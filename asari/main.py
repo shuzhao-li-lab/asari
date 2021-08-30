@@ -36,8 +36,11 @@ def process_project(list_input_files, dict_meta_data, ionization_mode='positive'
 
 
 
-def main():
-    pass
+def main(directory):
+    process_project(
+            read_projec_dir(directory), {}, 
+    )
+    
 
 
 #
@@ -45,5 +48,5 @@ def main():
 #
 
 if __name__ == '__main__':
-
-    main()
+    directory = sys.argv[1]
+    main(directory)

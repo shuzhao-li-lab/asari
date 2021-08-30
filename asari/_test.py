@@ -8,6 +8,14 @@ In [21]: for ii in range( 7):
     ...:     for P in SM1.list_MassTraces[ii].list_peaks:  
     ...:         print(P.goodness_fitting, P.peak_height, P.rtime) 
 
+
+def __rt_overlap__(RT1, RT2):   # over 90% of one RT in the other
+    S1, S2 = set([str(x)[:6] for x in RT1]), set([str(x)[:6] for x in RT2])
+    if len(S1.intersection(S2)) > 0.9 * min(RT1.size, RT2.size):
+        return True
+    else:
+        return False
+
 '''
 
 import matplotlib.pyplot as plt

@@ -3,12 +3,25 @@ Reusing class definitions in metDataModel.
 
 The flow in asari:
     Get MassTraces
-    Peak detection per MassTrace
-    Mass calibration
-    Retention indexing
-    Correspondence
+        Clean up redundant traces, calculate selectivity (mz)
+
+    Peak detection per MassTrace, using simple local maxima (required height and prominence)
+        If multiple peaks are found, redo peak dection by raising prominence to (max_intensity/10).
+        Further refining can be added, e.g. redo peak detection in the remaining region of trace.
+
+    Peak evaluation, calculate peak quality, RT, area.
+
+    Correspondence, initial
+        on peaks of high selectivity, by assigning to formula_mass
+
+    Mass calibration check, calibrate and recalculate selectivity if needed
+    
+    Correspondence, RANSAC on peaks of low selectivity
+
     Output feature table
+
     (Further annotation is done via mass2chem)
+    # future: Retention indexing
 
 Examples of data
 ----------------
@@ -118,8 +131,9 @@ class Sample:
     def __init__(self, input_file=''):
         self.input_file = input_file
         self.belonged_experiment = ''
-        # fixed sequence
-        self.list_MassTraces = []
+        self.list_MassTraces = []       # fixed sequence
+        self.number_MassTraces = 0
+        self.mz_list = []               # array
 
     def detect_peaks(self, 
                     min_intensity_threshold=30000, 
@@ -138,9 +152,15 @@ class Sample:
 
     def read_chromatogram_file(self, infile, min_intensity_threshold):
         '''
-        Get chromatograms, via pyOpenMS functions. 
+        Get chromatograms, via pyOpenMS functions (only used in this function). 
         Convert to list MassTraces for transparency.
         The rest of software uses metDataModel class extensions.
+
+        A decision point is on wheter to merge XICs of identical m/z.
+        From OpenMS, redundant peaks may come from big peaks spilled over (shoulder), 
+        and they should be merged.
+        But if the peaks don't overlap, they should be kept.
+        Because this software centers on formula mass, we will keep one XIC per m/z.
 
         Input
         -----
@@ -151,23 +171,34 @@ class Sample:
 
         Return
         ------
-        A list of MassTrace objects.
+        A list of MassTrace objects, sorted by increasing m/z values.
 
         '''
+        def __concatenate__(T1, T2):
+            # insert a gap of ten zeros between T1 and T2
+            return np.concatenate(T1, np.zeros(10), T2)
+
         exp = MSExperiment()                                                                                          
         MzMLFile().load(infile, exp)
         list_MassTraces = []
         mzDict = {}
+        padding = [0]*10
         for chromatogram in exp.getChromatograms():
             mz = chromatogram.getPrecursor().getMZ()
-            # remove redundancy. Repeated m/z values possible when big peaks spill over.
             mz_str = str(round(mz,6))
             RT, INTS = chromatogram.get_peaks() 
             if INTS.max() > min_intensity_threshold:
-                if mz_str not in mzDict or INTS.sum() > mzDict[mz_str][2].sum():
+                if mz_str not in mzDict:
+                    mzDict[mz_str] = [mz, RT, INTS]
+                elif RT[0] > mzDict[mz_str][1][-1]:
+                    mzDict[mz_str] = [mz, __concatenate__(mzDict[mz_str][1], RT), __concatenate__(mzDict[mz_str][2], INTS)]
+                elif mzDict[mz_str][1][0] > RT[-1]:
+                    mzDict[mz_str] = [mz, __concatenate__(RT, mzDict[mz_str][1]), __concatenate__(INTS, mzDict[mz_str][2])]
+                elif INTS.sum() > mzDict[mz_str][2].sum():    
+                    # overwrite if bigger trace found; watch out nuances in the future updates
                     mzDict[mz_str] = [mz, RT, INTS]
 
-        for [mz, RT, INTS] in mzDict.values():
+        for [mz, RT, INTS] in sorted(mzDict.values()):
             M = ext_MassTrace()
             M.mz, M.list_retention_time, M.list_intensity = [mz, RT, INTS]
             list_MassTraces.append( M )
@@ -175,7 +206,14 @@ class Sample:
         print("Processing %s, found %d mass traces." %(self.input_file, len(list_MassTraces)))
         return list_MassTraces
 
+
     def calibrate_mass_formula(self):
+        '''
+        Experimental step. 
+
+        Will change to after initial feature coresspondence of high-selectivity peaks.
+
+        '''
         _pesudo_features = [{'mz': M.mz} for M in self.list_MassTraces]
         _pram, new_list = mass_calibrate(_pesudo_features, calibration_mass_dict_pos, 20)
         ii = 0
@@ -185,6 +223,134 @@ class Sample:
             ii += 1
 
 
+    def calculate_selectivity(self, std_ppm=5):
+        '''
+        To calculate selectivity for all valid mass traces (thus specific m/z values).
+
+        The mass selectivity between two m/z values, between (0, 1), is defined as: 
+        (1 - Probability(confusing two peaks)), further formalized as an exponential model:
+
+        P = exp( -x/std_ppm ),
+        whereas x is ppm distance between two peaks, 
+        std_ppm standard deviation of ppm between true peaks and theoretical values, default at 5 pmm.
+
+        Close to 1 means high selectivity.
+        If multiple adjacent peaks are present, we multiply the selectivity scores.
+        Considering 2 lower and 2 higher neighbors approximately here.
+
+        Future direction: std_ppm can be dependent on m/z. 
+        This can be taken into account by a higher order model.
+        '''
+        def __sel__(x, std_ppm=std_ppm): return 1 - np.exp(-x/std_ppm)
+        self.mz_list = np.array([M.mz for M in self.list_MassTraces])
+        ppm_distances = 1000000 * (self.mz_list[1:] - self.mz_list[:-1])/self.mz_list[:-1]
+        # first two MassTraces
+        selectivities = [
+            __sel__(ppm_distances[0]) * __sel__(ppm_distances[0]+ppm_distances[1]),
+            __sel__(ppm_distances[0]) * __sel__(ppm_distances[1])* __sel__(ppm_distances[1]+ppm_distances[2]),
+            ]
+        for ii in range(2, self.number_MassTraces-2):
+            selectivities.append(
+                __sel__(ppm_distances[ii-2]+ppm_distances[ii-1]) * __sel__(ppm_distances[ii-1]) * __sel__(ppm_distances[ii]) * __sel__(ppm_distances[ii]+ppm_distances[ii+1])
+            )
+        # last two MassTraces
+        selectivities += [
+            __sel__(ppm_distances[-3]+ppm_distances[-2]) * __sel__(ppm_distances[-2]) * __sel__(ppm_distances[-1]),
+            __sel__(ppm_distances[-2]+ppm_distances[-1]) * __sel__(ppm_distances[-1]),
+            ]
+        for ii in range(self.number_MassTraces):
+            self.list_MassTraces[ii].selectivity = selectivities[ii]
+
+
+#
+# peak detection in this class
+#
+class ext_MassTrace(massTrace):
+    '''
+    Extending metDataModel.core.massTrace
+
+    self.calibrated_mz - will update at calibration
+
+    Peak detection using scipy.signal.find_peaks, a local maxima method with prominence control.
+    Example
+    -------
+
+    peaks:    (array([10, 16]),
+    properties:    {'peak_heights': array([3736445.25, 5558352.5 ]),
+                    'prominences': array([1016473.75, 3619788.  ]),
+                    'left_bases': array([0, 6]),
+                    'right_bases': array([12, 22]),
+                    'widths': array([3.21032149, 5.58696106]),
+                    'width_heights': array([3228208.375, 3748458.5  ]),
+                    'left_ips': array([ 8.12272812, 13.25125172]),
+                    'right_ips': array([11.33304961, 18.83821278])},
+    mz:    786.599123189169,
+    list_retention_time:    array([66.26447883, 66.63433189, 67.01434098, 67.38420814, 67.7534237 ,
+                    68.12477678, 68.49404578, 68.87324949, 69.25232779, 69.63137115,
+                    70.01254658, 70.39144237, 70.77048133, 71.14956203, 71.52869926,
+                    71.90967366, 72.27886773, 72.65788714, 73.02685195, 73.39578426,
+                    73.76490146, 74.13592309, 74.51518654]),
+    list_intensity:    array([  24545.924,   40612.44 ,  151511.27 ,  343555.5  ,  885063.8  ,
+                    1232703.6  , 1938564.5  , 2306679.2  , 3195485.5  , 3462114.5  ,
+                    3736445.2  , 3482002.5  , 2719971.5  , 3400839.8  , 4784387.5  ,
+                    4500411.   , 5558352.5  , 4896509.   , 5039317.5  , 3499304.   ,
+                    2457701.2  , 1694263.9  , 1377836.1  ], dtype=float32))
+
+    min_prominence_threshold is unlikely one-size fits all. But an iterative detection will work better.
+    prominence_window is not important, but is set to improve performance.
+    min_timepoints is taken at mid-height, therefore 2 is set to allow very narrow peaks.
+    gaussian_shape is minimal R^2 in Gaussian peak goodness_fitting.
+    '''
+
+    def detect_peaks(self, 
+                    min_intensity_threshold=30000, 
+                    min_timepoints=2,
+                    min_prominence_threshold=10000,
+                    prominence_window=30,
+                    gaussian_shape=0.8,
+                    ):
+        self.list_peaks = []
+        peaks, properties = find_peaks(self.list_intensity, 
+                                    height=min_intensity_threshold, width=min_timepoints, 
+                                    prominence=min_prominence_threshold, wlen=prominence_window) 
+        
+        if len(peaks) > 1:
+            # Rerun, raising min_prominence_threshold. Not relying on peak shape for small peaks, 
+            # because chromatography is often not good so that small peaks can't be separated from noise.
+            #
+            # This step can be further refined in future
+            #
+            _tenth_height = 0.1*self.list_intensity.max()
+            min_prominence_threshold = max(min_prominence_threshold, _tenth_height)
+            peaks, properties = find_peaks(self.list_intensity, 
+                                    height=min_intensity_threshold, width=min_timepoints, 
+                                    prominence=min_prominence_threshold, wlen=prominence_window)
+        
+        for ii in range(len(peaks)):
+            P = ext_Peak()
+            # scipy.signal.find_peaks works on 1-D array. RT coordinates need to be added back.
+            P.peak_initiate(parent_mass_trace=self, mz = self.mz, apex = peaks[ii],
+                            peak_height = properties['peak_heights'][ii],
+                            left_base = properties['left_bases'][ii],
+                            right_base = properties['right_bases'][ii])
+            P.evaluate_peak_model()
+            if P.goodness_fitting > gaussian_shape:
+                self.list_peaks.append(P)
+
+        self.number_of_peaks = len(self.list_peaks)
+
+    def serialize2(self):
+        d = {
+            'number_of_peaks': self.number_of_peaks,
+            'peaks': [P.id for P in self.list_peaks],
+        }
+        return d.update( self.serialize() )
+        
+
+
+#
+# peak evaluation in this class
+#
 class ext_Peak(Peak):
     '''
     Extending metDataModel.core.Peak.
@@ -238,85 +404,4 @@ class ext_Peak(Peak):
 
     def serialize2(self):
         pass
-
-
-class ext_MassTrace(massTrace):
-    '''
-    Extending metDataModel.core.massTrace
-
-    self.calibrated_mz - will update at calibration
-
-    Peak detection using scipy.signal.find_peaks, a local maxima method with prominence control.
-    Example
-    -------
-
-    peaks:    (array([10, 16]),
-    properties:    {'peak_heights': array([3736445.25, 5558352.5 ]),
-                    'prominences': array([1016473.75, 3619788.  ]),
-                    'left_bases': array([0, 6]),
-                    'right_bases': array([12, 22]),
-                    'widths': array([3.21032149, 5.58696106]),
-                    'width_heights': array([3228208.375, 3748458.5  ]),
-                    'left_ips': array([ 8.12272812, 13.25125172]),
-                    'right_ips': array([11.33304961, 18.83821278])},
-    mz:    786.599123189169,
-    list_retention_time:    array([66.26447883, 66.63433189, 67.01434098, 67.38420814, 67.7534237 ,
-                    68.12477678, 68.49404578, 68.87324949, 69.25232779, 69.63137115,
-                    70.01254658, 70.39144237, 70.77048133, 71.14956203, 71.52869926,
-                    71.90967366, 72.27886773, 72.65788714, 73.02685195, 73.39578426,
-                    73.76490146, 74.13592309, 74.51518654]),
-    list_intensity:    array([  24545.924,   40612.44 ,  151511.27 ,  343555.5  ,  885063.8  ,
-                    1232703.6  , 1938564.5  , 2306679.2  , 3195485.5  , 3462114.5  ,
-                    3736445.2  , 3482002.5  , 2719971.5  , 3400839.8  , 4784387.5  ,
-                    4500411.   , 5558352.5  , 4896509.   , 5039317.5  , 3499304.   ,
-                    2457701.2  , 1694263.9  , 1377836.1  ], dtype=float32))
-
-    min_prominence_threshold is unlikely one-size fits all. But an iterative detection will work better.
-    prominence_window is not important, but is set to improve performance.
-    min_timepoints is taken at mid-height, therefore 2 is set to allow very narrow peaks.
-    gaussian_shape is minimal R^2 in Gaussian peak goodness_fitting.
-    '''
-
-    def detect_peaks(self, 
-                    min_intensity_threshold=30000, 
-                    min_timepoints=2,
-                    min_prominence_threshold=10000,
-                    prominence_window=30,
-                    gaussian_shape=0.8,
-                    ):
-        self.list_peaks = []
-        peaks, properties = find_peaks(self.list_intensity, 
-                                    height=min_intensity_threshold, width=min_timepoints, 
-                                    prominence=min_prominence_threshold, wlen=prominence_window) 
-        
-        if len(peaks) > 1:
-            # Rerun, raising min_prominence_threshold. Not relying on peak shape for small peaks, 
-            # because chromatography is often not good so that small peaks can't be separated from noise.
-            _tenth_height = 0.1*self.list_intensity.max()
-            min_prominence_threshold = max(min_prominence_threshold, _tenth_height)
-            peaks, properties = find_peaks(self.list_intensity, 
-                                    height=min_intensity_threshold, width=min_timepoints, 
-                                    prominence=min_prominence_threshold, wlen=prominence_window)
-        
-        for ii in range(len(peaks)):
-            P = ext_Peak()
-            # scipy.signal.find_peaks works on 1-D array. RT coordinates need to be added back.
-            P.peak_initiate(parent_mass_trace=self, mz = self.mz, apex = peaks[ii],
-                            peak_height = properties['peak_heights'][ii],
-                            left_base = properties['left_bases'][ii],
-                            right_base = properties['right_bases'][ii])
-            P.evaluate_peak_model()
-            if P.goodness_fitting > gaussian_shape:
-                self.list_peaks.append(P)
-
-        self.number_of_peaks = len(self.list_peaks)
-
-    def serialize2(self):
-        d = {
-            'number_of_peaks': self.number_of_peaks,
-            'peaks': [P.id for P in self.list_peaks],
-        }
-        return d.update( self.serialize() )
-        
-
 
