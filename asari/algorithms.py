@@ -52,7 +52,10 @@ from scipy.optimize import curve_fit
 from pyopenms import MSExperiment, MzMLFile
 
 from metDataModel.core import massTrace, Peak, Feature, Experiment
-from mass2chem.annotate import mass_calibrate, calibration_mass_dict_pos, mass_formula_annotate, DB_1, DB_2, DB_3
+
+# from mass2chem.annotate import list_search_formula_mass_db, compute_adducts_formulae
+
+# mass_calibrate, calibration_mass_dict_pos, mass_formula_annotate, DB_1, DB_2, DB_3
 
 
 def __gaussian_function__(x, a, mu, sigma):
@@ -61,6 +64,48 @@ def __gaussian_function__(x, a, mu, sigma):
 def __goodness_fitting__(y_orignal, y_fitted):
     # R^2 as goodness of fitting
     return 1 - (np.sum((y_fitted-y_orignal)**2) / np.sum((y_orignal-np.mean(y_orignal))**2))
+
+
+def calculate_selectivity(sorted_mz_list, std_ppm=5):
+    '''
+    To calculate selectivity for all valid mass traces (thus specific m/z values).
+
+    The mass selectivity between two m/z values, between (0, 1), is defined as: 
+    (1 - Probability(confusing two peaks)), further formalized as an exponential model:
+
+    P = exp( -x/std_ppm ),
+    whereas x is ppm distance between two peaks, 
+    std_ppm standard deviation of ppm between true peaks and theoretical values, default at 5 pmm.
+
+    Close to 1 means high selectivity.
+    If multiple adjacent peaks are present, we multiply the selectivity scores.
+    Considering 2 lower and 2 higher neighbors approximately here.
+
+    Future direction: std_ppm can be dependent on m/z. 
+    This can be taken into account by a higher order model.
+    '''
+    def __sel__(x, std_ppm=std_ppm): 
+        return 1 - np.exp(-x/std_ppm)
+
+    mz_list = np.array(sorted_mz_list)
+    ppm_distances = 1000000 * (mz_list[1:] - mz_list[:-1])/mz_list[:-1]
+    # first two MassTraces
+    selectivities = [
+        __sel__(ppm_distances[0]) * __sel__(ppm_distances[0]+ppm_distances[1]),
+        __sel__(ppm_distances[0]) * __sel__(ppm_distances[1])* __sel__(ppm_distances[1]+ppm_distances[2]),
+        ]
+    for ii in range(2, mz_list.size-2):
+        selectivities.append(
+            __sel__(ppm_distances[ii-2]+ppm_distances[ii-1]) * __sel__(ppm_distances[ii-1]) * __sel__(ppm_distances[ii]) * __sel__(ppm_distances[ii]+ppm_distances[ii+1])
+        )
+    # last two MassTraces
+    selectivities += [
+        __sel__(ppm_distances[-3]+ppm_distances[-2]) * __sel__(ppm_distances[-2]) * __sel__(ppm_distances[-1]),
+        __sel__(ppm_distances[-2]+ppm_distances[-1]) * __sel__(ppm_distances[-1]),
+        ]
+
+    return selectivities
+
 
 
 class ext_Experiment(Experiment):
@@ -159,7 +204,7 @@ class Sample:
         A decision point is on wheter to merge XICs of identical m/z.
         From OpenMS, redundant peaks may come from big peaks spilled over (shoulder), 
         and they should be merged.
-        But if the peaks don't overlap, they should be kept.
+        But if the peaks don't overlap, they should be kept and fillers are added to the trace.
         Because this software centers on formula mass, we will keep one XIC per m/z.
 
         Input
@@ -174,14 +219,23 @@ class Sample:
         A list of MassTrace objects, sorted by increasing m/z values.
 
         '''
-        def __concatenate__(T1, T2):
-            # insert a gap of ten zeros between T1 and T2
-            return np.concatenate(T1, np.zeros(10), T2)
+        def __concatenate_rt__(T1, T2, number_steps):
+            # insert a gap of ten zeros between T1 and T2, T2 must be greater than T1
+            return np.concatenate((T1, np.linspace(T1[-1], T2[0], number_steps), T2))
+
+        def __concatenate_ints__(T1, T2, number_steps):
+            # insert a gap of ten zeros between T1 and T2, T2 must be greater than T1
+            return np.concatenate((T1, np.zeros(number_steps), T2))
 
         exp = MSExperiment()                                                                                          
         MzMLFile().load(infile, exp)
         list_MassTraces = []
         mzDict = {}
+        #
+        # will fix to automated
+        retention_time_step = 0.38
+        # step = 0.25 * (T1[-1]-T1[-3] + T2[2]-T2[0])
+
         padding = [0]*10
         for chromatogram in exp.getChromatograms():
             mz = chromatogram.getPrecursor().getMZ()
@@ -190,10 +244,15 @@ class Sample:
             if INTS.max() > min_intensity_threshold:
                 if mz_str not in mzDict:
                     mzDict[mz_str] = [mz, RT, INTS]
+
                 elif RT[0] > mzDict[mz_str][1][-1]:
-                    mzDict[mz_str] = [mz, __concatenate__(mzDict[mz_str][1], RT), __concatenate__(mzDict[mz_str][2], INTS)]
+                    number_steps = int((RT[0] - mzDict[mz_str][1][-1])/retention_time_step)
+                    mzDict[mz_str] = [mz, __concatenate_rt__(mzDict[mz_str][1], RT, number_steps), __concatenate_ints__(mzDict[mz_str][2], INTS, number_steps)]
+
                 elif mzDict[mz_str][1][0] > RT[-1]:
-                    mzDict[mz_str] = [mz, __concatenate__(RT, mzDict[mz_str][1]), __concatenate__(INTS, mzDict[mz_str][2])]
+                    number_steps = int(( mzDict[mz_str][1][0] - RT[-1] )/retention_time_step)
+                    mzDict[mz_str] = [mz, __concatenate_rt__(RT, mzDict[mz_str][1], number_steps), __concatenate_ints__(INTS, mzDict[mz_str][2], number_steps)]
+
                 elif INTS.sum() > mzDict[mz_str][2].sum():    
                     # overwrite if bigger trace found; watch out nuances in the future updates
                     mzDict[mz_str] = [mz, RT, INTS]
@@ -205,6 +264,27 @@ class Sample:
 
         print("Processing %s, found %d mass traces." %(self.input_file, len(list_MassTraces)))
         return list_MassTraces
+
+    def export_peaklist(self, outfile=''):
+        '''
+        Export tsv peak list for intermediate storage or diagnosis.
+        If detailed, requires selectivity assigned.
+        '''
+        if not outfile:
+            outfile = self.input_file.replace('.mzML', '') + '.peaklist'
+        header = ['m/z', 'retention time', 'area', 'shape_quality', 'gaussian_amplitude', 'gaussian_variance', 'mz_selectivity']
+        peaklist = []
+        for M in self.list_MassTraces:
+            for P in M.list_peaks:
+                formatted = [str(round(M.mz, 6)), str(round(P.rtime, 2)), str(int(P.peak_area)), 
+                                str(round(P.goodness_fitting, 2)), str(int(P.gaussian_parameters[0])), 
+                                  str(round(P.gaussian_parameters[2], 2)), str(round(M.selectivity, 2))]
+                peaklist.append(formatted)
+
+        with open(outfile, 'w') as O:
+            O.write(
+                    '\t'.join(header) + '\n' + '\n'.join([ '\t'.join(L) for L in peaklist ]) + '\n'
+            )
 
 
     def calibrate_mass_formula(self):
@@ -222,42 +302,8 @@ class Sample:
             self.list_MassTraces[ii].mass_formula = mass_formula_annotate(F['calibrated_mz'])
             ii += 1
 
-
-    def calculate_selectivity(self, std_ppm=5):
-        '''
-        To calculate selectivity for all valid mass traces (thus specific m/z values).
-
-        The mass selectivity between two m/z values, between (0, 1), is defined as: 
-        (1 - Probability(confusing two peaks)), further formalized as an exponential model:
-
-        P = exp( -x/std_ppm ),
-        whereas x is ppm distance between two peaks, 
-        std_ppm standard deviation of ppm between true peaks and theoretical values, default at 5 pmm.
-
-        Close to 1 means high selectivity.
-        If multiple adjacent peaks are present, we multiply the selectivity scores.
-        Considering 2 lower and 2 higher neighbors approximately here.
-
-        Future direction: std_ppm can be dependent on m/z. 
-        This can be taken into account by a higher order model.
-        '''
-        def __sel__(x, std_ppm=std_ppm): return 1 - np.exp(-x/std_ppm)
-        self.mz_list = np.array([M.mz for M in self.list_MassTraces])
-        ppm_distances = 1000000 * (self.mz_list[1:] - self.mz_list[:-1])/self.mz_list[:-1]
-        # first two MassTraces
-        selectivities = [
-            __sel__(ppm_distances[0]) * __sel__(ppm_distances[0]+ppm_distances[1]),
-            __sel__(ppm_distances[0]) * __sel__(ppm_distances[1])* __sel__(ppm_distances[1]+ppm_distances[2]),
-            ]
-        for ii in range(2, self.number_MassTraces-2):
-            selectivities.append(
-                __sel__(ppm_distances[ii-2]+ppm_distances[ii-1]) * __sel__(ppm_distances[ii-1]) * __sel__(ppm_distances[ii]) * __sel__(ppm_distances[ii]+ppm_distances[ii+1])
-            )
-        # last two MassTraces
-        selectivities += [
-            __sel__(ppm_distances[-3]+ppm_distances[-2]) * __sel__(ppm_distances[-2]) * __sel__(ppm_distances[-1]),
-            __sel__(ppm_distances[-2]+ppm_distances[-1]) * __sel__(ppm_distances[-1]),
-            ]
+    def assign_selectivity(self, std_ppm=5):
+        selectivities = calculate_selectivity([M.mz for M in self.list_MassTraces], std_ppm)
         for ii in range(self.number_MassTraces):
             self.list_MassTraces[ii].selectivity = selectivities[ii]
 
@@ -275,7 +321,7 @@ class ext_MassTrace(massTrace):
     Example
     -------
 
-    peaks:    (array([10, 16]),
+    peaks:    array([10, 16]),
     properties:    {'peak_heights': array([3736445.25, 5558352.5 ]),
                     'prominences': array([1016473.75, 3619788.  ]),
                     'left_bases': array([0, 6]),
@@ -300,6 +346,12 @@ class ext_MassTrace(massTrace):
     prominence_window is not important, but is set to improve performance.
     min_timepoints is taken at mid-height, therefore 2 is set to allow very narrow peaks.
     gaussian_shape is minimal R^2 in Gaussian peak goodness_fitting.
+
+    To-do
+    -----
+    further refine peak detection in future, 
+    e.g. extra iteration of peak detection in remaining region; better deconvolution of overlapping peaks.
+
     '''
 
     def detect_peaks(self, 
@@ -314,11 +366,9 @@ class ext_MassTrace(massTrace):
                                     height=min_intensity_threshold, width=min_timepoints, 
                                     prominence=min_prominence_threshold, wlen=prominence_window) 
         
-        if len(peaks) > 1:
+        if peaks.size > 1:
             # Rerun, raising min_prominence_threshold. Not relying on peak shape for small peaks, 
             # because chromatography is often not good so that small peaks can't be separated from noise.
-            #
-            # This step can be further refined in future
             #
             _tenth_height = 0.1*self.list_intensity.max()
             min_prominence_threshold = max(min_prominence_threshold, _tenth_height)
@@ -326,7 +376,7 @@ class ext_MassTrace(massTrace):
                                     height=min_intensity_threshold, width=min_timepoints, 
                                     prominence=min_prominence_threshold, wlen=prominence_window)
         
-        for ii in range(len(peaks)):
+        for ii in range(peaks.size):
             P = ext_Peak()
             # scipy.signal.find_peaks works on 1-D array. RT coordinates need to be added back.
             P.peak_initiate(parent_mass_trace=self, mz = self.mz, apex = peaks[ii],
@@ -340,6 +390,9 @@ class ext_MassTrace(massTrace):
         self.number_of_peaks = len(self.list_peaks)
 
     def serialize2(self):
+        '''
+        Placeholder
+        '''
         d = {
             'number_of_peaks': self.number_of_peaks,
             'peaks': [P.id for P in self.list_peaks],

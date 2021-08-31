@@ -1,4 +1,9 @@
 '''
+Do peaks export per sample in a directory:
+shuzhao@red5:~/projects/asari$ python3 -m asari.main /home/shuzhao/projects/pipelineMJ/preprocessing/test_R01batch9/
+
+
+mydir = '/home/shuzhao/projects/pipelineMJ/preprocessing/test_R01batch9/'   
 
 In [7]: [X.number_of_peaks for X in SM1.list_MassTraces[10: 30]]                                                      
 Out[7]: [1, 2, 1, 1, 1, 1, 1, 3, 1, 1, 2, 1, 1, 1, 2, 2, 1, 2, 1, 3]
@@ -27,6 +32,8 @@ f = '/home/shuzhao/projects/pipelineMJ/preprocessing/test_R01batch9/MT_20210803_
 
 SM1 = Sample(f)
 SM1.detect_peaks()
+SM1.assign_selectivity()
+SM1.export_peaklist('MT_20210803_115.peaklist')
 
 plot_peaks_masstrace(SM1.list_MassTraces[4], 'masstrace4.pdf')
 

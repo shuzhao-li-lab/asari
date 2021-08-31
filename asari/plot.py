@@ -15,6 +15,8 @@ Out[214]: <matplotlib.collections.LineCollection at 0x7f30b8f0bb80>
 
 In [215]: plt.show()                                                                                                  
 
+color='green', marker='o', linestyle='dashed',
+...      linewidth=2, markersize=12
 
 '''
 
@@ -31,11 +33,11 @@ def plot_peaks_masstrace(mass_trace, outfile='masstrace_plot.pdf'):
 
     '''
     plt.figure()
-    plt.plot(mass_trace.list_retention_time, mass_trace.list_intensity, 'o')
+    plt.plot(mass_trace.list_retention_time, mass_trace.list_intensity, marker='o', linewidth=0, markersize=1)
     for P in mass_trace.list_peaks:
         # plot peak models
         P.extend_model_range()
-        plt.plot(P.rt_extended, P.y_fitted_extended, 'r-')
+        plt.plot(P.rt_extended, P.y_fitted_extended, color='red', alpha=0.5, linewidth=0.6)
     plt.title("mass trace " + str(round(mass_trace.mz, 6)))
     plt.savefig(outfile)
     plt.close()

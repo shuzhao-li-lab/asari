@@ -21,18 +21,26 @@ def metafile_to_dict(infile):
 def process_project(list_input_files, dict_meta_data, ionization_mode='positive'):
     '''
     Use ext_Experiment as a containing class to hold processed data.
+
+
+
+    EE.assign_formula_masses()
+    EE.calibrate_retention_time()
+    EE.correspondency()
+    EE.export_feature_table('out.tsv')
+
+
     '''
     EE = ext_Experiment()
     EE.set_sample_order(list_input_files)
     for f in list_input_files:
         SM = Sample(f)
         SM.detect_peaks()
-        EE.samples.append(SM)
+        SM.assign_selectivity()
+        SM.export_peaklist()
+        #
+        #EE.samples.append(SM)
 
-    EE.assign_formula_masses()
-    EE.calibrate_retention_time()
-    EE.correspondency()
-    EE.export_feature_table('out.tsv')
 
 
 
