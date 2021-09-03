@@ -220,11 +220,11 @@ class Sample:
 
         '''
         def __concatenate_rt__(T1, T2, number_steps):
-            # insert a gap of ten zeros between T1 and T2, T2 must be greater than T1
+            # filling gap between T1 and T2 retention times, T2 must be greater than T1
             return np.concatenate((T1, np.linspace(T1[-1], T2[0], number_steps), T2))
 
         def __concatenate_ints__(T1, T2, number_steps):
-            # insert a gap of ten zeros between T1 and T2, T2 must be greater than T1
+            # filing zeros between T1 and T2 intensities
             return np.concatenate((T1, np.zeros(number_steps), T2))
 
         exp = MSExperiment()                                                                                          
@@ -236,7 +236,6 @@ class Sample:
         retention_time_step = 0.38
         # step = 0.25 * (T1[-1]-T1[-3] + T2[2]-T2[0])
 
-        padding = [0]*10
         for chromatogram in exp.getChromatograms():
             mz = chromatogram.getPrecursor().getMZ()
             mz_str = str(round(mz,6))
@@ -286,12 +285,21 @@ class Sample:
                     '\t'.join(header) + '\n' + '\n'.join([ '\t'.join(L) for L in peaklist ]) + '\n'
             )
 
-
     def calibrate_mass_formula(self):
         '''
+
+        under work.
+
         Experimental step. 
 
         Will change to after initial feature coresspondence of high-selectivity peaks.
+
+
+
+
+
+
+
 
         '''
         _pesudo_features = [{'mz': M.mz} for M in self.list_MassTraces]
@@ -302,6 +310,12 @@ class Sample:
             self.list_MassTraces[ii].mass_formula = mass_formula_annotate(F['calibrated_mz'])
             ii += 1
 
+        mu, std = scipy.stats.norm(
+            
+        )
+        for M in self.list_MassTraces:
+            M.calibrated_mz = M.mz + mu
+
     def assign_selectivity(self, std_ppm=5):
         selectivities = calculate_selectivity([M.mz for M in self.list_MassTraces], std_ppm)
         for ii in range(self.number_MassTraces):
@@ -309,7 +323,7 @@ class Sample:
 
 
 #
-# peak detection in this class
+# peak detection is in this class
 #
 class ext_MassTrace(massTrace):
     '''
