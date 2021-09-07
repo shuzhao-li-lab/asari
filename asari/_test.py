@@ -21,6 +21,32 @@ def __rt_overlap__(RT1, RT2):   # over 90% of one RT in the other
     else:
         return False
 
+
+In [8]: len(SM1.list_MassTraces)                                                                
+Out[8]: 3283
+
+In [9]: good[0]                                                                                 
+Out[9]: 
+['C4H7N2_83.060374',
+ 83.06037446677,
+ 'C4H7N2',
+ 0.9965129342851303,
+ [('C4H6N2_82.053098', 'M+H[1+]')]]
+
+In [10]: good[1000]                                                                             
+Out[10]: 
+['C10H9ClNNaO3_250.024119',
+ 250.02411946677,
+ 'C10H9ClNNaO3',
+ None,
+ [('C10H9NO3_191.058243', 'M+NaCl[1+]')]]
+ 
+In [11]: SM1.__mass_accuracy__                                                                  
+Out[11]: -0.3369786631057757
+
+In [12]: SM1.__mass_stdev__                                                                     
+Out[12]: 3.766422552049111
+
 '''
 
 import matplotlib.pyplot as plt
@@ -31,9 +57,13 @@ from .plot import plot_peaks_masstrace
 f = '/home/shuzhao/projects/pipelineMJ/preprocessing/test_R01batch9/MT_20210803_115_chrom.mzML'
 
 SM1 = Sample(f)
-SM1.detect_peaks()
-SM1.assign_selectivity()
+SM1.process_step_1()
 SM1.export_peaklist('MT_20210803_115.peaklist')
 
 plot_peaks_masstrace(SM1.list_MassTraces[4], 'masstrace4.pdf')
+
+SM1._match_mass_formula_(DB_1)
+
+good = [M.formula_mass for M in SM1.list_MassTraces if M.formula_mass]
+
 

@@ -31,12 +31,12 @@ def process_project(list_input_files, dict_meta_data, ionization_mode='positive'
 
 
     '''
-    EE = ext_Experiment()
-    EE.set_sample_order(list_input_files)
+    #EE = ext_Experiment()
+    #EE.set_sample_order(list_input_files)
+    
     for f in list_input_files:
         SM = Sample(f)
-        SM.detect_peaks()
-        SM.assign_selectivity()
+        SM.process_step_1()
         SM.export_peaklist()
         #
         #EE.samples.append(SM)
