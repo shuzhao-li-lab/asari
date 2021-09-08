@@ -74,6 +74,7 @@ from .pos_ref_DBs import DB_1
 # HOT_DB is updated continuously as each sample is processed
 HOT_DB = []
 
+
 def __gaussian_function__(x, a, mu, sigma):
     return a*np.exp(-(x-mu)**2/(2*sigma**2)) 
 
@@ -135,9 +136,9 @@ class ext_Experiment(Experiment):
 
     '''
 
-    def __init2__(self, list_input_files, chunk_size=100, mode='pos'):
+    def __init2__(self, list_input_files, mode='pos'):
         '''
-        chunk_size: number of input files to hold in memory. Use disk cache if list_input_files have more files.
+        # chunk_size: number of input files to hold in memory. Use disk cache if list_input_files have more files.
 
         '''
         # leave sort decision elsewhere
