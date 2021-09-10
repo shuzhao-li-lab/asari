@@ -67,7 +67,7 @@ from metDataModel.core import MassTrace, Peak, Feature, Experiment
 
 from mass2chem.annotate import annotate_formula_mass 
 
-from .sql import *
+from sql import *
 
 # HOT_DB is updated continuously as each sample is processed
 HOT_DB = {}         # will be pd.DataFrame
@@ -137,12 +137,22 @@ def search_formula_mass_dataframe(query_mz, DFDB, limit_ppm=10):
     return best match formula_mass in DFDB if under ppm limit.
     DFDB is using a Pandas DataFrame to house reference database.
     ppm is signed to capture the direction of mass shift.
+
+    
     '''
     DFDB['tmp'] = abs(DFDB.mz - query_mz)
-    ii = DFDB.tmp.idxmin()
+    #ii = DFDB.tmp.idxmin()          # index not necessarily integer; can be sequence if more than one match, but they are trying to fix in pandas dev version
+    ii = DFDB.tmp.values.argmin()
+    #if isinstance(ii,  pd.Series): ii = ii.values[0]
+
     ppm = 1000000 * (query_mz - DFDB.iloc[ii].mz)/query_mz
-    if  ppm < limit_ppm:
-        return (DFDB.iloc[ii].formula_mass, ppm)
+    # this can be 
+    try:
+        if  ppm < limit_ppm:
+            return (DFDB.iloc[ii].name, ppm)            # name is formula_mass
+
+    except ValueError:
+        print(query_mz, ii, ppm)
     else:
         return None
 
@@ -209,11 +219,12 @@ class ext_Experiment(Experiment):
 
     def process_all(self):
         self.init_hot_db( INIT_DFDB )
-        for f in self.list_input_files if f not in self.initiation_samples:
-            SM = Sample(self, self.mode, f)
-            SM.process_step_1()
-            SM.process_step_2(HOT_DB)
-            self.samples.append(SM)
+        for f in self.list_input_files:
+            if f not in self.initiation_samples:
+                SM = Sample(self, self.mode, f)
+                SM.process_step_1()
+                SM.process_step_2(HOT_DB)
+                self.samples.append(SM)
         
         # now on to correspondence, and RT calibration
 
@@ -577,7 +588,7 @@ class Sample:
             if abs(mass_accuracy) > 5:   # this is considered significant mass shift, requiring m/z correction for all
                 list_ppm_errors = []
                 for M in self.list_MassTraces:
-                    M.raw_mz = mz
+                    M.raw_mz = M.mz
                     M.mz = M.mz - M.mz*0.000001*mass_accuracy
                     M.__mass_corrected_by_asari__ = True
                     # redo search because we may find different matches after mass correction; update search ppm too

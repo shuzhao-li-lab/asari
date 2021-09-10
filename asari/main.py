@@ -25,7 +25,7 @@ from .algorithms import Sample, ext_MassTrace, ext_Experiment
 
 
 PARAMETERS = {
-    'ionization_mode': 'pos',
+    'mode': 'pos',                      # ionization mode
     'min_intensity_threshold': 30000,   # minimal peak intensity
     'min_timepoints': 5,                # minimal number of data points in elution profile
     #
@@ -70,7 +70,7 @@ def process_project(list_input_files, dict_meta_data={}, parameters=PARAMETERS):
             dict_meta_data[k] = dict_meta_data[k].upper()       # upper characters to standardize
             
     EE = ext_Experiment()
-    EE._init2__(list_input_files, dict_meta_data, parameters)
+    EE.__init2__(list_input_files, dict_meta_data, parameters)
     
     #EE.set_sample_order(list_input_files)
     
