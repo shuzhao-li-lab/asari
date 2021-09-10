@@ -55,6 +55,7 @@ custom_annotation = namedtuple('custom_annotation',
 '''
 
 
+import os
 import numpy as np
 from scipy.signal import find_peaks  
 from scipy.optimize import curve_fit 
@@ -65,15 +66,21 @@ from pyopenms import MSExperiment, MzMLFile
 from metDataModel.core import MassTrace, Peak, Feature, Experiment
 
 from mass2chem.annotate import annotate_formula_mass 
-#, compute_adducts_formulae
 
-#
-# this is tier 1 pos only, will update the DB in later iterations
-from .pos_ref_DBs import DB_1
+from .sql import *
 
 # HOT_DB is updated continuously as each sample is processed
-HOT_DB = []
+HOT_DB = {}         # will be pd.DataFrame
 
+# starting point of ref DB, in DF format. Will update
+# this will be THE ref DB.
+INIT_DFDB = DB_to_DF( extend_DB1(DB_1) )
+
+posList = [(1.00727646677, 'M+H[1+]'), (22.989218, 'Na'), (-0.0005, 'M+'), 
+            (19.01787646677, 'M+H2O+H[1+]')]
+
+negList = [(-1.00727646677, 'M-H[-]'), (34.969402, 'M+Cl-'), (0.0005, 'M+e[-]'), 
+            (-19.01787646677, 'M-H2O-H[-]')]
 
 def __gaussian_function__(x, a, mu, sigma):
     return a*np.exp(-(x-mu)**2/(2*sigma**2)) 
@@ -124,37 +131,127 @@ def calculate_selectivity(sorted_mz_list, std_ppm=5):
     return selectivities
 
 
+
+def search_formula_mass_dataframe(query_mz, DFDB, limit_ppm=10):
+    '''
+    return best match formula_mass in DFDB if under ppm limit.
+    DFDB is using a Pandas DataFrame to house reference database.
+    ppm is signed to capture the direction of mass shift.
+    '''
+    DFDB['tmp'] = abs(DFDB.mz - query_mz)
+    ii = DFDB.tmp.idxmin()
+    ppm = 1000000 * (query_mz - DFDB.iloc[ii].mz)/query_mz
+    if  ppm < limit_ppm:
+        return (DFDB.iloc[ii].formula_mass, ppm)
+    else:
+        return None
+
+
+
+
+
 class ext_Experiment(Experiment):
     '''
-    Extend metDataModel Experiment with preprocessing methods.
+    Extend metDataModel.core.Experiment with preprocessing methods.
+    This encapsulates a set of LC-MS files using the same method to be processed together.
 
 
-    To-do:
-    establish expt parameters,
+    init_hot_db: use three samples to establish expt wide parameters like RT vector, and 
+    a HOT_DB to hold all expt specific annotations.
+    All other samples will be annotated to formula_mass using the HOT_DB.
+    
 
-    hold a hot DB
+    Leave annotation of remaining featuers to the end (No other ext search at sample level than initial effort).
+    Leave empCpd organization and correction at the end.
+
+
+
+
+
+    # create new DB for common isotopes and adducts based on what's found earlier
+    extended_DB = create_extended_DB([x[4][0][0] for x in result if x], mode)
+    # extend search to common isotopes and adducts
+    if ppm_std:
+        limit_ppm = 2 * ppm_std
+    for ii in range(N):
+        if not result[ii]:
+            result[ii] = search_formula_mass_db(list_query_mz[ii], extended_DB, limit_ppm)
+    
 
     '''
 
-    def __init2__(self, list_input_files, mode='pos'):
+    def __init2__(self, list_input_files, dict_meta_data, parameters):
         '''
-        # chunk_size: number of input files to hold in memory. Use disk cache if list_input_files have more files.
+        This is the overall container for all data in an experiment/project.
+        We don't sort sample orders. One can sort after getting the feature table.
 
-        '''
-        # leave sort decision elsewhere
-        self.sample_order = list_samples
-        self.samples = []
         # will cumulate mass accuracy and stdev for all samples and report
 
-    def get_ref_database(self, DB=DB_1):
+        Input
+        -----
+        list_input_files: list of inputfiles, including directory path, to read
+        dict_meta_data: description of sample types for each file, e.g. 'QC', 'pooled', 'sample'.
+        parameters: including 'ionization_mode', 'min_intensity_threshold', 'min_timepoints'. See main.py.
+
+        '''
+        self.list_input_files = list_input_files
+        self.samples = []       # out of initial input order in samples
+        
+        self.number_of_samples = len(list_input_files)
+        self.files_meta_data = dict_meta_data
+        self.processing_parameters = parameters
+        self.mode = parameters['mode']
+
+        self.initiation_samples = self.__choose_initiation_samples__()
+        # self.retention_time_list = []       # ?? as only XICs are input
+   
+
+
+    def process_all(self):
+        self.init_hot_db( INIT_DFDB )
+        for f in self.list_input_files if f not in self.initiation_samples:
+            SM = Sample(self, self.mode, f)
+            SM.process_step_1()
+            SM.process_step_2(HOT_DB)
+            self.samples.append(SM)
+        
+        # now on to correspondence, and RT calibration
+
+
+
+        
+
+
+    def init_hot_db(self, DFDB):
         '''
         [['C2H4NaO3_99.00532', 99.00532046676999, 'C2H4NaO3', 0.9999999571942034, [('C2H4O3_76.016044', 'M+Na[1+]')]], 
 
          adducts: e.g. [(58.53894096677, 'M+2H[2+]', result_formula), ...,]
 
         Because this custom_database is updated since the 1st sample, repeated features will be fast to access in later samples.
+
+
+        Use three samples to initiate a hot DB to house feature annotation specific to this Experiment.
+        The HOT_DB will be used during sample processing, and have another update after correspondence and additional annotation.
+        The HOT_DB will then be exported as Expt annotation.
+        
         '''
-        self.custom_database = []
+        global HOT_DB
+        chosen_Samples = []
+        for f in self.initiation_samples:
+            SM = Sample(self, self.mode, f)
+            SM.process_step_1()
+            SM.process_step_2(DFDB)
+            chosen_Samples.append(SM)
+
+        self.samples += chosen_Samples
+        # Experiment wide parameters
+        self.__mass_stdev__ = np.median([SM.__mass_stdev__ for SM in chosen_Samples])       # ppm stdev, used for later searches
+        # ver 1 HOT_DB will be a subset of INIT_DFDB
+        found_formula_masses = set([ M.formula_mass for M in SM.list_MassTraces for SM in chosen_Samples ])
+        found_formula_masses.remove(None)
+        HOT_DB = DFDB.loc[found_formula_masses]     # no need to copy?
+
         
 
     def assign_formula_masses(self):
@@ -176,6 +273,12 @@ class ext_Experiment(Experiment):
         Skip a sample if not enough "good peaks" are found.
         
         https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.UnivariateSpline.html
+
+
+        For the  mass traces with more than one peaks, after RT calibration,
+        do a composite chromatogram by summing up all traces,
+        then do peak detection to decide how many peaks are there.
+
 
         '''
 
@@ -220,6 +323,28 @@ class ext_Experiment(Experiment):
             O.write('\n'.join(new))
 
 
+    def __choose_initiation_samples__(self):
+        if self.processing_parameters['initiation_samples']:
+            return self.processing_parameters['initiation_samples'][:3]
+        else:
+            if self.number_of_samples < 4:
+                return self.list_input_files
+            elif not self.files_meta_data:
+                return random.sample(self.list_input_files, 3)
+            else:
+                chosen = []
+                POOLED = [f for f in self.list_input_files if self.files_meta_data[f] == 'POOLED']
+                if POOLED:
+                    chosen.append(random.choice(POOLED))
+                QC = [f for f in self.list_input_files if self.files_meta_data[f] == 'QC']
+                if QC:
+                    chosen.append( random.choice(QC) )
+                OTHERS = [f for f in self.list_input_files if self.files_meta_data[f] not in ['POOLED', 'QC', 'BLANK']]
+                chosen += random.sample(OTHERS, 3)
+                return chosen[:3]
+            
+
+
 class Sample:
     '''
     A sample or injection, corresponding to one raw data file, either from positive or negative ionization.
@@ -239,13 +364,18 @@ class Sample:
     Mass calibration and annotating formula_mass is at sample level.
     Retention time calibration and correspondency is done across samples at experiment level.
     '''
-    def __init__(self, input_file='', mode='pos'):
+    def __init__(self, experiment, mode, input_file=''):
         self.input_file = input_file
-        self.belonged_experiment = ''
-        self.mode = mode
+        self.experiment = experiment    # parent Experiment instance
+        self.name = os.path.basename(input_file)
+        self.mode = self.experiment.mode
+        
         self.list_MassTraces = []       # fixed sequence
         self.number_MassTraces = 0
         self.mz_list = []               # array
+
+        self.__process_stage__ = 0          # 0 = unprocessed, 1 = step_1, ..
+        self.__mass_accuracy__, self.__mass_stdev__ = 0, 0
 
         # internal use only
         self.__annotated_masstraces__ = []
@@ -262,23 +392,22 @@ class Sample:
             self._detect_peaks_()
             self._assign_selectivity_()
 
-    def process_step_2(self, indexed_DB):
+    def process_step_2(self, DFDB):
         '''
         Annotate MassTraces with unique formula_mass.
         This is based on reference DB and may not cover all MassTraces.
         The remaining steps (correspondence, alignment) will be performed at Experiment level.
-        indexed_DB: either from positive or negative ionization
+        DFDB: either from positive or negative ionization
         '''
-        self._match_mass_formula_(indexed_DB)
+        self._match_mass_formula_(DFDB)
 
 
-    def export_peaklist(self, outfile=''):
+    def export_peaklist(self):
         '''
         Export tsv peak list for intermediate storage or diagnosis.
         Requiring selectivity assigned.
         '''
-        if not outfile:
-            outfile = self.input_file.replace('.mzML', '') + '.peaklist'
+        outfile = self.name.replace('.mzML', '') + '.peaklist'
         header = ['m/z', 'retention time', 'area', 'shape_quality', 'gaussian_amplitude', 'gaussian_variance', 'mz_selectivity']
         peaklist = []
         for M in self.list_MassTraces:
@@ -347,15 +476,11 @@ class Sample:
         MzMLFile().load(infile, exp)
         list_MassTraces = []
         mzDict = {}
-        #
-        # will fix to automated
-        retention_time_step = 0.38
-        # step = 0.25 * (T1[-1]-T1[-3] + T2[2]-T2[0])
-
         for chromatogram in exp.getChromatograms():
             mz = chromatogram.getPrecursor().getMZ()
             mz_str = str(round(mz,6))
             RT, INTS = chromatogram.get_peaks() 
+            retention_time_step = 0.5 * (RT[2] - RT[0])     # assuming XIC must have min 3 data points
             if INTS.max() > min_intensity_threshold:
                 if mz_str not in mzDict:
                     mzDict[mz_str] = [mz, RT, INTS]
@@ -416,22 +541,16 @@ class Sample:
 
 
 
-    def _match_mass_formula_(self, indexed_DB, check_mass_accuracy=True):
+    def _match_mass_formula_(self, DFDB, check_mass_accuracy=True, ppm=10):
         '''
         Match peaks to formula_mass database, including mass accuracy check and correction if needed.
         Only high-selectivity (> 0.9) peaks will be used downstream for alignment calibration.
         Mass accuracy has no hard limit at the moment, but should be restricted in future versions.
         E.g. if mass shift is larger than 20 ppm, user should do own mass calibrate first.
 
-        Different from some software tools that search adducts after feature correspondence across samples,
-        this is done within the sample becuase we avoid mass shift across samples this way,
-        and retention time is easier to control within a sample.
-
-        indexed_DB: [formula_mass, m/z, charged_formula, selectivity, [relations to neutral formula]]
-            example DB_1[99] = 
-            [['C2H4NaO3_99.00532', 99.00532046676999, 'C2H4NaO3', 0.9999999571942034, [('C2H4O3_76.016044', 'M+Na[1+]')]], 
-            ['C4H5NS_99.013721', 99.01372099999999, 'C4H5NS', 0.9967247109333564, [('C4H5NS_99.01427', 'M[1+]')]], 
-            ['C3H8NaO2_99.041706', 99.04170646677, 'C3H8NaO2', 0.999999999998776, [('C3H8O2_76.05243', 'M+Na[1+]')]], ...]
+        DFDB: a reference DB in DataFrame.
+        check_mass_accuracy should be on for all samples in asari processing.
+        ppm: use a larger initial number, and the check step will reduce based on stdev of ppm.
 
         This modifies
         -------------
@@ -446,16 +565,28 @@ class Sample:
             M.__mass_corrected_by_asari__ = True
 
         '''
-        mzList = [M.mz for M in self.list_MassTraces]
-        formula_mass_annotation = annotate_formula_mass(mzList, indexed_DB, check_mass_accuracy=check_mass_accuracy, mode=self.mode)
-        self.__mass_accuracy__, self.__mass_stdev__ = formula_mass_annotation['mass_accuracy'], formula_mass_annotation['ppm_std']
+        list_ppm_errors = []
+        for M in self.list_MassTraces:
+            query = search_formula_mass_dataframe(M.mz, DFDB, ppm)
+            if query:
+                M.formula_mass, delta_ppm = query
+                list_ppm_errors.append(delta_ppm)
 
-        for ii in range(self.number_MassTraces):
-            self.list_MassTraces[ii].formula_mass = formula_mass_annotation['annotated_list'][ii]
-            if formula_mass_annotation['corrected_list_query_mz']:      # mz corrected
-                self.list_MassTraces[ii].raw_mz = self.list_MassTraces[ii].mz
-                self.list_MassTraces[ii].mz = formula_mass_annotation['corrected_list_query_mz'][ii]
-                self.list_MassTraces[ii].__mass_corrected_by_asari__ = True 
+        self.__mass_accuracy__, self.__mass_stdev__ = mass_accuracy, ppm_std = normal_distribution.fit(list_ppm_errors)
+        if check_mass_accuracy:
+            if abs(mass_accuracy) > 5:   # this is considered significant mass shift, requiring m/z correction for all
+                list_ppm_errors = []
+                for M in self.list_MassTraces:
+                    M.raw_mz = mz
+                    M.mz = M.mz - M.mz*0.000001*mass_accuracy
+                    M.__mass_corrected_by_asari__ = True
+                    # redo search because we may find different matches after mass correction; update search ppm too
+                    query = search_formula_mass_dataframe(M.mz, DFDB, 2*ppm_std)
+                    if query:
+                        M.formula_mass, delta_ppm = query
+                        list_ppm_errors.append( delta_ppm )
+                # update ppm_std because it may be used for downstream search parameters
+                _mu, self.__mass_stdev__ = normal_distribution.fit(list_ppm_errors)
 
 
     def _assign_selectivity_(self, std_ppm=5):
