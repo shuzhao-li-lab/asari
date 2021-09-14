@@ -54,3 +54,10 @@ def plot_peaks():
     '''
 
     pass
+
+def plot_sample_rt_calibration(sample, outfile='rt_calibration.pdf'):
+    plt.figure()
+    plt.plot(*sample.__rt_calibration__data__, marker='o', linewidth=1, markersize=1)
+    plt.title("rt_calibration")
+    plt.savefig(sample.name+outfile)
+    plt.close()

@@ -22,16 +22,22 @@ Ref: https://abibuilder.informatik.uni-tuebingen.de/archive/openms/Documentation
 
 import os, sys
 from .algorithms import Sample, ext_MassTrace, ext_Experiment
-
+# from .plot import plot_sample_rt_calibration
 
 PARAMETERS = {
-    'mode': 'pos',                      # ionization mode
-    'min_intensity_threshold': 30000,   # minimal peak intensity
+    'min_intensity_threshold': 10000,   # minimal peak intensity
     'min_timepoints': 5,                # minimal number of data points in elution profile
+    #
+    'mode': 'pos',                      # ionization mode
+    'max_rtime': 300,                   # retention time range (chromatography) 0-300 seconds
+    'interpolate_factor': 10,           # per second. Can increase to 100 for very fast scan rate.
+    #
+    'rtime_tolerance': 10,              # feature rtime shift must be under 10 seconds; not very important?
+                                        # will change to automated parameter using stdev
     #
     'initiation_samples': [],           # if user to specify 3 samples to initiate data processing, to init HOT_DB; 
                                         # otherwise they are chosen automatically
-    # no need to modify below
+    # no need to modify below unless you know what you are doing
     'prominence_window': 30,
     'gaussian_shape': 0.8,
 }
@@ -40,6 +46,7 @@ PARAMETERS['min_prominence_threshold'] = PARAMETERS['min_intensity_threshold']/3
 
 
 def read_projec_dir(directory, file_pattern='chrom.mzML'):
+    print("\nWorking on ", directory)
     return [os.path.join(directory, f) for f in os.listdir(directory) if file_pattern in f]
 
 def metafile_to_dict(infile):
@@ -52,7 +59,7 @@ def metafile_to_dict(infile):
         meta[a[0]] = a[1]
     return {}
 
-def process_project(list_input_files, dict_meta_data={}, parameters=PARAMETERS):
+def process_project(list_input_files, dict_meta_data={}, parameters=PARAMETERS, output_dir=''):
     '''
     Use ext_Experiment as a containing class to hold processed data.
 
@@ -63,30 +70,34 @@ def process_project(list_input_files, dict_meta_data={}, parameters=PARAMETERS):
     EE.correspondency()
     EE.export_feature_table('out.tsv')
 
+    if not output_dir:
+        output_dir = './'
+        
+    for SM in EE.samples:
+        # plot_sample_rt_calibration(SM)
+        SM.export_peaklist()
 
     '''
     if dict_meta_data:
         for k in dict_meta_data:
             dict_meta_data[k] = dict_meta_data[k].upper()       # upper characters to standardize
-            
+    if not list_input_files:
+        print("No input file found. Please verify your pathway to files.")
+
+
     EE = ext_Experiment()
-    EE.__init2__(list_input_files, dict_meta_data, parameters)
+    EE.__init2__(list_input_files, dict_meta_data, parameters, output_dir)
     
-    #EE.set_sample_order(list_input_files)
+    EE.process_all()
     
-    for f in list_input_files:
-        SM = Sample(f)
-        SM.process_step_1()
-        SM.export_peaklist()
-        #
-        #EE.samples.append(SM)
 
 
 
 
 def main(directory):
+    print("\n\n~~~~~~~ Hello from Asari! ~~~~~~~~~\n")
     process_project(
-            read_projec_dir(directory), {}, 
+            read_projec_dir(directory), {}, PARAMETERS, directory   #setting output_dir as input dir
     )
     
 

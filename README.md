@@ -8,6 +8,7 @@ This focuses on high-resolution data, where most features are specific to a form
 - Fully incorporating peak quality, selectiviy (on m/z, database, elution).
 - Peaks of high quality and selectivity are aligned via formula mass.
 - Fast assembly and annotation of serum/plasma metabolomes.
+- Prioritized leverage of high mass resolution.
 
 Basic concepts follow https://github.com/shuzhao-li/metDataModel, as
 

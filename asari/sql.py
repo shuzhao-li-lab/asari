@@ -50,7 +50,7 @@ from mass2chem.annotate import compute_adducts_formulae
 
 #
 # this is tier 1 pos only, will update the DB in later iterations
-from pos_ref_DBs import DB_1
+from .pos_ref_DBs import DB_1
 
 def make_formula_mass_id(formula, mz): return formula + '_' + str(round(mz,6))
 
@@ -60,12 +60,16 @@ def extend_DB1(DB1, mode='pos'):
         if 40 < k < 2000:
             flat += v
     new = []
+    counter = [v[2] for v in flat]
+    # watch for redundancy; this should check [charged]formula alone as minor discripency may exist for m/z.
     for L in flat:
         neutral_formula, mw = L[4][0][0].split("_")
         adducts = compute_adducts_formulae(float(mw), neutral_formula, mode)    
                                                  # e.g. [(58.53894096677, 'M+2H[2+]', result_formula), ...,]
         for A in adducts:
-            new.append( [make_formula_mass_id(A[2], A[0]), A[0], A[2], None, [(L[4][0][0], A[1]),] ] )
+            if A[2] not in counter:
+                new.append( [make_formula_mass_id(A[2], A[0]), A[0], A[2], None, [(L[4][0][0], A[1]),] ] )
+                counter.append(A[2])
 
     return flat + new
 
@@ -82,6 +86,8 @@ def DB_to_DF(DB):
     return pd.DataFrame(flat, columns=header[1:], index=index)
     
 
+def tsv2refDB(file):
+    return pd.read_csv(file, sep='\t', index_col=0)
 
 
 

@@ -40,6 +40,7 @@ setup(
   install_requires=[
     'metDataModel',
     'mass2chem',
+    'pyopenms',
     'matplotlib',
     'numpy',
     'scipy',
