@@ -2,7 +2,8 @@ Asari
 =====
 
 Simple Python program for LC-MS metabolomics data preprocessing.
-This focuses on high-resolution data, where most features are specific to a formula based mass.
+This focuses on high-resolution data, where most features are specific to a formula based mass, 
+and baseline is rarely a problem in peak detection.
 
 - Simple peak dection based on local maxima and prominence.
 - Fully incorporating peak quality, selectiviy (on m/z, database, elution).

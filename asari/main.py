@@ -29,6 +29,7 @@ PARAMETERS = {
     'min_timepoints': 5,                # minimal number of data points in elution profile
     #
     'mode': 'pos',                      # ionization mode
+    'mass_range': (50, 2000),
     'max_rtime': 300,                   # retention time range (chromatography) 0-300 seconds
     'interpolate_factor': 10,           # per second. Can increase to 100 for very fast scan rate.
     #
@@ -40,8 +41,7 @@ PARAMETERS = {
     # no need to modify below unless you know what you are doing
     'prominence_window': 30,
     'gaussian_shape': 0.8,
-}
-
+    }
 PARAMETERS['min_prominence_threshold'] = PARAMETERS['min_intensity_threshold']/3.0
 
 
