@@ -1,6 +1,6 @@
 '''
 asari, a simple program for LC-MS metabolomics data preprocessing.
-Last update by Shuzhao Li, 2021-09-14
+Last update by Shuzhao Li, 2021-09-15
 '''
 import os
 import random
@@ -14,7 +14,8 @@ from scipy.interpolate import UnivariateSpline
 
 from pyopenms import MSExperiment, MzMLFile
 from metDataModel.core import MassTrace, Peak, Experiment       # Feature, Sample later
-from mass2chem.annotate import annotate_formula_mass 
+
+from mass2chem.annotate import annotate_formula_mass            # under dev
 
 from .sql import *
 
@@ -22,8 +23,8 @@ from .sql import *
 #INIT_DFDB = DB_to_DF( extend_DB1(DB_1) )
 INIT_DFDB = tsv2refDB('hot_db.tsv')
 
-# feature id will be assigned at the end; intensities is list; mass_id links to MassTrace
-Feature = namedtuple('Feature', 'mass_id,mz,rtime,peak_quality,selectivity_rt,intensities'.split(',') )
+# feature id will be assigned at the end; intensities is a list; mass_id links to MassTrace
+Feature = namedtuple('Feature', ['mass_id', 'mz', 'rtime', 'peak_quality', 'selectivity_rt', 'intensities'])
 
 def __gaussian_function__(x, a, mu, sigma):
     return a*np.exp(-(x-mu)**2/(2*sigma**2)) 
@@ -74,7 +75,6 @@ def calculate_selectivity(sorted_mz_list, std_ppm=5):
 
     return selectivities
 
-
 def search_formula_mass_dataframe(query_mz, DFDB, limit_ppm=10):
     '''
     return best match formula_mass in DFDB if under ppm limit.
@@ -92,18 +92,16 @@ def search_formula_mass_dataframe(query_mz, DFDB, limit_ppm=10):
     else:
         return None
 
-
-def bin_by_median_rt(List_of_peaks, tolerance):
+def bin_by_median(List_of_tuples, func_tolerance):
     '''
-    List_of_tuples: [(value, object), (value, object), ...], to be separated into bins by values.
+    Not perfect because left side may deviate out of tolerance, but LC-MS data always have enough gaps for separation.
+    List_of_tuples: [(value, object), (value, object), ...], to be separated into bins by values (either rt or mz).
                     objects have attribute of sample_name if to align elsewhere.
     return: [seprated bins], each as a list in the same input format. If all falls in same bin, i.e. [List_of_tuples].
     '''
-    List_of_tuples = [(P.cal_rtime, P) for P in List_of_peaks]
-    List_of_tuples.sort()
     new = [[List_of_tuples[0], ], ]
     for X in List_of_tuples[1:]:
-        if X[0]-np.median([ii[0] for ii in new[-1]]) < tolerance:       # median moving with list change
+        if X[0]-np.median([ii[0] for ii in new[-1]]) < func_tolerance(X[0]):       # median moving with list change
             new[-1].append(X)
         else:
             new.append([X])
@@ -112,33 +110,29 @@ def bin_by_median_rt(List_of_peaks, tolerance):
         PL.append([X[1] for X in L])
     return PL
 
-#
-# revisit weak peaks???
-#
-
-
 def peaks_to_features(peak_dict, rtime_tolerance, ordered_sample_names):
     '''
     This uese high-selectivity peaks to establish features;
     still possibly not distinguishing close peaks well, which may be treated as combined peaks. 
-    
-    return
-    ------
-    List of Features (namedTuples, 'mass_id,mz,rtime,peak_quality,selectivity_rt,intensities'), following the input sample order.
-
+    return List of Features (namedTuples, 'mass_id,mz,rtime,peak_quality,selectivity_rt,intensities'), following the input sample order.
     '''
     def __get_peaks_intensities__(peaks, ordered_sample_names):
         dict_intensities = {}
         for P in peaks: 
             if P.sample_name in dict_intensities:
-                dict_intensities[P.sample_name] += P.peak_area      # redundant peaks in same m/z & rt
+                dict_intensities[P.sample_name] += P.peak_area      # redundant peaks in same m/z & rt are merged/summed here
             else:
                 dict_intensities[P.sample_name] = P.peak_area
         return [dict_intensities.get(name, 0) for name in ordered_sample_names]
 
+    def __bin_by_median_rt__(List_of_peaks, tolerance):
+        List_of_tuples = [(P.cal_rtime, P) for P in List_of_peaks]
+        List_of_tuples.sort()
+        return bin_by_median(List_of_tuples, lambda x: tolerance)
+
     FeatureList = []
     for k,v in peak_dict.items():
-        for F in bin_by_median_rt(v, rtime_tolerance):
+        for F in __bin_by_median_rt__(v, rtime_tolerance):
             median_mz, median_rt = np.median([P.mz for P in F]), np.median([P.cal_rtime for P in F])
             peak_quality = max([P.goodness_fitting for P in F])                                 # will include np.median
             intensities = __get_peaks_intensities__(F, ordered_sample_names)
@@ -169,6 +163,7 @@ class ext_Experiment(Experiment):
         self.output_dir = output_dir
         self.samples = []                   # out of initial input order in samples
         self.ordered_sample_names = []      # will populate after sample processing, enforced in assembling featuretable
+        self.name_to_Sample = {}
         self.HOT_DB = {}                    # will be pd.DataFrame, to be initiated by chosen 3 smaples
         self.feature_table = {}             # will be pd.DataFrame
         
@@ -179,16 +174,14 @@ class ext_Experiment(Experiment):
         self.mode = parameters['mode']
 
         self.initiation_samples = self.__choose_initiation_samples__()
-        # self.interpolate_rtime_list = np.linspace(0, parameters['max_rtime'], 3000)       # ?? as only XICs are input
+        # self.interpolate_rtime_list = np.linspace(0, parameters['max_rtime'], 3000)       # ?? 
         
-
     def process_all(self):
         '''
         This will shift to a DB design in next version, not to keep all samples in memory.
         '''
-        self.init_hot_db( INIT_DFDB )   # initial processing of 3 samples to set up HOT_DB
-        # run remaining samples
-        for f in self.list_input_files:
+        self.init_hot_db( INIT_DFDB )       # initial processing of 3 samples to set up HOT_DB
+        for f in self.list_input_files:     # run remaining samples
             if f not in self.initiation_samples:
                 SM = Sample(self, self.mode, f)
                 SM.process_step_1()
@@ -197,12 +190,8 @@ class ext_Experiment(Experiment):
         
         self.calibrate_retention_time()
         self.correspondence()
-
-        #self.retrieve_weak_peaks()
-        #self.export_feature_table()
-
-
-
+        self.export_feature_table(self.FeatureTable)
+        
     def init_hot_db(self, DFDB):
         '''
         Use three samples to initiate a hot DB to house feature annotation specific to this Experiment, and speed up subsequent search.
@@ -234,7 +223,6 @@ class ext_Experiment(Experiment):
         #export_hot_db
         self.HOT_DB.to_csv("dynamic_hot_db.tsv", sep="\t")
         
-
     def calibrate_retention_time(self, method='spline', smoothing_factor=0.5):
         '''
         Calibrate (align) RT using selected `good` peaks.
@@ -258,7 +246,7 @@ class ext_Experiment(Experiment):
             rt_cal = rt_table[[SM.name, 'median']].dropna(axis=0, how='any').values.tolist() 
             # now this is listed converted from numpy.ndarray 
             if len(rt_cal) < 30:
-                print("\n\n-- Warning, RT regression using too few features (%s, %d) --\n\n" %(SM.name, len(xx)))
+                print("\n\n*** Warning, RT regression using too few features (%s, %d) ***\n\n" %(SM.name, len(xx)))
             rt_cal.sort()
             # to-do: need down sample, each bin no more than 10 data points
 
@@ -278,7 +266,6 @@ class ext_Experiment(Experiment):
             for ML in SM.dict_masstraces.values():
                 for M in ML:
                     M.cal_list_retention_time = SM.__rt_calibration__(M.list_retention_time)
-
 
     def get_rt_calibration_ref(self):
         '''
@@ -312,53 +299,68 @@ class ext_Experiment(Experiment):
         rt_table.to_csv("raw_rt_calibration_matrix.tsv", sep="\t")    # to export 
         return rt_table
         
-
     def correspondence(self):
         '''
-        
         In each sample: Peak.mzstr links to Sample.mzstr_2_formula_mass, Sample.dict_masstraces
-
-        Start feature table; not including Peak instances yet.
-        detailed peak info will be pushed in to SQLite DB.
+        Start feature table using good peaks (quality > 0.8), then fill weak peaks based on them. 
+        Because no feature should be considered if no single good peak exists.
+        To do: detailed peak info will be pushed in to SQLite DB.
         '''
-        self.ordered_sample_names = [SM.name for SM in self.samples]    # this is used to order intensity values in Features and help group/split Features
-
-        # -- next == >>
-        #  First get unique formula_mass or tentative mass_id for all good peaks.
-
+        self.ordered_sample_names = [SM.name for SM in self.samples]    # used to order intensity values in Features 
+        unassigned = []
         peak_dict = {}
         for SM in self.samples:
+            self.name_to_Sample[SM.name] = SM
             for P in SM.good_peaks:
-                try:
-                    k = SM.mzstr_2_formula_mass[P.mzstr]
-                    if k in peak_dict:
-                        peak_dict[k].append(P)
-                    else:
-                        peak_dict[k] = [P]
-                except KeyError:
-                    pass
+                if P.goodness_fitting > 0.8:
+                    if P.mzstr not in SM.mzstr_2_formula_mass:          # next to get a label of consensus m/z
+                        unassigned.append((P.mz, P.rtime, P))           # need rtime to break ties in sorting
+                    else:                                               # those with formula_mass labelled
+                        k = SM.mzstr_2_formula_mass[P.mzstr]
+                        if k in peak_dict:
+                            peak_dict[k].append(P)
+                        else:
+                            peak_dict[k] = [P]
 
-        # organize features by peak_dict; if >1 peaks in same sample fall into same feature, merge.
+        unassigned.sort()
+        unassigned = [(x[0], x[2]) for x in unassigned]
+        mz_peak_bins = bin_by_median(unassigned, lambda x: 2 * self.__mass_stdev__ * 0.000001 * x)
+        for BIN in mz_peak_bins:
+            peak_dict[ '_M_' + str(round(np.median([P.mz for P in BIN]),6)) ] = BIN
+
+        peak_dict = self._recover_weak_signals_(peak_dict)
         FeatureList = peaks_to_features(peak_dict, self.parameters['rtime_tolerance'], self.ordered_sample_names)
-
-        #with open('tuple_feature_table.tsv', 'w') as O:
-        #    O.write('\n'.join([str(x) for x in FeatureList]))
-
-        self.export_feature_table(FeatureList)
-
+        print("Additional features are assembled based on 2x stdev seen in this experiment, ", self.__mass_stdev__)
         self.FeatureTable = FeatureList
 
+        # update selectivities
 
 
-    def retrieve_weak_peaks(self):
-        pass
+    def _recover_weak_signals_(self, peak_dict):
+        '''
+        Weak signal recovery based on the above FeatureTable.
+        
+        for k, v in peak_dict.items():
+            samples_2_look = [self.name_to_Sample[x] for x in self.ordered_sample_names if x not in [P.sample_name for P in v]]
+            for SM in samples_2_look:
+                # v += peaks in  MassTrace = k
+
+        peak_initiate(self, parent_mass_trace, mz, apex, peak_height, left_base, right_base):
+
+        
+
+        for F in __bin_by_median_rt__(v, rtime_tolerance):
+            median_mz, median_rt = np.median([P.mz for P in F]), np.median([P.cal_rtime for P in F])
+            peak_quality = max([P.goodness_fitting for P in F])                                 # will include np.median
+
+        '''
+
+        return peak_dict
 
 
     def export_feature_table(self, FeatureList, outfile='feature_table.tsv'):
         '''
-        ftable = pd.DataFrame(ftable)
-        ftable.to_csv(outfile, sep='\t')
-        'mass_id,mz,rtime,peak_quality,selectivity_rt,intensities'
+        FeatureList: a list of namedTuples, i.e. Features
         '''
         outfile = os.path.join(self.output_dir, outfile)
         s = '\t'.join(['formula_mass', 'm/z', 'retention time', 'peak_quality', 'selectivity_rt',] + self.ordered_sample_names) + '\n'
@@ -369,19 +371,6 @@ class ext_Experiment(Experiment):
             ) + '\n'
         with open(outfile, 'w') as O:
             O.write(s)
-
-
-    def __process__unassigned_masstraces__(self):
-
-        '''
-        build index for unassigned
-        determine how many mass_ids
-        return [(mass_id, List_of_MassTraces), ...]
-
-        '''
-
-
-        pass
 
     def __choose_initiation_samples__(self):
         if self.parameters['initiation_samples']:
@@ -410,23 +399,15 @@ class Sample:
     '''
     def __init__(self, experiment, mode, input_file=''):
         self.input_file = input_file
-        self.experiment = experiment    # parent Experiment instance
+        self.experiment = experiment                        # parent Experiment instance
         self.name = os.path.basename(input_file)            # must be unique
         self.mode = self.experiment.mode
         self.parameters = self.experiment.parameters
-
-        self.dict_masstraces = {}       # indexed by str(round(mz,6))
+        self.dict_masstraces = {}                           # indexed by str(round(mz,6))
         self.mzstr_2_formula_mass = {}
         self.good_peaks = []
-
-        self.number_MassTraces = 0
-        self.__mass_accuracy__, self.__mass_stdev__ = 0, 0
-        self.__rt_calibration__ = None          # This will be the calibration function
-
-        # internal use only
-        self.__mass_index__ = {}
-        self.__unassigned_masstraces__ = []
-        self.list_MassTraces = []       # fixed sequence
+        self.__mass_accuracy__, self.__mass_stdev__ = None, None
+        self.__rt_calibration__ = None                      # This will be the calibration function
 
     def process_step_1(self):
         '''
@@ -454,9 +435,8 @@ class Sample:
         header = ['m/z', 'retention time', 'area', 'shape_quality', 'gaussian_amplitude', 'gaussian_variance', 'mz_selectivity']
         peaklist = []
         for P in self.good_peaks:
-            formatted = [str(round(P.mz, 6)), str(round(P.rtime, 2)), str(int(P.peak_area)), 
-                            str(round(P.goodness_fitting, 2)), str(int(P.gaussian_parameters[0])), 
-                                str(round(P.gaussian_parameters[2], 2)), str(round(P.selectivity, 2)),]
+            formatted = [str(round(P.mz, 6)), str(round(P.rtime, 2)), str(int(P.peak_area)), str(round(P.goodness_fitting, 2)), 
+                            str(int(P.gaussian_parameters[0])), str(round(P.gaussian_parameters[2], 2)), str(round(P.selectivity, 2)),]
             if P.mzstr in self.mzstr_2_formula_mass:
                 formatted.append(self.mzstr_2_formula_mass[P.mzstr])
             peaklist.append(formatted)
@@ -491,7 +471,7 @@ class Sample:
             if _low < mz < _high:
                 mz_str = str(round(mz,6))
                 RT, INTS = chromatogram.get_peaks() 
-                if INTS.max() > self.experiment.parameters['min_intensity_threshold'] * 0.1:    # use threshold for good peaks; keep more
+                if INTS.max() > self.experiment.parameters['min_intensity_threshold'] * 0.1:    # Keeping more XICs, but use higher threshold for good peaks
                     M = ext_MassTrace()
                     M.__init2__(mz, RT, INTS)
                     if mz_str in self.dict_masstraces:
@@ -502,13 +482,13 @@ class Sample:
         print("\nProcessing %s, found %d mass traces." %(self.input_file, len(self.dict_masstraces)))
 
     def _assign_selectivity_(self, std_ppm=5):
-        Q = [(P.mz, P.rtime, P) for P in self.good_peaks]
+        Q = [(P.mz, P.rtime, P) for P in self.good_peaks]                                       # need rtime to break ties in sorting
         Q.sort()
         selectivities = calculate_selectivity([x[0] for x in Q], std_ppm)
         for ii in range(len(Q)):
             Q[ii][2].selectivity = selectivities[ii]
 
-    def _match_mass_formula_(self, DFDB, check_mass_accuracy=True, ppm=15):
+    def _match_mass_formula_(self, DFDB, check_mass_accuracy=True, ppm=10):
         '''
         Match peaks to formula_mass database, including mass accuracy check and correction if needed.
         Only high-selectivity (> 0.9) peaks will be used downstream for alignment calibration.
@@ -517,7 +497,8 @@ class Sample:
 
         DFDB: a reference DB in DataFrame.
         check_mass_accuracy should be on for all samples in asari processing.
-        ppm: use a larger initial number, and the check step will reduce based on stdev of ppm.
+        ppm: default to 10, because features (although in smaller number) will still match if the instrument has larger variations.
+        
         '''
         list_ppm_errors, mzstr_2_formula_mass = [], {}
         for P in self.good_peaks:
@@ -528,7 +509,7 @@ class Sample:
                 list_ppm_errors.append(delta_ppm)
 
         self.__mass_accuracy__, self.__mass_stdev__ = mass_accuracy, ppm_std = normal_distribution.fit(list_ppm_errors)
-        print("    (mass_accuracy, mass_stdev) = (%5.2f, %5.2f ) " %(mass_accuracy, ppm_std))
+        print("    (mass_accuracy, stdev in matched results) = (%5.2f, %5.2f ) ppm." %(mass_accuracy, ppm_std))
         if check_mass_accuracy and abs(mass_accuracy) > 5:   # this is considered significant mass shift, requiring m/z correction for all
             list_ppm_errors, mzstr_2_formula_mass = [], {}
             for P in self.good_peaks:
@@ -604,6 +585,8 @@ class ext_MassTrace(MassTrace):
 
         return list_peaks
 
+    def extract_targeted_peak(self, rt_range):
+        pass
 
 # peak evaluation is in this class
 class ext_Peak(Peak):

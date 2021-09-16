@@ -38,9 +38,10 @@ PARAMETERS = {
     #
     'initiation_samples': [],           # if user to specify 3 samples to initiate data processing, to init HOT_DB; 
                                         # otherwise they are chosen automatically
+                                        
     # no need to modify below unless you know what you are doing
     'prominence_window': 30,
-    'gaussian_shape': 0.8,
+    'gaussian_shape': 0.5,
     }
 PARAMETERS['min_prominence_threshold'] = PARAMETERS['min_intensity_threshold']/3.0
 
