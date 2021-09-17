@@ -34,11 +34,17 @@ Each sample is checked for mass accuracy. Mass calibration is done if systematic
 
 RT calibration is performed based on limited number of selected high quality peaks. A sample is dropped if too few such peaks are found. 
 
+Because peak detection uses lenient default parameters (high quality peaks used to guide major steps),
+weak signal reovery is not implemented. The missing peaks are considered under limit of detection.
+One can impute with minimal detected values in each feature (row) in downstream analysis. 
+
 
 Next to-do
 ==========
 
 Group features into empicical compounds via mass2chem.
+
+To add kernel density method for grouping m/z features (and RT). Right now, formula_mass anchors correspondence. The remaining peaks are groupped by binning median.
 
 Add SQLite DB for storage.
 Before then, we may consider to process data in limited sizes. But without caching mass traces, the memory use is small.

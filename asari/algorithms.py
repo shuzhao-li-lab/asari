@@ -98,6 +98,7 @@ def search_formula_mass_dataframe(query_mz, DFDB, limit_ppm=10):
 def bin_by_median(List_of_tuples, func_tolerance):
     '''
     Not perfect because left side may deviate out of tolerance, but LC-MS data always have enough gaps for separation.
+    Will add kernel density method for grouping m/z features.
     List_of_tuples: [(value, object), (value, object), ...], to be separated into bins by values (either rt or mz).
                     objects have attribute of sample_name if to align elsewhere.
     return: [seprated bins], each as a list in the same input format. If all falls in same bin, i.e. [List_of_tuples].
@@ -487,7 +488,8 @@ class Sample:
             if _low < mz < _high:
                 mz_str = str(round(mz,6))
                 RT, INTS = chromatogram.get_peaks() 
-                if INTS.max() > self.experiment.parameters['min_intensity_threshold'] * 0.1:    # Keeping more XICs, but use higher threshold for good peaks
+                if INTS.max() > self.experiment.parameters['min_intensity_threshold']:
+                    # * 0.1:    # can lower if want more XICs for weak signal recovery, but higher threshold still for good peaks
                     M = ext_MassTrace()
                     M.__init2__(mz, RT, INTS)
                     if mz_str in self.dict_masstraces:

@@ -25,7 +25,7 @@ from .algorithms import Sample, ext_MassTrace, ext_Experiment
 # from .plot import plot_sample_rt_calibration
 
 PARAMETERS = {
-    'min_intensity_threshold': 10000,   # minimal peak intensity
+    'min_intensity_threshold': 5000,   # minimal peak height
     'min_timepoints': 5,                # minimal number of data points in elution profile
     'cache_mass_traces': False,         # to save memory if not using DB; turn on if need to plot and diagnose
     'output_filename': 'feature_table.tsv',
