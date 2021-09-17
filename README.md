@@ -30,14 +30,26 @@ Algorithms
 
 Align (correspondence) peaks of high selectivity in both measured data and in reference database via formula mass.
 
-Group degenerate peaks into empicical compounds (based on primary ions in previous step) in each sample.
+Each sample is checked for mass accuracy. Mass calibration is done if systematic shift > 5 pm.
 
-Mass calibration if needed. RT calibration.
-
-RANSAC alignment of the remaining peaks.
+RT calibration is performed based on limited number of selected high quality peaks. A sample is dropped if too few such peaks are found. 
 
 
+Next to-do
+==========
+
+Group features into empicical compounds via mass2chem.
+
+Add SQLite DB for storage.
+Before then, we may consider to process data in limited sizes. But without caching mass traces, the memory use is small.
+
+It will be significant to replace pyOpenMS (and OpenMS) and update the chromatogram file format.
+Right now, each file takes ~10 seconds to process and half of the time is spent on reading the chromatogram file.
+
+More work is needed for estimation of mass stdev. The current method is too dependent on the limit window. 
+Also, if users have spike-in controls, they should be allowed to use first.
 
 
-
+Repository
+==========
 https://github.com/shuzhao-li/asari

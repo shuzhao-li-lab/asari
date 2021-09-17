@@ -27,21 +27,24 @@ from .algorithms import Sample, ext_MassTrace, ext_Experiment
 PARAMETERS = {
     'min_intensity_threshold': 10000,   # minimal peak intensity
     'min_timepoints': 5,                # minimal number of data points in elution profile
+    'cache_mass_traces': False,         # to save memory if not using DB; turn on if need to plot and diagnose
+    'output_filename': 'feature_table.tsv',
+    'annotation_filename': "annotation_db.tsv",
     #
     'mode': 'pos',                      # ionization mode
     'mass_range': (50, 2000),
     'max_rtime': 300,                   # retention time range (chromatography) 0-300 seconds
-    'interpolate_factor': 10,           # per second. Can increase to 100 for very fast scan rate.
+    # 'interpolate_factor': 10,           # per second. Can increase to 100 for very fast scan rate.
     #
-    'rtime_tolerance': 10,              # feature rtime shift must be under 10 seconds; not very important?
-                                        # will change to automated parameter using stdev
+    'rtime_tolerance': 10,              # feature rtime shift threshold under 10 seconds; or 10% of rtime
+                                        # will change to automated parameter using stdev??
     #
     'initiation_samples': [],           # if user to specify 3 samples to initiate data processing, to init HOT_DB; 
                                         # otherwise they are chosen automatically
-                                        
+
     # no need to modify below unless you know what you are doing
     'prominence_window': 30,
-    'gaussian_shape': 0.5,
+    'gaussian_shape': 0.3,              # min cutoff
     }
 PARAMETERS['min_prominence_threshold'] = PARAMETERS['min_intensity_threshold']/3.0
 

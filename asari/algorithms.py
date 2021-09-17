@@ -15,7 +15,7 @@ from scipy.interpolate import UnivariateSpline
 from pyopenms import MSExperiment, MzMLFile
 from metDataModel.core import MassTrace, Peak, Experiment       # Feature, Sample later
 
-from mass2chem.annotate import annotate_formula_mass            # under dev
+# from mass2chem.annotate import annotate_formula_mass            # under dev
 
 from .sql import *
 
@@ -24,7 +24,10 @@ from .sql import *
 INIT_DFDB = tsv2refDB('hot_db.tsv')
 
 # feature id will be assigned at the end; intensities is a list; mass_id links to MassTrace
-Feature = namedtuple('Feature', ['mass_id', 'mz', 'rtime', 'peak_quality', 'selectivity_rt', 'intensities'])
+Feature = namedtuple('Feature', ['mass_id', 'mz', 'rtime', 'rt_min', 'rt_max', 
+                                'peak_quality_max', 'peak_quality_median', 'number_peaks', 'perc_peaks',
+                                'selectivity_combined', 'selectivity_mz', 'intensity_mean',
+                                'intensities'])
 
 def __gaussian_function__(x, a, mu, sigma):
     return a*np.exp(-(x-mu)**2/(2*sigma**2)) 
@@ -128,16 +131,25 @@ def peaks_to_features(peak_dict, rtime_tolerance, ordered_sample_names):
     def __bin_by_median_rt__(List_of_peaks, tolerance):
         List_of_tuples = [(P.cal_rtime, P) for P in List_of_peaks]
         List_of_tuples.sort()
-        return bin_by_median(List_of_tuples, lambda x: tolerance)
+        return bin_by_median(List_of_tuples, lambda x: max(tolerance, 0.1*x))
 
     FeatureList = []
     for k,v in peak_dict.items():
         for F in __bin_by_median_rt__(v, rtime_tolerance):
             median_mz, median_rt = np.median([P.mz for P in F]), np.median([P.cal_rtime for P in F])
-            peak_quality = max([P.goodness_fitting for P in F])                                 # will include np.median
+            rt_min = float(min([P.left_rtime for P in F]))          # not sure why min returns np.array
+            rt_max = float(max([P.right_rtime for P in F]))
+            peak_quality_max = max([P.goodness_fitting for P in F])
+            peak_quality_median = np.median([P.goodness_fitting for P in F])
+            number_peaks = len(set([P.sample_name for P in F]))
+            perc_peaks = 100.0 * number_peaks/len(ordered_sample_names)
+            selectivity_mz = np.mean([P.selectivity for P in F])
+            selectivity_combined = 9
             intensities = __get_peaks_intensities__(F, ordered_sample_names)
-            #'mass_id,mz,rtime,peak_quality,selectivity_rt,intensities'
-            FeatureList += [Feature(k, median_mz, median_rt, peak_quality, 1, intensities)]
+            intensity_mean = int(sum(intensities)/number_peaks)
+            FeatureList += [Feature(k, median_mz, median_rt, rt_min, rt_max, 
+                            peak_quality_max, peak_quality_median, number_peaks, perc_peaks,
+                            selectivity_combined, selectivity_mz, intensity_mean, intensities)]
 
     return FeatureList
 
@@ -180,24 +192,25 @@ class ext_Experiment(Experiment):
         '''
         This will shift to a DB design in next version, not to keep all samples in memory.
         '''
-        self.init_hot_db( INIT_DFDB )       # initial processing of 3 samples to set up HOT_DB
-        for f in self.list_input_files:     # run remaining samples
+        self.init_hot_db( INIT_DFDB )                                   # initial processing of 3 samples to set up HOT_DB
+        for f in self.list_input_files:                                 # run remaining samples
             if f not in self.initiation_samples:
                 SM = Sample(self, self.mode, f)
                 SM.process_step_1()
                 SM.process_step_2(self.HOT_DB)
+                if not self.parameters['cache_mass_traces']:
+                    del(SM.dict_masstraces)
                 self.samples.append(SM)
         
-        self.calibrate_retention_time()
+        self.calibrate_retention_time()                                 # samples may be marked to drop
         self.correspondence()
-        self.export_feature_table(self.FeatureTable)
+        self.export_feature_table(self.FeatureTable, self.parameters['output_filename'])
         
     def init_hot_db(self, DFDB):
         '''
         Use three samples to initiate a hot DB to house feature annotation specific to this Experiment, and speed up subsequent search.
         The HOT_DB will be used during sample processing, and have another update after correspondence and additional annotation.
         The HOT_DB will then be exported as Expt annotation.
-        
         '''
         chosen_Samples, found_formula_masses = [], []
         for f in self.initiation_samples:
@@ -219,9 +232,8 @@ class ext_Experiment(Experiment):
 
         print("\n[@.@] Anchoring with %d initial formula matches." %len(found_formula_masses))
         print("[@.@] Initial estimation done on\n" + '\n'.join(self.initiation_samples))
-
-        #export_hot_db
-        self.HOT_DB.to_csv("dynamic_hot_db.tsv", sep="\t")
+        #export_hot_db, without last col
+        self.HOT_DB.iloc[:, :-1].to_csv(os.path.join(self.output_dir, self.parameters['annotation_filename']), sep="\t")
         
     def calibrate_retention_time(self, method='spline', smoothing_factor=0.5):
         '''
@@ -245,27 +257,29 @@ class ext_Experiment(Experiment):
         for SM in self.samples:
             rt_cal = rt_table[[SM.name, 'median']].dropna(axis=0, how='any').values.tolist() 
             # now this is listed converted from numpy.ndarray 
-            if len(rt_cal) < 30:
-                print("\n\n*** Warning, RT regression using too few features (%s, %d) ***\n\n" %(SM.name, len(xx)))
-            rt_cal.sort()
-            # to-do: need down sample, each bin no more than 10 data points
+            if len(rt_cal) < 20:
+                SM.__valid__ = False 
+                print("\n\n*** Warning, RT regression using too few features (%d) ***" %len(rt_cal))
+                print("*** Sample %s removed from processing. ***\n\n" %SM.name)
+            else:
+                rt_cal.sort()
+                # to-do: need down sample, each bin no more than 10 data points
+                xx, yy = [], []
+                for L in rt_cal:
+                    if abs(L[0]-L[1])/L[1] < 0.2:       # control shift < 20%
+                        xx.append(L[0])
+                        yy.append(L[1])
 
-            xx, yy = [], []
-            for L in rt_cal:
-                if abs(L[0]-L[1])/L[1] < 0.2:       # control shift < 20%
-                    xx.append(L[0])
-                    yy.append(L[1])
+                spl = UnivariateSpline(xx, yy, s=smoothing_factor)
+                SM.__rt_calibration__ = spl
+                SM.__rt_calibration__data__ = (xx, yy)
 
-            spl = UnivariateSpline(xx, yy, s=smoothing_factor)
-            SM.__rt_calibration__ = spl
-            SM.__rt_calibration__data__ = (xx, yy)
+                # calibrate all detected RT for all peaks, and raw RT from MassTraces
+                for P in SM.good_peaks:
+                    P.cal_rtime = SM.__rt_calibration__(P.rtime)
+                    P.left_rtime = SM.__rt_calibration__(P.left_rtime)
+                    P.right_rtime = SM.__rt_calibration__(P.right_rtime)
 
-            # calibrate all detected RT for all peaks, and raw RT from MassTraces
-            for P in SM.good_peaks:
-                P.cal_rtime = SM.__rt_calibration__(P.rtime)
-            for ML in SM.dict_masstraces.values():
-                for M in ML:
-                    M.cal_list_retention_time = SM.__rt_calibration__(M.list_retention_time)
 
     def get_rt_calibration_ref(self):
         '''
@@ -306,71 +320,73 @@ class ext_Experiment(Experiment):
         Because no feature should be considered if no single good peak exists.
         To do: detailed peak info will be pushed in to SQLite DB.
         '''
+        self.samples = [SM for SM in self.samples if SM.__valid__]      # remove sample!!!
         self.ordered_sample_names = [SM.name for SM in self.samples]    # used to order intensity values in Features 
         unassigned = []
         peak_dict = {}
         for SM in self.samples:
             self.name_to_Sample[SM.name] = SM
             for P in SM.good_peaks:
-                if P.goodness_fitting > 0.8:
-                    if P.mzstr not in SM.mzstr_2_formula_mass:          # next to get a label of consensus m/z
-                        unassigned.append((P.mz, P.rtime, P))           # need rtime to break ties in sorting
-                    else:                                               # those with formula_mass labelled
-                        k = SM.mzstr_2_formula_mass[P.mzstr]
-                        if k in peak_dict:
-                            peak_dict[k].append(P)
-                        else:
-                            peak_dict[k] = [P]
+                #if P.goodness_fitting > 0.9:
+                if P.mzstr not in SM.mzstr_2_formula_mass:              # next to get a label of consensus m/z
+                    unassigned.append((P.mz, P.rtime, P))               # need rtime to break ties in sorting
+                else:                                                   # those with formula_mass labelled
+                    k = SM.mzstr_2_formula_mass[P.mzstr]
+                    if k in peak_dict:
+                        peak_dict[k].append(P)
+                    else:
+                        peak_dict[k] = [P]
 
         unassigned.sort()
         unassigned = [(x[0], x[2]) for x in unassigned]
         mz_peak_bins = bin_by_median(unassigned, lambda x: 2 * self.__mass_stdev__ * 0.000001 * x)
         for BIN in mz_peak_bins:
             peak_dict[ '_M_' + str(round(np.median([P.mz for P in BIN]),6)) ] = BIN
-
-        peak_dict = self._recover_weak_signals_(peak_dict)
         FeatureList = peaks_to_features(peak_dict, self.parameters['rtime_tolerance'], self.ordered_sample_names)
-        print("Additional features are assembled based on 2x stdev seen in this experiment, ", self.__mass_stdev__)
+        print("Additional features are assembled based on 2x stdev (%5.2f ppm) seen in this experiment, " % self.__mass_stdev__)
         self.FeatureTable = FeatureList
+        # to update selectivity_combined
 
-        # update selectivities
-
-
-    def _recover_weak_signals_(self, peak_dict):
+    def _recover_weak_signals_(self, FeatureList):
         '''
         Weak signal recovery based on the above FeatureTable.
-        
-        for k, v in peak_dict.items():
+        for F in FeatureList:
             samples_2_look = [self.name_to_Sample[x] for x in self.ordered_sample_names if x not in [P.sample_name for P in v]]
-            for SM in samples_2_look:
-                # v += peaks in  MassTrace = k
-
-        peak_initiate(self, parent_mass_trace, mz, apex, peak_height, left_base, right_base):
-
-        
-
-        for F in __bin_by_median_rt__(v, rtime_tolerance):
-            median_mz, median_rt = np.median([P.mz for P in F]), np.median([P.cal_rtime for P in F])
-            peak_quality = max([P.goodness_fitting for P in F])                                 # will include np.median
-
+        def _search_masstrace_by_(self, Sample, formula_mass, mz, rt_min, rt_max)
         '''
-
-        return peak_dict
-
+        pass
 
     def export_feature_table(self, FeatureList, outfile='feature_table.tsv'):
         '''
-        FeatureList: a list of namedTuples, i.e. Features
+        FeatureList: a list of namedTuples, i.e. Features; Output two files, one main, another low quality features.
         '''
-        outfile = os.path.join(self.output_dir, outfile)
-        s = '\t'.join(['formula_mass', 'm/z', 'retention time', 'peak_quality', 'selectivity_rt',] + self.ordered_sample_names) + '\n'
-        for F in FeatureList:
-            s += '\t'.join(
-                [F.mass_id, str(round(F.mz,4)), str(round(F.rtime,2)), str(round(F.peak_quality,2)), 
-                str(round(F.selectivity_rt,2))] + [str(int(x)) for x in F.intensities]
-            ) + '\n'
-        with open(outfile, 'w') as O:
-            O.write(s)
+        def __write__(FeatureList, outfile):
+            s = '\t'.join(['formula_mass', 'mz', 'rtime', 'rt_min', 'rt_max', 'number_peaks',
+                                    'peak_quality_max', 'peak_quality_median', 'intensity_mean', 'selectivity_mz',
+                                    ] + self.ordered_sample_names) + '\n'
+            for F in FeatureList:
+                s += '\t'.join(
+                    [F.mass_id, str(round(F.mz,4)), str(round(F.rtime,2)), str(round(F.rt_min,2)), str(round(F.rt_max,2)), str(F.number_peaks),
+                    str(round(F.peak_quality_max,2)), str(round(F.peak_quality_median,2)), str(F.intensity_mean), str(round(F.selectivity_mz,2)),
+                    ] + [str(int(x)) for x in F.intensities]
+                    ) + '\n'
+            with open( outfile, 'w') as O:
+                O.write(s)
+
+        high_quality_features, low_quality_features = [], []
+        for F in FeatureList: 
+            if F.peak_quality_max > 0.8 and F.perc_peaks > 15:
+                high_quality_features.append(F)
+            else:
+                low_quality_features.append(F)
+
+        high_quality_features.sort(key=lambda F: F.peak_quality_max, reverse=True)
+        #print(FeatureList[99])
+        __write__(high_quality_features, os.path.join(self.output_dir, outfile))
+        __write__(low_quality_features, os.path.join(self.output_dir, 'low_quality_features_' + outfile))
+        print("Feature tables were written under %s." %self.output_dir)
+        print("The main feature table (%s) has %d samples and %d features.\n\n\n" %(
+            self.parameters['output_filename'], len(self.ordered_sample_names), len(high_quality_features)))
 
     def __choose_initiation_samples__(self):
         if self.parameters['initiation_samples']:
@@ -406,6 +422,7 @@ class Sample:
         self.dict_masstraces = {}                           # indexed by str(round(mz,6))
         self.mzstr_2_formula_mass = {}
         self.good_peaks = []
+        self.__valid__ = True
         self.__mass_accuracy__, self.__mass_stdev__ = None, None
         self.__rt_calibration__ = None                      # This will be the calibration function
 
@@ -423,14 +440,13 @@ class Sample:
         This is based on reference DB and may not cover all MassTraces.
         The remaining steps (correspondence, alignment) will be performed at Experiment level.
         DFDB: either from positive or negative ionization
-
         There may be repeated formula_mass - traces here, leaving to step_3 and masstraces_to_features to handle.
         '''
         self._match_mass_formula_(DFDB)
         for P in self.good_peaks:
             P.sample_name = self.name
 
-    def export_peaklist(self):
+    def export_peaklist(self):                                  # for diagnosis etc.
         outfile = os.path.join(self.experiment.output_dir, self.name.replace('.mzML', '') + '.peaklist')
         header = ['m/z', 'retention time', 'area', 'shape_quality', 'gaussian_amplitude', 'gaussian_variance', 'mz_selectivity']
         peaklist = []
@@ -543,14 +559,13 @@ class ext_MassTrace(MassTrace):
     '''
     Extending metDataModel.core.MassTrace
     Peak detection using scipy.signal.find_peaks, a local maxima method with prominence control.
-    Not keeping Peaks in this class; Peaks are attached to Sample.
+    Not keeping Peaks in this class; Peaks are attached to Sample. 
     To-do: further refine peak detection in future, 
     e.g. extra iteration of peak detection in remaining region; better deconvolution of overlapping peaks.
-
     '''
     def __init2__(self, mz, RT, INTS):
         self.mz, self.list_retention_time, self.list_intensity = [mz, RT, INTS]
-        self.cal_list_retention_time = []
+        # self.cal_list_retention_time = []             # not using now
         self.formula_mass = None
         self.raw_mzs = []                               # multiple values possible when merging traces
         self.__mass_corrected_by_asari__ = False        # True if updated by calibration
@@ -559,25 +574,22 @@ class ext_MassTrace(MassTrace):
 
     def detect_peaks(self, min_intensity_threshold, min_timepoints, min_prominence_threshold, prominence_window, gaussian_shape):
         list_peaks = []
-        peaks, properties = find_peaks(self.list_intensity, 
-                                    height=min_intensity_threshold, width=min_timepoints, 
-                                    prominence=min_prominence_threshold, wlen=prominence_window) 
+        peaks, properties = find_peaks(self.list_intensity, height=min_intensity_threshold, width=min_timepoints, 
+                                                        prominence=min_prominence_threshold, wlen=prominence_window) 
         
         if peaks.size > 1:
             # Rerun, raising min_prominence_threshold. Not relying on peak shape for small peaks, 
             # because chromatography is often not good so that small peaks can't be separated from noise.
             _tenth_height = 0.1*self.list_intensity.max()
             min_prominence_threshold = max(min_prominence_threshold, _tenth_height)
-            peaks, properties = find_peaks(self.list_intensity, 
-                                    height=min_intensity_threshold, width=min_timepoints, 
-                                    prominence=min_prominence_threshold, wlen=prominence_window)
+            peaks, properties = find_peaks(self.list_intensity, height=min_intensity_threshold, width=min_timepoints, 
+                                                        prominence=min_prominence_threshold, wlen=prominence_window)
         
         for ii in range(peaks.size):
             P = ext_Peak()
             # scipy.signal.find_peaks works on 1-D array. RT coordinates need to be added back.
-            P.peak_initiate(parent_mass_trace=self, mz = self.mz, apex = peaks[ii],
-                            peak_height = properties['peak_heights'][ii],
-                            left_base = properties['left_bases'][ii],
+            P.__init2__(parent_mass_trace=self, mz = self.mz, apex = peaks[ii],
+                            peak_height = properties['peak_heights'][ii], left_base = properties['left_bases'][ii],
                             right_base = properties['right_bases'][ii])
             P.evaluate_peak_model()
             if P.goodness_fitting > gaussian_shape:
@@ -591,22 +603,23 @@ class ext_MassTrace(MassTrace):
 # peak evaluation is in this class
 class ext_Peak(Peak):
     '''
-    Extending metDataModel.core.Peak.
-    Include pointer to parent MassTrace.
-    Not storing RT or intensity arrays, but looking up in MassTrace.
+    Extending metDataModel.core.Peak, including pointer to parent MassTrace.
+    Not storing RT or intensity arrays, but looking up in MassTrace if needed.
     '''
-    def peak_initiate(self, parent_mass_trace, mz, apex, peak_height, left_base, right_base):
-        [ self.parent_mass_trace, self.mz, self.apex, self.peak_height, self.left_base, self.right_base
+    def __init2__(self, parent_mass_trace, mz, apex, peak_height, left_base, right_base):
+        [ self.parent_mass_trace, 
+        self.mz, self.apex, self.peak_height, self.left_base, self.right_base
                 ] = [ parent_mass_trace, mz, apex, peak_height, left_base, right_base ]
+        self.left_rtime = self.parent_mass_trace.list_retention_time[left_base]
+        self.right_rtime = self.parent_mass_trace.list_retention_time[right_base]
 
     def evaluate_peak_model(self):
         '''
         Use Gaussian models to fit peaks, R^2 as goodness of fitting.
-        Peak area is defined by Gaussian model,
-        the integral of a Gaussian function being a * c *sqrt(2*pi).
-
-        Left to right base may not be full represenation of the peak. 
-        The Gaussian function will propose a good boundary.
+        Peak area is defined by Gaussian model, the integral of a Gaussian function being a * c *sqrt(2*pi).
+        Good: Left to right base may not be full represenation of the peak. The Gaussian function will propose a good boundary.
+        Less good: peaks are not always in Gaussian shape. But we are comparing same features across samples, 
+        same bias in peak shape is applied to all samples.
         '''
         xx = self.parent_mass_trace.list_retention_time[self.left_base: self.right_base+1]
         # set initial parameters
@@ -615,10 +628,8 @@ class ext_Peak(Peak):
                         xx.std()
         try:
             popt, pcov = curve_fit(__gaussian_function__, 
-                            xx,
-                            self.parent_mass_trace.list_intensity[self.left_base: self.right_base+1],
+                            xx, self.parent_mass_trace.list_intensity[self.left_base: self.right_base+1],
                             p0=[a, mu, sigma])
-
             self.gaussian_parameters = popt
             self.rtime = popt[1]
             self.peak_area = popt[0]*popt[2]*2.506628274631
