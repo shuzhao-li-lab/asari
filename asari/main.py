@@ -49,7 +49,7 @@ PARAMETERS = {
 PARAMETERS['min_prominence_threshold'] = PARAMETERS['min_intensity_threshold']/3.0
 
 
-def read_projec_dir(directory, file_pattern='chrom.mzML'):
+def read_project_dir(directory, file_pattern='chrom.mzML'):
     print("\nWorking on ", directory)
     return [os.path.join(directory, f) for f in os.listdir(directory) if file_pattern in f]
 
@@ -101,7 +101,7 @@ def process_project(list_input_files, dict_meta_data={}, parameters=PARAMETERS, 
 def main(directory):
     print("\n\n~~~~~~~ Hello from Asari! ~~~~~~~~~\n")
     process_project(
-            read_projec_dir(directory), {}, PARAMETERS, directory   #setting output_dir as input dir
+            read_project_dir(directory), {}, PARAMETERS, directory   #setting output_dir as input dir
     )
     
 

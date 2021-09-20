@@ -20,11 +20,11 @@ from metDataModel.core import MassTrace, Peak, Experiment       # Feature, Sampl
 from .sql import *
 
 # starting point of ref DB, 
-#INIT_DFDB = DB_to_DF( extend_DB1(DB_1) )
-INIT_DFDB = tsv2refDB('hot_db.tsv')
+INIT_DFDB = DB_to_DF( extend_DB1(DB_1) )
+#INIT_DFDB = tsv2refDB('hot_db.tsv')
 
 # feature id will be assigned at the end; intensities is a list; mass_id links to MassTrace
-Feature = namedtuple('Feature', ['mass_id', 'mz', 'rtime', 'rt_min', 'rt_max', 
+Feature = namedtuple('Feature', ['feature_id', 'mass_id', 'mz', 'rtime', 'rt_min', 'rt_max', 
                                 'peak_quality_max', 'peak_quality_median', 'number_peaks', 'perc_peaks',
                                 'selectivity_combined', 'selectivity_mz', 'intensity_mean',
                                 'intensities'])
@@ -138,6 +138,7 @@ def peaks_to_features(peak_dict, rtime_tolerance, ordered_sample_names):
     for k,v in peak_dict.items():
         for F in __bin_by_median_rt__(v, rtime_tolerance):
             median_mz, median_rt = np.median([P.mz for P in F]), np.median([P.cal_rtime for P in F])
+            feature_id = str(round(median_mz,4)) + '@' + str(round(median_rt,2))
             rt_min = float(min([P.left_rtime for P in F]))          # not sure why min returns np.array
             rt_max = float(max([P.right_rtime for P in F]))
             peak_quality_max = max([P.goodness_fitting for P in F])
@@ -148,7 +149,7 @@ def peaks_to_features(peak_dict, rtime_tolerance, ordered_sample_names):
             selectivity_combined = 9
             intensities = __get_peaks_intensities__(F, ordered_sample_names)
             intensity_mean = int(sum(intensities)/number_peaks)
-            FeatureList += [Feature(k, median_mz, median_rt, rt_min, rt_max, 
+            FeatureList += [Feature(feature_id, k, median_mz, median_rt, rt_min, rt_max, 
                             peak_quality_max, peak_quality_median, number_peaks, perc_peaks,
                             selectivity_combined, selectivity_mz, intensity_mean, intensities)]
 
@@ -250,6 +251,8 @@ class ext_Experiment(Experiment):
         https://dynamictimewarping.github.io/
         Will compare with spline later, and implement if desired (?).    
 
+        To-do: force 0 on left.
+
         '''
         rt_table = self.get_rt_calibration_ref()    # This is the pd.DataFrame containing peak data for RT calibration
         rt_table['median'] = rt_table.median(axis=1)
@@ -338,11 +341,12 @@ class ext_Experiment(Experiment):
                     else:
                         peak_dict[k] = [P]
 
-        unassigned.sort()
-        unassigned = [(x[0], x[2]) for x in unassigned]
-        mz_peak_bins = bin_by_median(unassigned, lambda x: 2 * self.__mass_stdev__ * 0.000001 * x)
-        for BIN in mz_peak_bins:
-            peak_dict[ '_M_' + str(round(np.median([P.mz for P in BIN]),6)) ] = BIN
+        if unassigned:
+            unassigned.sort()
+            unassigned = [(x[0], x[2]) for x in unassigned]
+            mz_peak_bins = bin_by_median(unassigned, lambda x: 2 * self.__mass_stdev__ * 0.000001 * x)
+            for BIN in mz_peak_bins:
+                peak_dict[ '_M_' + str(round(np.median([P.mz for P in BIN]),6)) ] = BIN
         FeatureList = peaks_to_features(peak_dict, self.parameters['rtime_tolerance'], self.ordered_sample_names)
         print("Additional features are assembled based on 2x stdev (%5.2f ppm) seen in this experiment, " % self.__mass_stdev__)
         self.FeatureTable = FeatureList
@@ -362,12 +366,12 @@ class ext_Experiment(Experiment):
         FeatureList: a list of namedTuples, i.e. Features; Output two files, one main, another low quality features.
         '''
         def __write__(FeatureList, outfile):
-            s = '\t'.join(['formula_mass', 'mz', 'rtime', 'rt_min', 'rt_max', 'number_peaks',
+            s = '\t'.join(['feature_id', 'formula_mass', 'mz', 'rtime', 'rt_min', 'rt_max', 'number_peaks',
                                     'peak_quality_max', 'peak_quality_median', 'intensity_mean', 'selectivity_mz',
                                     ] + self.ordered_sample_names) + '\n'
             for F in FeatureList:
                 s += '\t'.join(
-                    [F.mass_id, str(round(F.mz,4)), str(round(F.rtime,2)), str(round(F.rt_min,2)), str(round(F.rt_max,2)), str(F.number_peaks),
+                    [F.feature_id, F.mass_id, str(round(F.mz,4)), str(round(F.rtime,2)), str(round(F.rt_min,2)), str(round(F.rt_max,2)), str(F.number_peaks),
                     str(round(F.peak_quality_max,2)), str(round(F.peak_quality_median,2)), str(F.intensity_mean), str(round(F.selectivity_mz,2)),
                     ] + [str(int(x)) for x in F.intensities]
                     ) + '\n'

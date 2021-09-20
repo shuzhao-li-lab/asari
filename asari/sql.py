@@ -15,17 +15,9 @@ One Experiment (project) per database.
 Each sample links to two tables: mass_traces and peaks.
 
 
-
-
-
-
 Use pandas for DB operations (ORM).
 
 Use JOIN etc for data operation.
-
-
-
-
 
 
 For ref DBs, flat the relationship list and use the 1st only in SQL table.
@@ -39,6 +31,10 @@ There are cases of non-unique relationships, e.g.
   [('C4H8O5_136.037173', 'M+H[1+]'), ('C4H6O4_118.026609', 'M+H2O+H[1+]')]],
 
 As these are small minority, not dealt with in this version of asari.
+
+
+The final search of features on DB_2 and DB_3 should use indexed DB format, not DataFrame.
+The former is more efficient for larger DBs??
 
 
 '''
