@@ -42,6 +42,8 @@ One can impute with minimal detected values in each feature (row) in downstream 
 Next to-do
 ==========
 
+The reference DB is not finalized. The current DB in this repo takes much larger to load. A real ref DB will be loaded in 1 sec.
+
 Group features into empicical compounds via mass2chem.
 
 To add kernel density method for grouping m/z features (and RT). Right now, formula_mass anchors correspondence. The remaining peaks are groupped by binning median.

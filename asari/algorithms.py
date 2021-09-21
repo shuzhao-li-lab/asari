@@ -261,14 +261,14 @@ class ext_Experiment(Experiment):
         for SM in self.samples:
             rt_cal = rt_table[[SM.name, 'median']].dropna(axis=0, how='any').values.tolist() 
             # now this is listed converted from numpy.ndarray 
-            if len(rt_cal) < 20:
+            if len(rt_cal) < self.parameters['peak_number_rt_calibration']:
                 SM.__valid__ = False 
                 print("\n\n*** Warning, RT regression using too few features (%d) ***" %len(rt_cal))
                 print("*** Sample %s removed from processing. ***\n\n" %SM.name)
             else:
                 rt_cal.sort()
                 # to-do: need down sample, each bin no more than 10 data points
-                xx, yy = [], []
+                xx, yy = [0, ], [0, ]                   # force left to 0
                 for L in rt_cal:
                     if abs(L[0]-L[1])/L[1] < 0.2:       # control shift < 20%
                         xx.append(L[0])
