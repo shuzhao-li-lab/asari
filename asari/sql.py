@@ -1,23 +1,16 @@
 '''
 
 Use SQLite3 as backend database to store all sample-related data.
-
 This relieves the memory requirement and provides persistence to stop/resume operations.
-
-Multiple processes can visit the same database, thus enabling parallel processing.
+Multiple processes can visit the same database, thus potentially enabling parallel processing.
 
 
 Design
 ------
-
 One Experiment (project) per database.
-
 Each sample links to two tables: mass_traces and peaks.
-
-
 Use pandas for DB operations (ORM).
-
-Use JOIN etc for data operation.
+Use JOIN etc for data operation (??).
 
 
 For ref DBs, flat the relationship list and use the 1st only in SQL table.
@@ -84,10 +77,6 @@ def DB_to_DF(DB):
 
 def tsv2refDB(file):
     return pd.read_csv(file, sep='\t', index_col=0)
-
-
-
-
 
 
 

@@ -22,20 +22,20 @@ color='green', marker='o', linestyle='dashed',
 
 from matplotlib import pyplot as plt
 
-def plot_peaks_masstrace(mass_trace, outfile='masstrace_plot.pdf'):
+def plot_peaks_masstrace(sample, mzstr, outfile='masstrace_plot.pdf'):
     '''
-    To inspect how peak models fit the raw data.
-    A mass trace may contain more than one peaks.
+    To inspect how peak models fit the raw data. Mass traces and Peaks are indexed by mzstr in each Sample.
+    A mass trace may correspond more than one peaks.
 
     Input
     -----
-    ext_MassTrace instance with detected Peak instances.
-
+    Sample instance with detected Peak instances.
+    mzstr has to be precise string that is used as a key in dictionaries dict_masstraces and dict_peaks.
     '''
     plt.figure()
-    plt.plot(mass_trace.list_retention_time, mass_trace.list_intensity, marker='o', linewidth=0, markersize=1)
-    for P in mass_trace.list_peaks:
-        # plot peak models
+    for mass_trace in sample.dict_masstraces[mzstr]:
+        plt.plot(mass_trace.list_retention_time, mass_trace.list_intensity, marker='o', linewidth=0, markersize=1)
+    for P in sample.dict_peaks[mzstr]:
         P.extend_model_range()
         plt.plot(P.rt_extended, P.y_fitted_extended, color='red', alpha=0.5, linewidth=0.6)
     plt.title("mass trace " + str(round(mass_trace.mz, 6)))
