@@ -1,6 +1,6 @@
 '''
 asari, a simple program for LC-MS metabolomics data preprocessing.
-Last update by Shuzhao Li, 2021-09-15
+Last update by Shuzhao Li, 2021-09-25
 '''
 import os
 import random
@@ -446,11 +446,8 @@ class Sample:
 
     def process_step_2(self, DFDB):
         '''
-        Annotate MassTraces with unique formula_mass.
-        This is based on reference DB and may not cover all MassTraces.
+        Annotate MassTraces with unique formula_mass. This is based on reference DB and may not cover all MassTraces.
         The remaining steps (correspondence, alignment) will be performed at Experiment level.
-        DFDB: either from positive or negative ionization
-        There may be repeated formula_mass - traces here, leaving to step_3 and masstraces_to_features to handle.
         '''
         self._match_mass_formula_(DFDB)
         for P in self.good_peaks:
@@ -481,7 +478,6 @@ class Sample:
 
     def _detect_peaks_(self):
         for mzstr, ML in self.dict_masstraces.items():
-            self.dict_peaks[mzstr] = []
             for M in ML:
                 list_peaks = M.detect_peaks(self.parameters['min_intensity_threshold'], self.parameters['min_timepoints'], 
                                 self.parameters['min_prominence_threshold'], self.parameters['prominence_window'], self.parameters['gaussian_shape'])
@@ -489,7 +485,6 @@ class Sample:
                     for P in list_peaks:
                         P.mzstr = mzstr
                         self.good_peaks.append(P)
-                        self.dict_peaks[mzstr].append(P)
 
         print("Detected %d good peaks." %len(self.good_peaks))
 
@@ -536,7 +531,14 @@ class Sample:
         DFDB: a reference DB in DataFrame.
         check_mass_accuracy should be on for all samples in asari processing.
         ppm: default to 10, because features (although in smaller number) will still match if the instrument has larger variations.
-        
+
+
+        for mzstr in self.dict_masstraces.keys():
+            if mzstr not in mzstr_2_formula_mass:
+                query = search_formula_mass_dataframe(self.dict_masstraces[mzstr][0].mz, DFDB, 2*self.__mass_stdev__)
+                if query:
+                    mzstr_2_formula_mass[mzstr], _ = query
+
         '''
         list_ppm_errors, mzstr_2_formula_mass = [], {}
         for P in self.good_peaks:
@@ -566,18 +568,6 @@ class Sample:
                     M.raw_mzs = [M.mz]      # may not need to be a list anymore
                     M.mz = M.mz - M.mz*0.000001*mass_accuracy
                     M.__mass_corrected_by_asari__ = True
-
-        for mzstr in self.dict_masstraces.keys():
-
-
-
-            # reduce to search for traces with peaks only !
-
-
-            if mzstr not in mzstr_2_formula_mass:
-                query = search_formula_mass_dataframe(self.dict_masstraces[mzstr][0].mz, DFDB, 2*self.__mass_stdev__)
-                if query:
-                    mzstr_2_formula_mass[mzstr], _ = query
 
         self.mzstr_2_formula_mass = mzstr_2_formula_mass
 
