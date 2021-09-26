@@ -35,7 +35,9 @@ def plot_peaks_masstrace(sample, mzstr, outfile='masstrace_plot.pdf'):
     plt.figure()
     for mass_trace in sample.dict_masstraces[mzstr]:
         plt.plot(mass_trace.list_retention_time, mass_trace.list_intensity, marker='o', linewidth=0, markersize=1)
-    for P in sample.dict_peaks[mzstr]:
+    
+    dict_peaks = sample.create_peak_dict()
+    for P in dict_peaks[mzstr]:
         P.extend_model_range()
         plt.plot(P.rt_extended, P.y_fitted_extended, color='red', alpha=0.5, linewidth=0.6)
     plt.title("mass trace " + str(round(mass_trace.mz, 6)))

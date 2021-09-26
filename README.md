@@ -35,7 +35,7 @@ Each sample is checked for mass accuracy. Mass calibration is done if systematic
 RT calibration is performed based on limited number of selected high quality peaks. A sample is dropped if too few such peaks are found. 
 
 Because peak detection uses lenient default parameters (high quality peaks used to guide major steps),
-weak signal reovery is not implemented. The missing peaks are considered under limit of detection.
+weak signal reovery is not implemented nor desired. The missing peaks are considered under limit of detection.
 One can impute with minimal detected values in each feature (row) in downstream analysis. 
 
 

@@ -30,8 +30,6 @@ Feature = namedtuple('Feature', ['feature_id', 'mass_id', 'mz', 'rtime', 'rt_min
                                 'intensities'])
 
 
-
-
 def __gaussian_function__(x, a, mu, sigma):
     return a*np.exp(-(x-mu)**2/(2*sigma**2)) 
 
@@ -368,15 +366,6 @@ class ext_Experiment(Experiment):
         self.FeatureTable = NewTable
         
 
-    def _recover_weak_signals_(self, FeatureList):
-        '''
-        Weak signal recovery based on the above FeatureTable.
-        for F in FeatureList:
-            samples_2_look = [self.name_to_Sample[x] for x in self.ordered_sample_names if x not in [P.sample_name for P in v]]
-        def _search_masstrace_by_(self, Sample, formula_mass, mz, rt_min, rt_max)
-        '''
-        pass
-
     def export_feature_table(self, FeatureList, outfile='feature_table.tsv'):
         '''
         FeatureList: a list of namedTuples, i.e. Features; Output two files, one main, another low quality features.
@@ -441,7 +430,6 @@ class Sample:
         self.mode = self.experiment.mode
         self.parameters = self.experiment.parameters
         self.dict_masstraces = {}                           # indexed by str(round(mz,6))
-        self.dict_peaks = {}                                # indexed by str(round(mz,6))
         self.mzstr_2_formula_mass = {}
         self.good_peaks = []
         self.__valid__ = True
@@ -482,13 +470,22 @@ class Sample:
         with open(outfile, 'w') as O:
             O.write( '\t'.join(header) + '\n' + '\n'.join([ '\t'.join(L) for L in peaklist ]) + '\n' )
 
+    def create_peak_dict(self):
+        dict_peaks = {}                                # index Peaks by by mzstr
+        for P in self.good_peaks:
+            if P.mzstr in dict_peaks:
+                dict_peaks[P.mzstr].append(P)
+            else:
+                dict_peaks[P.mzstr] = P
+        return dict_peaks
+
     def _detect_peaks_(self):
         for mzstr, ML in self.dict_masstraces.items():
+            self.dict_peaks[mzstr] = []
             for M in ML:
                 list_peaks = M.detect_peaks(self.parameters['min_intensity_threshold'], self.parameters['min_timepoints'], 
                                 self.parameters['min_prominence_threshold'], self.parameters['prominence_window'], self.parameters['gaussian_shape'])
                 if list_peaks:
-                    self.dict_peaks[mzstr] = []
                     for P in list_peaks:
                         P.mzstr = mzstr
                         self.good_peaks.append(P)
@@ -571,6 +568,12 @@ class Sample:
                     M.__mass_corrected_by_asari__ = True
 
         for mzstr in self.dict_masstraces.keys():
+
+
+
+            # reduce to search for traces with peaks only !
+
+
             if mzstr not in mzstr_2_formula_mass:
                 query = search_formula_mass_dataframe(self.dict_masstraces[mzstr][0].mz, DFDB, 2*self.__mass_stdev__)
                 if query:
