@@ -102,7 +102,7 @@ def bin_by_median(List_of_tuples, func_tolerance):
     Will add kernel density method for grouping m/z features.
     List_of_tuples: [(value, object), (value, object), ...], to be separated into bins by values (either rt or mz).
                     objects have attribute of sample_name if to align elsewhere.
-    return: [seprated bins], each as a list in the same input format. If all falls in same bin, i.e. [List_of_tuples].
+    return: [seprated bins], each as a list of objects as [X[1] for X in L]. Possible all falls in same bin.
     '''
     new = [[List_of_tuples[0], ], ]
     for X in List_of_tuples[1:]:
@@ -117,8 +117,7 @@ def bin_by_median(List_of_tuples, func_tolerance):
 
 def peaks_to_features(peak_dict, rtime_tolerance, ordered_sample_names):
     '''
-    This uese high-selectivity peaks to establish features;
-    still possibly not distinguishing close peaks well, which may be treated as combined peaks. 
+    peak_dict: {formula_mass or _M_id: list of Peaks}
     return List of Features (namedTuples, 'mass_id,mz,rtime,peak_quality,selectivity_rt,intensities'), following the input sample order.
     '''
     def __get_peaks_intensities__(peaks, ordered_sample_names):
@@ -135,7 +134,7 @@ def peaks_to_features(peak_dict, rtime_tolerance, ordered_sample_names):
         List_of_tuples.sort()
         return bin_by_median(List_of_tuples, lambda x: max(tolerance, 0.1*x))
 
-    FeatureList = []
+    FeatureList = []            # still possibly not distinguishing close peaks well, which may be treated as combined peaks. 
     for k,v in peak_dict.items():
         for F in __bin_by_median_rt__(v, rtime_tolerance):
             median_mz, median_rt = np.median([P.mz for P in F]), np.median([P.cal_rtime for P in F])
