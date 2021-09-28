@@ -20,8 +20,9 @@ from mass2chem.annotate import annotate_formula_mass            # under dev
 from .sql import *
 
 # starting point of ref DB, 
-INIT_DFDB = DB_to_DF( extend_DB1(DB_1) )
-#INIT_DFDB = tsv2refDB('hot_db.tsv')
+#INIT_DFDB = DB_to_DF( extend_DB1(DB_1) )
+dbfile = os.path.join(os.path.dirname(__file__), 'ref_db_v0.2.tsv')
+INIT_DFDB = tsv2refDB(dbfile)
 
 # feature id will be assigned at the end; intensities is a list; mass_id links to MassTrace
 Feature = namedtuple('Feature', ['feature_id', 'mass_id', 'mz', 'rtime', 'rt_min', 'rt_max', 

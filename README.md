@@ -42,7 +42,10 @@ One can impute with minimal detected values in each feature (row) in downstream 
 Next to-do
 ==========
 
-The reference DB is not finalized. The current DB in this repo takes much larger to load. A real ref DB will be loaded in 1 sec.
+It will be significant to replace pyOpenMS (and OpenMS) and update the chromatogram file format.
+Right now, each file takes ~10 seconds to process and half of the time is spent on reading the chromatogram file.
+
+The reference DB is not finalized. 
 
 Group features into empicical compounds via mass2chem.
 
@@ -50,9 +53,6 @@ To add kernel density method for grouping m/z features (and RT). Right now, form
 
 Add SQLite DB for storage.
 Before then, we may consider to process data in limited sizes. But without caching mass traces, the memory use is small.
-
-It will be significant to replace pyOpenMS (and OpenMS) and update the chromatogram file format.
-Right now, each file takes ~10 seconds to process and half of the time is spent on reading the chromatogram file.
 
 More work is needed for estimation of mass stdev. The current method is too dependent on the limit window. 
 Also, if users have spike-in controls, they should be allowed to use first.
