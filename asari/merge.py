@@ -153,19 +153,17 @@ def merge_feature_tables(list_of_feature_tables, make_feature_id=False, PPM_tole
 
     new_features = []
     for k,v in formula_mass_dict.items():
-        new_features.append( (k, _masstrace2features_(v
-
-
-                            , RTime_tolerance)) )
+        new_features.append( (k, _masstrace2features_(v , RTime_tolerance)) )
 
     numbers_cols = [ len(data_dict['header'].rstrip().split('\t')) for data_dict in all_tables ]
 
-    s = 'new_feature_id\told_ids\tformula_mass\t' + '\t'.join([data_dict['header'].rstrip() for data_dict in all_tables]) + '\n'
+    s = 'new_feature_id\tnumber_src_tables\told_ids\tformula_mass\t' + '\t'.join([data_dict['header'].rstrip() for data_dict in all_tables]) + '\n'
     for k,LL in new_features:       # formula_mass, list of features per input table
         for L in LL:
             new_id = [x for x in L if x][0]
             filled_id = [x or '_' for x in L]
-            line = '\t'.join([new_id, ','.join(filled_id), k])
+            number_src_tables = str(len([x for x in L if x]))
+            line = '\t'.join([new_id, number_src_tables, ','.join(filled_id), k])
             for ii in range(NN):
                 if L[ii]:           # None if not found in a position
                     line += '\t' + all_tables[ii][L[ii]]
@@ -184,11 +182,11 @@ def merge_feature_tables(list_of_feature_tables, make_feature_id=False, PPM_tole
 if __name__ == '__main__':
 
     list_of_feature_tables = [
-        'T2_feature_table.tsv',  'T3_feature_table.tsv', 'T2_feature_table.tsv',
+        'feature_table_b1.tsv',  'feature_table_b2.tsv', 'feature_table_b3.tsv', 'feature_tableb4.tsv',
     ]
 
     # make_feature_id=False if feature_id in first col
     merge_feature_tables(list_of_feature_tables, make_feature_id=False, 
                         PPM_tolerance = 4, RTime_tolerance = 15, 
-                        outfile="merged_featuretable.tsv")
+                        outfile="merged_featuretable_0928.tsv")
 
