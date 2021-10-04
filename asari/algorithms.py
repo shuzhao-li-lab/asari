@@ -1,6 +1,6 @@
 '''
 asari, a simple program for LC-MS metabolomics data preprocessing.
-Last update by Shuzhao Li, 2021-09-25
+Last update by Shuzhao Li, 2021-10-02
 '''
 import os
 import random
@@ -19,10 +19,6 @@ from mass2chem.annotate import annotate_formula_mass            # under dev
 
 from .sql import *
 
-# starting point of ref DB, 
-#INIT_DFDB = DB_to_DF( extend_DB1(DB_1) )
-dbfile = os.path.join(os.path.dirname(__file__), 'ref_db_v0.2.tsv')
-INIT_DFDB = tsv2refDB(dbfile)
 
 # feature id will be assigned at the end; intensities is a list; mass_id links to MassTrace
 Feature = namedtuple('Feature', ['feature_id', 'mass_id', 'mz', 'rtime', 'rt_min', 'rt_max', 
@@ -195,7 +191,7 @@ class ext_Experiment(Experiment):
         '''
         This will shift to a DB design in next version.
         '''
-        self.init_hot_db( INIT_DFDB )                                   # initial processing of 3 samples to set up HOT_DB
+        self.init_hot_db( self._get_ref_db_() )                         # initial processing of 3 samples to set up HOT_DB
         for f in self.list_input_files:                                 # run remaining samples
             if f not in self.initiation_samples:
                 SM = Sample(self, self.mode, f)
@@ -210,6 +206,19 @@ class ext_Experiment(Experiment):
         #self.annotate_final()
         self.export_feature_table(self.FeatureTable, self.parameters['output_filename'])
         
+    def _get_ref_db_(self):
+        '''
+        Earlier version used INIT_DFDB = DB_to_DF( extend_DB1(DB_1) ), which was moved to mass2chem.
+        '''
+
+        if self.mode == 'pos':
+            dbfile = os.path.join(os.path.dirname(__file__), 'ref_db_v0.2.tsv')
+        elif self.mode == 'neg':
+            dbfile = os.path.join(os.path.dirname(__file__), 'neg_ref_db_v0.2.tsv')
+        else:
+            print("Ionization mode is either `pos` or `neg`.")
+        return tsv2refDB(dbfile)
+
     def init_hot_db(self, DFDB):
         '''
         Use three samples to initiate a hot DB to house feature annotation specific to this Experiment, and speed up subsequent search.
@@ -276,7 +285,11 @@ class ext_Experiment(Experiment):
                         xx.append(L[0])
                         yy.append(L[1])
 
-                spl = UnivariateSpline(xx, yy, s=smoothing_factor)
+                # force right match
+                xx.append(1.1*self.parameters['max_rtime'])
+                yy.append(1.1*self.parameters['max_rtime'])
+                # leave out s=smoothing_factor
+                spl = UnivariateSpline(xx, yy, )
                 SM.__rt_calibration__ = spl
                 SM.__rt_calibration__data__ = (xx, yy)
 

@@ -16,7 +16,9 @@ Typical chromatogram (XIC) extraction from mzML raw files:
 Parameters above: 2, 2, 5 seconds
 Ref: https://abibuilder.informatik.uni-tuebingen.de/archive/openms/Documentation/release/latest/html/TOPP_FeatureFinderMetabo.html
 
-
+Example use
+-----------
+python3 -m asari.main neg /Users/shuzhao/li.projects/asari/T03
 
 '''
 
@@ -113,5 +115,6 @@ def main(directory):
 #
 
 if __name__ == '__main__':
-    directory = sys.argv[1]
+    PARAMETERS['mode'] = sys.argv[1]
+    directory = sys.argv[2]
     main(directory)

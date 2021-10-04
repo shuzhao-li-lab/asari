@@ -38,6 +38,12 @@ Because peak detection uses lenient default parameters (high quality peaks used 
 weak signal reovery is not implemented nor desired. The missing peaks are considered under limit of detection.
 One can impute with minimal detected values in each feature (row) in downstream analysis. 
 
+Use
+===
+Currently 
+`python3 -m asari.main neg /Users/shuzhao/projectx/chromdir`
+
+The two arguments are ionization_mode and data_directory.
 
 Next to-do
 ==========

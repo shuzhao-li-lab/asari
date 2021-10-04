@@ -4,6 +4,8 @@ Use SQLite3 as backend database to store all sample-related data.
 This relieves the memory requirement and provides persistence to stop/resume operations.
 Multiple processes can visit the same database, thus potentially enabling parallel processing.
 
+Moving pos_ref_DBs to mass2chem.
+
 
 Design
 ------
@@ -39,7 +41,7 @@ from mass2chem.annotate import compute_adducts_formulae
 
 #
 # this is tier 1 pos only, will update the DB in later iterations
-from .pos_ref_DBs import DB_1
+# from .pos_ref_DBs import DB_1
 
 def make_formula_mass_id(formula, mz): return formula + '_' + str(round(mz,6))
 
