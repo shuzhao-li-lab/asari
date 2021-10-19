@@ -28,7 +28,7 @@ from .algorithms import Sample, ext_MassTrace, ext_Experiment
 
 PARAMETERS = {
     'min_intensity_threshold': 5000,   # minimal peak height
-    'min_timepoints': 5,                # minimal number of data points in elution profile
+    'min_timepoints': 5,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
     #
     'peak_number_rt_calibration': 20,   # minimal number of selected high-quality peaks required for RT calibration. Samples with fewer selected peaks are dropped out.
     'cache_mass_traces': False,         # to save memory if not using DB; turn on if need to plot and diagnose

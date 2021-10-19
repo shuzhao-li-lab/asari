@@ -492,7 +492,7 @@ class Sample:
     def _detect_peaks_(self):
         for mzstr, ML in self.dict_masstraces.items():
             for M in ML:
-                list_peaks = M.detect_peaks(self.parameters['min_intensity_threshold'], self.parameters['min_timepoints'], 
+                list_peaks = M.detect_peaks(self.parameters['min_intensity_threshold'], int(0.5 * self.parameters['min_timepoints']), 
                                 self.parameters['min_prominence_threshold'], self.parameters['prominence_window'], self.parameters['gaussian_shape'])
                 if list_peaks:
                     for P in list_peaks:
@@ -603,9 +603,9 @@ class ext_MassTrace(MassTrace):
         self.features_assigned = False                  # tracking if assigned to Experiment features
         self.sample_name = ''
 
-    def detect_peaks(self, min_intensity_threshold, min_timepoints, min_prominence_threshold, prominence_window, gaussian_shape):
+    def detect_peaks(self, min_intensity_threshold, min_fwhm, min_prominence_threshold, prominence_window, gaussian_shape):
         list_peaks = []
-        peaks, properties = find_peaks(self.list_intensity, height=min_intensity_threshold, width=min_timepoints, 
+        peaks, properties = find_peaks(self.list_intensity, height=min_intensity_threshold, width=min_fwhm, 
                                                         prominence=min_prominence_threshold, wlen=prominence_window) 
         
         if peaks.size > 1:
@@ -613,7 +613,7 @@ class ext_MassTrace(MassTrace):
             # because chromatography is often not good so that small peaks can't be separated from noise.
             _tenth_height = 0.1*self.list_intensity.max()
             min_prominence_threshold = max(min_prominence_threshold, _tenth_height)
-            peaks, properties = find_peaks(self.list_intensity, height=min_intensity_threshold, width=min_timepoints, 
+            peaks, properties = find_peaks(self.list_intensity, height=min_intensity_threshold, width=min_fwhm, 
                                                         prominence=min_prominence_threshold, wlen=prominence_window)
         
         for ii in range(peaks.size):
@@ -667,6 +667,7 @@ class ext_Peak(Peak):
             self.goodness_fitting = __goodness_fitting__(
                             self.parent_mass_trace.list_intensity[self.left_base: self.right_base+1], 
                             __gaussian_function__(xx, *popt))
+
         # failure to fit
         except RuntimeError:
             self.rtime = mu
