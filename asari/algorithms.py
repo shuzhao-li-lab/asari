@@ -15,7 +15,7 @@ from scipy.interpolate import UnivariateSpline
 from pyopenms import MSExperiment, MzMLFile
 from metDataModel.core import MassTrace, Peak, Experiment       # Feature, Sample later
 
-from mass2chem.annotate import annotate_formula_mass            # under dev
+from mass2chem.annotate import annotate_formula_mass, massDict_hmdb
 
 from .sql import *
 
@@ -185,7 +185,7 @@ class ext_Experiment(Experiment):
         self.mode = parameters['mode']
 
         self.initiation_samples = self.__choose_initiation_samples__()
-        # self.interpolate_rtime_list = np.linspace(0, parameters['max_rtime'], 3000)       # ?? 
+        # self.interpolate_rtime_list = np.linspace(0, parameters['max_rtime'], 3000)       # no need
         
     def process_all(self):
         '''
@@ -203,14 +203,14 @@ class ext_Experiment(Experiment):
         
         self.calibrate_retention_time()                                 # samples may be marked to drop
         self.correspondence()
-        #self.annotate_final()
+        self.annotate_final()
         self.export_feature_table(self.FeatureTable, self.parameters['output_filename'])
         
     def _get_ref_db_(self):
         '''
+        Dispatch for ref DB.
         Earlier version used INIT_DFDB = DB_to_DF( extend_DB1(DB_1) ), which was moved to mass2chem.
         '''
-
         if self.mode == 'pos':
             dbfile = os.path.join(os.path.dirname(__file__), 'ref_db_v0.2.tsv')
         elif self.mode == 'neg':
@@ -246,7 +246,7 @@ class ext_Experiment(Experiment):
         print("\n[@.@] Anchoring with %d initial formula matches." %len(found_formula_masses))
         print("[@.@] Initial estimation done on\n" + '\n'.join(self.initiation_samples))
         #export_hot_db, without last col
-        self.HOT_DB.iloc[:, :-1].to_csv(os.path.join(self.output_dir, self.parameters['annotation_filename']), sep="\t")
+        self.HOT_DB.iloc[:, :-1].to_csv(os.path.join(self.output_dir, '__intermediary__' + self.parameters['annotation_filename']), sep="\t")
         
     def calibrate_retention_time(self, method='spline', smoothing_factor=0.5):
         '''
@@ -278,16 +278,17 @@ class ext_Experiment(Experiment):
                 print("*** Sample %s removed from processing. ***\n\n" %SM.name)
             else:
                 rt_cal.sort()
-                # to-do: need down sample, each bin no more than 10 data points
+                # to-do: need down sample to spread better over rt range
                 xx, yy = [0, ], [0, ]                   # force left to 0
                 for L in rt_cal:
                     if abs(L[0]-L[1])/L[1] < 0.2:       # control shift < 20%
                         xx.append(L[0])
                         yy.append(L[1])
 
-                # force right match
-                xx.append(1.1*self.parameters['max_rtime'])
-                yy.append(1.1*self.parameters['max_rtime'])
+                # force right match, to avoid erradic spline running out of sanity
+                right_end = 1.1 * max( self.parameters['max_rtime'], L[0], L[1] )
+                xx.append(right_end)
+                yy.append(right_end)
                 # leave out s=smoothing_factor
                 spl = UnivariateSpline(xx, yy, )
                 SM.__rt_calibration__ = spl
@@ -298,7 +299,6 @@ class ext_Experiment(Experiment):
                     P.cal_rtime = SM.__rt_calibration__(P.rtime)
                     P.left_rtime = SM.__rt_calibration__(P.left_rtime)
                     P.right_rtime = SM.__rt_calibration__(P.right_rtime)
-
 
     def get_rt_calibration_ref(self):
         '''
@@ -370,13 +370,25 @@ class ext_Experiment(Experiment):
         '''
         More formula annotation of _M_ features using HMDB+PubChemLite;
         Group into empCpds via mass2chem.
+
+
+        Still to do remaining features
         '''
-        NewTable = []
+        s = u'\t'.join(['feature_id', 'formula_mass', 'mz_dbrecord',	'intensity_mean', 'charged_formula', 'selectivity',	'neutral_formula_mass',
+                                    'ion_relation', 'id_HMDB', 'name']) + '\n'
+        for F in self.FeatureTable:
+            if "_M_" == F.mass_id[:3]:
+                s += u'\t'.join([F.feature_id, F.mass_id, str(round(F.mz,4)), str(F.intensity_mean)]) + '\n'
+            else:
+                [mz, charged_formula, selectivity, neutral_formula_mass, ion_relation] = [str(x) for x in list(self.HOT_DB.loc[F.mass_id])[:5]]
+                name = massDict_hmdb.get(neutral_formula_mass, [['', '']])
+                name = u'\t'.join(name[0]).encode('utf-8', 'ignore').decode('utf-8')
+                s += u'\t'.join([F.feature_id, F.mass_id, mz, str(F.intensity_mean),
+                                charged_formula, selectivity, neutral_formula_mass, ion_relation, name]) + '\n'
+                
+        with open(os.path.join(self.output_dir, self.parameters['annotation_filename']), 'w', encoding='utf-8') as O:
+            O.write(s.encode('utf-8', 'ignore').decode('utf-8'))
 
-
-
-
-        self.FeatureTable = NewTable
         
 
     def export_feature_table(self, FeatureList, outfile='feature_table.tsv'):
@@ -544,14 +556,6 @@ class Sample:
         DFDB: a reference DB in DataFrame.
         check_mass_accuracy should be on for all samples in asari processing.
         ppm: default to 10, because features (although in smaller number) will still match if the instrument has larger variations.
-
-
-        for mzstr in self.dict_masstraces.keys():
-            if mzstr not in mzstr_2_formula_mass:
-                query = search_formula_mass_dataframe(self.dict_masstraces[mzstr][0].mz, DFDB, 2*self.__mass_stdev__)
-                if query:
-                    mzstr_2_formula_mass[mzstr], _ = query
-
         '''
         list_ppm_errors, mzstr_2_formula_mass = [], {}
         for P in self.good_peaks:

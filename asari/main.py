@@ -5,15 +5,14 @@ LC-MS metabolomics data pre-processing
 - formula mass centric
 - local maxima peak detection with prominence control
 
-
 Typical chromatogram (XIC) extraction from mzML raw files:
 
 > for file in ../mzML_IS_HILICposRPneg_05072021/*.mzML
 >   do FeatureFinderMetabo -in $file -out ${file/.mzML/.featureXML} -out_chrom ${file/.mzML/_chrom.mzML} \
->   -algorithm:common:chrom_fwhm 2 -algorithm:mtd:mass_error_ppm 2 -algorithm:mtd:min_trace_length 5
+>   -algorithm:common:chrom_fwhm 1 -algorithm:mtd:mass_error_ppm 2 -algorithm:mtd:min_trace_length 2
 > done
 
-Parameters above: 2, 2, 5 seconds
+Parameters above: 1 sec, 2 ppm, 2 seconds
 Ref: https://abibuilder.informatik.uni-tuebingen.de/archive/openms/Documentation/release/latest/html/TOPP_FeatureFinderMetabo.html
 
 Example use
@@ -33,7 +32,7 @@ PARAMETERS = {
     'peak_number_rt_calibration': 20,   # minimal number of selected high-quality peaks required for RT calibration. Samples with fewer selected peaks are dropped out.
     'cache_mass_traces': False,         # to save memory if not using DB; turn on if need to plot and diagnose
     'output_filename': 'feature_table.tsv',
-    'annotation_filename': "annotation_db.tsv",
+    'annotation_filename': "annotation_table.tsv",
     #
     'mode': 'pos',                      # ionization mode
     'mass_range': (50, 2000),
@@ -69,22 +68,8 @@ def metafile_to_dict(infile):
 
 def process_project(list_input_files, dict_meta_data={}, parameters=PARAMETERS, output_dir=''):
     '''
-    Use ext_Experiment as a containing class to hold processed data.
-
-    ionization_mode='positive'
-
-    EE.assign_formula_masses()
-    EE.calibrate_retention_time()
-    EE.correspondency()
-    EE.export_feature_table('out.tsv')
-
-    if not output_dir:
-        output_dir = './'
-        
-    for SM in EE.samples:
-        # plot_sample_rt_calibration(SM)
-        SM.export_peaklist()
-
+    list_input_files: Extracted ion chromatogram files.
+    parameters: dictionary of most parameters.
     '''
     if dict_meta_data:
         for k in dict_meta_data:
@@ -92,14 +77,9 @@ def process_project(list_input_files, dict_meta_data={}, parameters=PARAMETERS, 
     if not list_input_files:
         print("No input file found. Please verify your pathway to files.")
 
-
     EE = ext_Experiment()
     EE.__init2__(list_input_files, dict_meta_data, parameters, output_dir)
-    
     EE.process_all()
-    
-
-
 
 
 def main(directory):
@@ -108,7 +88,6 @@ def main(directory):
             read_project_dir(directory), {}, PARAMETERS, directory   #setting output_dir as input dir
     )
     
-
 
 #
 # -----------------------------------------------------------------------------
