@@ -381,8 +381,9 @@ class ext_Experiment(Experiment):
                 s += u'\t'.join([F.feature_id, F.mass_id, str(round(F.mz,4)), str(F.intensity_mean)]) + '\n'
             else:
                 [mz, charged_formula, selectivity, neutral_formula_mass, ion_relation] = [str(x) for x in list(self.HOT_DB.loc[F.mass_id])[:5]]
-                name = massDict_hmdb.get(neutral_formula_mass, [['', '']])
-                name = u'\t'.join(name[0]).encode('utf-8', 'ignore').decode('utf-8')
+                name = massDict_hmdb.get(neutral_formula_mass, '')
+                if name:
+                    name = u'\t'.join( [';'.join(x) for x in name] ).encode('utf-8', 'ignore').decode('utf-8')
                 s += u'\t'.join([F.feature_id, F.mass_id, mz, str(F.intensity_mean),
                                 charged_formula, selectivity, neutral_formula_mass, ion_relation, name]) + '\n'
                 
