@@ -506,7 +506,8 @@ class Sample:
         for mzstr, ML in self.dict_masstraces.items():
             for M in ML:
                 list_peaks = M.detect_peaks(self.parameters['min_intensity_threshold'], int(0.5 * self.parameters['min_timepoints']), 
-                                self.parameters['min_prominence_threshold'], self.parameters['prominence_window'], self.parameters['gaussian_shape'])
+                                self.parameters['min_prominence_threshold'], self.parameters['prominence_window'], self.parameters['gaussian_shape'],
+                                self.parameters['signal_noise_ratio'],)
                 if list_peaks:
                     for P in list_peaks:
                         P.mzstr = mzstr
@@ -608,11 +609,12 @@ class ext_MassTrace(MassTrace):
         self.features_assigned = False                  # tracking if assigned to Experiment features
         self.sample_name = ''
 
-    def detect_peaks(self, min_intensity_threshold, min_fwhm, min_prominence_threshold, prominence_window, gaussian_shape):
+    def detect_peaks(self, min_intensity_threshold, min_fwhm, min_prominence_threshold, prominence_window, gaussian_shape, snr):
         list_peaks = []
         peaks, properties = find_peaks(self.list_intensity, height=min_intensity_threshold, width=min_fwhm, 
                                                         prominence=min_prominence_threshold, wlen=prominence_window) 
-        
+        # This is noise estimate, but doesn't have to correspond to final list of peaks
+        _noise_level_ = self.__get_noise_level__(peaks, properties)
         if peaks.size > 1:
             # Rerun, raising min_prominence_threshold. Not relying on peak shape for small peaks, 
             # because chromatography is often not good so that small peaks can't be separated from noise.
@@ -622,19 +624,30 @@ class ext_MassTrace(MassTrace):
                                                         prominence=min_prominence_threshold, wlen=prominence_window)
         
         for ii in range(peaks.size):
-            P = ext_Peak()
-            # scipy.signal.find_peaks works on 1-D array. RT coordinates need to be added back.
-            P.__init2__(parent_mass_trace=self, mz = self.mz, apex = peaks[ii],
-                            peak_height = properties['peak_heights'][ii], left_base = properties['left_bases'][ii],
-                            right_base = properties['right_bases'][ii])
-            P.evaluate_peak_model()
-            if P.goodness_fitting > gaussian_shape:
-                list_peaks.append(P)
+            if properties['peak_heights'][ii] > snr*_noise_level_:
+                P = ext_Peak()
+                # scipy.signal.find_peaks works on 1-D array. RT coordinates need to be added back.
+                P.__init2__(parent_mass_trace=self, mz = self.mz, apex = peaks[ii],
+                                peak_height = properties['peak_heights'][ii], left_base = properties['left_bases'][ii],
+                                right_base = properties['right_bases'][ii])
+                P.evaluate_peak_model()
+                if P.goodness_fitting > gaussian_shape:
+                    list_peaks.append(P)
 
         return list_peaks
 
     def extract_targeted_peak(self, rt_range):
         pass
+
+    def __get_noise_level__(self, peaks, properties):
+        peak_data_points = []
+        for ii in range(peaks.size):
+            peak_data_points += range(properties['left_bases'][ii], properties['right_bases'][ii]+1)
+        noise_data_points = [ii for ii in range(len(self.list_intensity)) if ii not in peak_data_points]
+        if noise_data_points:
+            return np.median([self.list_intensity[ii] for ii in noise_data_points])
+        else:
+            return 0
 
 # peak evaluation is in this class
 class ext_Peak(Peak):
