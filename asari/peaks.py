@@ -1,7 +1,6 @@
 '''
-
+Mass traces (i.e. XIC, EIC or chromatogram) and peaks.
 '''
-
 
 import numpy as np
 from scipy.signal import find_peaks 
@@ -84,7 +83,7 @@ class ext_Peak(Peak):
 
 
         # need to convert back to seconds in asari xics
-        
+
         self.left_rtime = float(self.parent_mass_trace.list_retention_time[left_base])
         self.right_rtime = float(self.parent_mass_trace.list_retention_time[right_base])
 

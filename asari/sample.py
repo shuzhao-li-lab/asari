@@ -108,13 +108,16 @@ class Sample:
         MzMLFile().load(self.input_file, exp)
         xic_dict = self._get_masstraces_from_centroided_rawdata_(exp)
 
-        self.rt_numbers = xic_dict['rt_numbers']
+        self.rt_numbers = xic_dict['rt_numbers']    # list of scans, starting from 0
         self.list_retention_time = xic_dict['rt_times']
+        
         for xic in xic_dict['xics']:             # ( mz, rtlist, intensities )
             _low, _high = self.parameters['mass_range']
             if _low < xic[0] < _high:
                 mz_str = str(round(xic[0],4))
                 [RT, INTS] = xic[1:] 
+                # convert RT from scan number to seconds
+                RT = [self.list_retention_time[ii] for ii in RT]
                 if max(INTS) > self.experiment.parameters['min_intensity_threshold']:
                     M = ext_MassTrace()
                     M.__init2__(xic[0], RT, INTS)
@@ -188,6 +191,9 @@ class Sample:
 class Sample_openms(Sample):
     '''
     Reusing Sample class; only modifying mass trace functions as RT is used differently.
+
+    in progress
+
     '''
 
 
@@ -205,7 +211,7 @@ class Sample_openms(Sample):
 
 
         '''
-        
+
         exp = MSExperiment()                                                                                          
         MzMLFile().load(self.input_file, exp)
         xic_dict = self._get_masstraces_from_chromatogram_file_(exp)

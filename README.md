@@ -1,15 +1,22 @@
 Asari
 =====
 
+Version 0.6
+
 Simple Python program for LC-MS metabolomics data preprocessing.
 This focuses on high-resolution data, where most features are specific to a formula based mass, 
 and baseline is rarely a problem in peak detection.
 
+- only for high resolution data. Prioritized leverage of high mass resolution.
 - Simple peak dection based on local maxima and prominence.
 - Fully incorporating peak quality, selectiviy (on m/z, database, elution).
+- reproducible, trackable from features to XICs
 - Peaks of high quality and selectivity are aligned via formula mass.
+- Formula mass centric, reference centric.
 - Fast assembly and annotation of serum/plasma metabolomes.
-- Prioritized leverage of high mass resolution.
+- Use integers for RT scan numbers and intensities for computing efficiency. 
+- Avoid mathematical curves whereas possible for computing efficiency. 
+- Performance conscious, conscious of memory and CPU use to be fully scalable.
 
 Basic concepts follow https://github.com/shuzhao-li/metDataModel, as
 
@@ -28,11 +35,13 @@ Basic concepts follow https://github.com/shuzhao-li/metDataModel, as
 Algorithms
 ==========
 
-Align (correspondence) peaks of high selectivity in both measured data and in reference database via formula mass.
+- Chromatogram construction is based on m/z values via flexible bins and frequency counts (in lieu histograms). 
+- Peak dection based on local maxima and prominence.
+- Align (correspondence) peaks of high selectivity in both measured data and in reference database via formula mass.
+- Use information on observed features and epdTrees in the first few samples to guide data extraction and assembly in the remaining data.
+
 
 Each sample is checked for mass accuracy. Mass calibration is done if systematic shift > 5 pm.
-
-RT calibration is performed based on limited number of selected high quality peaks. A sample is dropped if too few such peaks are found. 
 
 Because peak detection uses lenient default parameters (high quality peaks used to guide major steps),
 weak signal reovery is not implemented nor desired. The missing peaks are considered under limit of detection.
@@ -48,14 +57,11 @@ The two arguments are ionization_mode and data_directory.
 Next to-do
 ==========
 
-It will be significant to replace pyOpenMS (and OpenMS) and update the chromatogram file format.
-Right now, each file takes ~10 seconds to process and half of the time is spent on reading the chromatogram file.
+Update FeatureMap algorithm (borrowed name from OpenMS).
 
 The reference DB is not finalized. 
 
 Group features into empicical compounds via mass2chem.
-
-To add kernel density method for grouping m/z features (and RT). Right now, formula_mass anchors correspondence. The remaining peaks are groupped by binning median.
 
 Add SQLite DB for storage.
 Before then, we may consider to process data in limited sizes. But without caching mass traces, the memory use is small.

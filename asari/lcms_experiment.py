@@ -11,12 +11,9 @@ import numpy as np
 from scipy.interpolate import UnivariateSpline
 
 from metDataModel.core import Experiment
-
 from mass2chem.annotate import annotate_formula_mass, massDict_hmdb
 
-
 from .sample import Sample
-
 from .utils import *
 from .sql import *
 
@@ -25,7 +22,7 @@ PARAMETERS = {
     'min_timepoints': 5,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
     'signal_noise_ratio': 2,            # peak height at least x fold over noise, which is median of non-peak data points.
     #
-    'peak_number_rt_calibration': 15,   # minimal number of selected high-quality peaks required for RT calibration. Samples with fewer selected peaks are dropped out.
+    'peak_number_rt_calibration': 5,   # minimal number of selected high-quality peaks required for RT calibration. Samples with fewer selected peaks are dropped out.
     'cache_mass_traces': False,         # to save memory if not using DB; turn on if need to plot and diagnose
     'output_filename': 'feature_table.tsv',
     'annotation_filename': "annotation_table.tsv",
@@ -198,8 +195,6 @@ class ext_Experiment(Experiment):
         method:dtw:
         https://dynamictimewarping.github.io/
         Will compare with spline later, and implement if desired (?).    
-
-        To-do: force 0 on left.
 
         '''
         rt_table = self.get_rt_calibration_ref()    # This is the pd.DataFrame containing peak data for RT calibration
