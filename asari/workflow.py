@@ -1,87 +1,20 @@
 '''
-asari, a simple program for LC-MS metabolomics data preprocessing.
-Last update by Shuzhao Li, 2021-12-07
+We use a similar concept of FeatureMap as in OpenMS here, 
+but the correspondence algorithms take adavantage of high m/z resolution first, 
+then utilizes MS1_pseudo spectra and cumulative elution profiles.
+
+Steps in corespondence in asari:
+1. mz alignment of high selectivity peaks; keep remaining peaks in queue.
+2. 
+
+
+to move to constructors.py
+
 
 
 '''
-import os
-import random
-import numpy as np
-
-from scipy.interpolate import UnivariateSpline
 
 from metDataModel.core import Experiment
-from mass2chem.annotate import annotate_formula_mass, massDict_hmdb
-
-from .sample import Sample
-from .utils import *
-from .sql import *
-
-PARAMETERS = {
-    'min_intensity_threshold': 5000,   # minimal peak height
-    'min_timepoints': 5,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
-    'signal_noise_ratio': 2,            # peak height at least x fold over noise, which is median of non-peak data points.
-    #
-    'peak_number_rt_calibration': 5,   # minimal number of selected high-quality peaks required for RT calibration. Samples with fewer selected peaks are dropped out.
-    'cache_mass_traces': False,         # to save memory if not using DB; turn on if need to plot and diagnose
-    'output_filename': 'feature_table.tsv',
-    'annotation_filename': "annotation_table.tsv",
-    #
-    'mode': 'pos',                      # ionization mode
-    'mass_range': (50, 2000),
-    'max_rtime': 300,                   # retention time range (chromatography) 0-300 seconds
-    # 'interpolate_factor': 10,           # per second. Can increase to 100 for very fast scan rate.
-    #
-    'mz_tolerance': 5,                  # ppm, high selectivity meaning no overlap neighbors to confuse; 
-                                        # Low selectivity regions will be still inspected to determine the true number of features
-    'rtime_tolerance': 10,              # feature rtime shift threshold under 10 seconds; or 10% of rtime
-                                        # will change to automated parameter using stdev??
-    #
-    'initiation_samples': [],           # if user to specify 3 samples to initiate data processing, to init HOT_DB; 
-                                        # otherwise they are chosen automatically
-
-    # no need to modify below unless you know what you are doing
-    'prominence_window': 30,
-    'gaussian_shape': 0.3,              # min cutoff
-    }
-PARAMETERS['min_prominence_threshold'] = PARAMETERS['min_intensity_threshold']/3.0
-
-
-def read_project_dir(directory, file_pattern='.mzML'):
-    '''
-    This reads centroided LC-MS files.
-    For OpenMS based XIC workflow, file_pattern='chrom.mzML'.
-    '''
-    print("\nWorking on ", directory)
-    return [os.path.join(directory, f) for f in os.listdir(directory) if file_pattern in f]
-
-def metafile_to_dict(infile):
-    '''
-    Optional.
-    Meta data file, tab delimited, first two columns corresponding to [file_name, sample_type].
-    '''
-    meta = {}
-    for line in open(infile).read().splitlines():
-        a = line.split('\t')
-        meta[a[0]] = a[1]
-    return {}
-
-def process_project(list_input_files, dict_meta_data={}, parameters=PARAMETERS, output_dir=''):
-    '''
-    list_input_files: Extracted ion chromatogram files.
-    parameters: dictionary of most parameters.
-    '''
-    if dict_meta_data:
-        for k in dict_meta_data:
-            dict_meta_data[k] = dict_meta_data[k].upper()       # upper characters to standardize
-    if not list_input_files:
-        print("No input file found. Please verify your pathway to files.")
-
-    EE = ext_Experiment()
-    EE.__init2__(list_input_files, dict_meta_data, parameters, output_dir)
-
-    EE.process_all()
-
 
 
 #
@@ -97,6 +30,7 @@ class ext_Experiment(Experiment):
         '''
         This is the overall container for all data in an experiment/project.
         We don't sort sample orders. One can sort after getting the feature table.
+
         Input
         -----
         list_input_files: list of inputfiles, including directory path, to read
@@ -109,8 +43,8 @@ class ext_Experiment(Experiment):
         self.samples = []                   # out of initial input order in samples
         self.ordered_sample_names = []      # will populate after sample processing, enforced in assembling featuretable
         self.name_to_Sample = {}
-        self.HOT_DB = {}                    # will be pd.DataFrame, to be initiated by chosen 3 smaples
-        self.feature_table = {}             # will be pd.DataFrame
+        self.HOT_DB = {}                    # pd.DataFrame
+        self.feature_table = {}             # 
         
         self.number_of_samples = len(list_input_files)
         self.files_meta_data = dict_meta_data
@@ -119,7 +53,7 @@ class ext_Experiment(Experiment):
         self.mode = parameters['mode']
 
         self.initiation_samples = self.__choose_initiation_samples__()
-        # self.interpolate_rtime_list = np.linspace(0, parameters['max_rtime'], 3000)       # no need
+
         
     def process_all(self):
         '''
@@ -258,7 +192,8 @@ class ext_Experiment(Experiment):
         
         rt_table = pd.DataFrame(d)      # merge into a table, each row as feature, col as sample
         # avoiding pd.DataFrame whenever possible, unpredictable behaivors
-        # drop rows by min presence in > 50% of samples. Not significnat, but potentially tricky for very large studies. QC or blank samples may behave differently
+        # drop rows by min presence in > 50% of samples. Not significnat, but potentially tricky for very large studies. 
+        # QC or blank samples may behave differently
         rt_table = rt_table.dropna(axis=0, thresh=min(int(0.5 * self.number_of_samples), 10))
         rt_table.to_csv("raw_rt_calibration_matrix.tsv", sep="\t")    # to export 
         return rt_table
@@ -375,3 +310,12 @@ class ext_Experiment(Experiment):
                 OTHERS = [f for f in self.list_input_files if self.files_meta_data[f] not in ['POOLED', 'QC', 'BLANK']]
                 chosen += random.sample(OTHERS, 3)
                 return chosen[:3]
+
+
+
+
+
+
+
+
+

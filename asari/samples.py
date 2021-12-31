@@ -1,38 +1,192 @@
 '''
+asari, LC-MS metabolomics data preprocessing - trackable, scalable.
+
+In the asari/mummichog packages, the data entities are presented in any of the four types: 
+class, namedtuple, JSON style dictionary or implicit list. 
+The implicit lists are used sparely for reduced clarity. 
+Namedtuple is immutable, then limited applications. 
+In-memory searches are conducted using indexed dictionaries or dataframes.
+
+Simple formats:
+===============
+XICs as [( mz, rtlist, intensities ), ...].
+Peak format: 
+{
+    'id_number': 0, 'mz', 'apex', 'left_base', 'right_base', 'height', 'parent_masstrace_id', 
+    'rtime', 'peak_area', 'goodness_fitting'
+}
+isotopic_patterns = [(1.003355, 'M(13C)', 0, 0.2), ...]
+
+Peak detection
+==============
+The main step uses scipy.signal.find_peaks, a local maxima method with prominence control.
+Prominence is important, but it should be more tailored to individual peaks. 
+Here, 
+prominence = max(min_prominence_threshold, 0.05*max(list_intensity)).
 
 
 '''
-
 import os
-
-
-from .peaks import ext_MassTrace
-
-
-from scipy.stats import norm as normal_distribution
+import random
+import numpy as np
+from scipy.signal import find_peaks 
 
 from pyopenms import MSExperiment, MzMLFile
 
-
-# from metDataModel.core import MassTrace, Peak, Experiment       # Feature, Sample later
+# from mass2chem.annotate import annotate_formula_mass, massDict_hmdb
 
 from .chromatograms import extract_massTraces
-from .search import search_formula_mass_dataframe
-
-from .utils import *
+from .functions import *
 from .sql import *
 
-
+from .constructors import epdsConstructor
 
 class Sample:
+    '''
+    Simplified LC-MS Sample instance with few dependencies, 
+    to generate mass traces and peaks from a mzML file.
+    This can be used externally for data mining, inferring m/z relationships (i.e. to construct epdTrees), etc.
+    
+    More a utility,
+    minimal filtering,
+    no correction on RT and m/z values.
+    Use scan numbers whereas possible.
+
+    Use dictionary formats for mass_trace, peak and empCpd for clarity.
+    '''
+    def __init__(self, mode='pos', input_file=''):
+        self.input_file = input_file
+        self.mode = mode
+        self.parameters = {}
+        self.rt_numbers = []                                # list of scans, starting from 0
+        self.list_retention_time = []                       # full RT time points in sample
+        # lists to store data
+        self.list_mass_traces = []                          # list of EICs
+        self.list_peaks = []   
+        self.list_empCpds = []   
+        # dict for future use
+        self.dict_mass_traces = {}
+        self.dict_peaks = {}
+
+    def process(self):
+        '''
+        From input file to list_MassTraces with detected peaks and selectivity on peaks.
+        '''
+        self.get_masstraces()
+        self.get_peaks()
+        
+        self.get_empCompounds()
+
+    def get_masstraces(self, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5):
+        '''
+        Get chromatograms, this class is using asari.chromatograms algorithm.
+        Use another class for a different algorithm (e.g. Sample_openms).
+        XICs as [( mz, rtlist, intensities ), ...].
+        mass_trace format: {'id_number':0, 'mz', 'rt_scan_numbers', 'intensity', 'number_peaks':0}
+        '''
+        exp = MSExperiment()                                                                                          
+        MzMLFile().load(self.input_file, exp)
+        xic_dict = extract_massTraces(exp, 
+                    mz_tolerance_ppm=mz_tolerance_ppm, min_intensity=min_intensity, min_timepoints=min_timepoints)
+        self.rt_numbers = xic_dict['rt_numbers']            # list of scans, starting from 0
+        self.list_retention_time = xic_dict['rt_times']     # full RT time points in sample
+        ii = 0
+        for xic in xic_dict['xics']:                        # xic = ( mz, rtlist, intensities )
+            self.list_mass_traces.append( {
+                'id_number': ii, 
+                'mz': xic[0],
+                'rt_scan_numbers': xic[1],                  # list
+                'intensity': xic[2],                        # list
+                'number_peaks': 0
+                } )
+            ii += 1
+
+        print("Processing %s, found %d mass traces." %(self.input_file, ii))
+
+    def get_peaks(self, min_intensity_threshold=10000, min_fwhm=3, min_prominence_threshold=5000, snr=2):
+        '''
+        '''
+        list_peaks = []
+        for xic in self.list_mass_traces:
+            list_peaks += self.detect_peaks(xic, min_intensity_threshold, min_fwhm, min_prominence_threshold, snr)
+        ii = 0
+        for p in list_peaks:
+            p['id_number'] = ii
+            self.list_peaks.append(p)
+            ii += 1
+
+    def detect_peaks(self, mass_trace, min_intensity_threshold=10000, min_fwhm=3, min_prominence_threshold=5000, snr=2):
+        '''
+        Return list of peaks. No stringent filtering of peaks. 
+        Reported left/right bases are not based on Gaussian shape or similar, just local maxima.
+        Prominence has a key control of how peaks are considered, but peak shape evaluation later can filter out most bad peaks.
+        Peak format: {
+            'id_number': 0, 'mz', 'apex', 'left_base', 'right_base', 'height', 'parent_masstrace_id', 
+            'rtime', 'peak_area', 'goodness_fitting'
+        }
+        '''
+        list_peaks = []
+        rt_numbers, list_intensity = mass_trace['rt_scan_numbers'], mass_trace['intensity']
+        # 
+        prominence = max(min_prominence_threshold, 0.05*max(list_intensity))
+        peaks, properties = find_peaks(list_intensity, height=min_intensity_threshold, width=min_fwhm, 
+                                                        prominence=prominence) 
+        _noise_level_ = self.__get_noise_level__(list_intensity, peaks, properties)
+        for ii in range(peaks.size):
+            if properties['peak_heights'][ii] > snr*_noise_level_:
+                list_peaks.append({
+                    'parent_masstrace_id': mass_trace['id_number'],
+                    'mz': mass_trace['mz'],
+                    'apex': rt_numbers[peaks[ii]], 
+                    'height': properties['peak_heights'][ii],
+                    'left_base': rt_numbers[properties['left_bases'][ii]],
+                    'right_base': rt_numbers[properties['right_bases'][ii]],
+                })
+        return list_peaks
+
+    def __get_noise_level__(self, list_intensity, peaks, properties):
+        peak_data_points = []
+        for ii in range(peaks.size):
+            peak_data_points += range(properties['left_bases'][ii], properties['right_bases'][ii]+1)
+        noise_data_points = [ii for ii in range(len(list_intensity)) if ii not in peak_data_points]
+        if noise_data_points:
+            return np.mean([list_intensity[ii] for ii in noise_data_points])        # mean more stringent than median
+        else:
+            return 0
+
+    def get_empCompounds(self):
+        '''
+        '''
+        ECCON = epdsConstructor(self.list_peaks)
+        self.list_empCpds = ECCON.peaks_to_epds()
+
+
+
+
+
+
+
+#
+# -----------------------------------------------------------------------------
+#
+# not used now
+# 
+
+
+
+class Sample_old:
     '''
     A sample or injection, corresponding to one raw data file, either from positive or negative ionization.
     Each sample has a series of scans in LC-MS (retentiion time). 
     The RT is recorded as integers of scan number in asari, and converted to seconds on demand.
     The OpenMS workflow uses seconds directly, and users should class Sample_openms.
 
+    RT and m/z values in a sample may be modified due to alignment to other samples.
+    The correction functions are stored per sample.
+
+
     '''
-    def __init__(self, experiment, mode, input_file=''):
+    def __init__(self, experiment, mode='pos', input_file=''):
         self.input_file = input_file
         self.experiment = experiment                        # parent Experiment instance
         self.name = os.path.basename(input_file)            # must be unique
@@ -41,9 +195,21 @@ class Sample:
         self.dict_masstraces = {}                           # indexed by str(round(mz,6))
         self.mzstr_2_formula_mass = {}
         self.good_peaks = []
+
         self.__valid__ = True
         self.__mass_accuracy__, self.__mass_stdev__ = None, None
+
+        # to apply correction/calibration 
+        self.__mass_ppm_shift__ = None                      # _r in utils.mass_paired_mapping_with_correction
         self.__rt_calibration__ = None                      # This will be the calibration function
+
+        self.rt_numbers = []                                # list of scans, starting from 0
+        self.list_retention_time = []                       # full RT time points in sample
+
+        self.list_mass_traces = []
+        self.dict_mass_traces = {}
+        self.list_peaks = []
+        self.dict_peaks = {}
 
     def process_step_1(self):
         '''
@@ -101,17 +267,14 @@ class Sample:
     def _get_masstraces_(self):
         '''
         Get chromatograms, this class is using asari.chromatograms algorithm.
-        Use another Sample class for a different algorithm.
-
+        Use another class for a different algorithm (e.g. Sample_openms).
         '''
         exp = MSExperiment()                                                                                          
         MzMLFile().load(self.input_file, exp)
         xic_dict = self._get_masstraces_from_centroided_rawdata_(exp)
-
-        self.rt_numbers = xic_dict['rt_numbers']    # list of scans, starting from 0
-        self.list_retention_time = xic_dict['rt_times']
-        
-        for xic in xic_dict['xics']:             # ( mz, rtlist, intensities )
+        self.rt_numbers = xic_dict['rt_numbers']            # list of scans, starting from 0
+        self.list_retention_time = xic_dict['rt_times']     # full RT time points in sample
+        for xic in xic_dict['xics']:                        # ( mz, rtlist, intensities )
             _low, _high = self.parameters['mass_range']
             if _low < xic[0] < _high:
                 mz_str = str(round(xic[0],4))
@@ -126,7 +289,7 @@ class Sample:
                     else:
                         self.dict_masstraces[mz_str] = [M]
 
-        print("\nProcessing %s, found %d mass traces." %(self.input_file, len(self.dict_masstraces)))
+        print("Processing %s, found %d mass traces." %(self.input_file, len(self.dict_masstraces)))
 
     def _get_masstraces_from_centroided_rawdata_(self, exp):
         '''
@@ -186,6 +349,13 @@ class Sample:
                     M.__mass_corrected_by_asari__ = True
 
         self.mzstr_2_formula_mass = mzstr_2_formula_mass
+
+
+
+
+#
+# -----------------------------------------------------------------------------
+#
 
 
 class Sample_openms(Sample):
@@ -264,5 +434,8 @@ class Sample_openms(Sample):
                         self.dict_masstraces[mz_str] = [M]
 
         return xics
+
+
+
 
 

@@ -1,19 +1,12 @@
 '''
 Use integers for RT scan numbers and intensities.
-
 Flexible binning based on ppm accuracy.
-
-
-Changing XIC procedure.
 Use mz tol (default 5 pmm) in XIC construction. 
 XICs without neighbors within x ppm are considered specific (i.e. high selectivity). 
 Low selectivity regions will be still inspected to determine the true number of XICs.
-
-Leave out calibration for now.
-
+Leave calibration to Correspondence step.
 
 import os
-
 from itertools import combinations
 # import matplotlib.pyplot as plt
 # from sklearn.neighbors import KernelDensity
@@ -71,12 +64,12 @@ def get_thousandth_regions(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_t
     number_spectra = ms_expt.getNrSpectra()
     alldata = []
     for ii in range(number_spectra):
-        for (mz, intensity) in zip(*ms_expt[ii].get_peaks()):
-            if intensity > min_intensity:
-                alldata.append((mz, ii, int(intensity)))
+        if ms_expt[ii].getMSLevel() == 1:                               # MS Level 1 only
+            for (mz, intensity) in zip(*ms_expt[ii].get_peaks()):
+                if intensity > min_intensity:
+                    alldata.append((mz, ii, int(intensity)))
 
-    print("extracted %d valide data points." %len(alldata))
-    
+    #print("extracted %d valide data points." %len(alldata))
     mzTree = {}
     for x in alldata:
         ii = int(x[0]*1000)

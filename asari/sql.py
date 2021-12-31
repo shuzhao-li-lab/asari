@@ -36,8 +36,13 @@ The former is more efficient for larger DBs??
 
 
 import sqlite3 as sql
+import sqlalchemy as db
+
+
+
 import pandas as pd
 from mass2chem.annotate import compute_adducts_formulae
+
 
 #
 # this is tier 1 pos only, will update the DB in later iterations

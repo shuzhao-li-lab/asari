@@ -1,5 +1,22 @@
 '''
-Mass traces (i.e. XIC, EIC or chromatogram) and peaks.
+Mass traces (i.e. XIC, EIC or chromatogram) and peaks are not instanced as classes in 
+internal processing for efficiency.
+XICs as [( mz, rtlist, intensities ), ...].
+Peak format: 
+{
+    'id_number': 0, 'mz', 'apex', 'left_base', 'right_base', 'height', 'parent_masstrace_id', 
+    'rtime', 'peak_area', 'goodness_fitting'
+}
+
+
+To further refine peak detection, 
+    e.g. extra iteration  better deconvolution of overlapping peaks - to determine across samples.
+
+def find_peaks_with_snr(list_intensity):
+    pass
+
+
+
 '''
 
 import numpy as np
@@ -11,14 +28,35 @@ from metDataModel.core import MassTrace, Peak
 from .utils import *
 
 
+
+
+
+
+
+#
+# -----------------------------------------------------------------------------
+#
+
+
+
+
+
+
+
+
+
+
 # peak detection is in this class
 class ext_MassTrace(MassTrace):
     '''
+
     Extending metDataModel.core.MassTrace
     Peak detection using scipy.signal.find_peaks, a local maxima method with prominence control.
-    Not keeping Peaks in this class; Peaks are attached to Sample. 
-    To-do: further refine peak detection in future, 
-    e.g. extra iteration of peak detection in remaining region; better deconvolution of overlapping peaks.
+    Not keeping Peaks in this class; Peaks are attached to Sample, then to store in SQLite (next version).
+
+
+        Useful to have a 2nd rule on prominence; can mark for review during correspondence.
+        
     '''
     def __init2__(self, mz, RT, INTS):
         # np.array or list -
@@ -70,19 +108,20 @@ class ext_MassTrace(MassTrace):
         else:
             return 0
 
+
 # peak evaluation is in this class
 class ext_Peak(Peak):
     '''
-    Extending metDataModel.core.Peak, including pointer to parent MassTrace.
+    Extending metDataModel.core.Peak, 
+    
+    including pointer to parent MassTrace.
+    
     Not storing RT or intensity arrays, but looking up in MassTrace if needed.
     '''
     def __init2__(self, parent_mass_trace, mz, apex, peak_height, left_base, right_base):
         [ self.parent_mass_trace, 
         self.mz, self.apex, self.peak_height, self.left_base, self.right_base
                 ] = [ parent_mass_trace, mz, apex, peak_height, left_base, right_base ]
-
-
-        # need to convert back to seconds in asari xics
 
         self.left_rtime = float(self.parent_mass_trace.list_retention_time[left_base])
         self.right_rtime = float(self.parent_mass_trace.list_retention_time[right_base])
