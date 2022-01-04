@@ -3,11 +3,11 @@ asari, LC-MS metabolomics data preprocessing - trackable, scalable.
 
 In the asari/mummichog packages, the data entities are presented in any of the four types: 
 class, namedtuple, JSON style dictionary or implicit list. 
-The implicit lists are used sparely for reduced clarity. 
+The implicit lists are used sparely as they have reduced clarity. 
 Namedtuple is immutable, then limited applications. 
 In-memory searches are conducted using indexed dictionaries or dataframes.
 
-Simple formats:
+Data formats:
 ===============
 XICs as [( mz, rtlist, intensities ), ...].
 Peak format: 
@@ -97,7 +97,7 @@ class Sample:
                 'mz': xic[0],
                 'rt_scan_numbers': xic[1],                  # list
                 'intensity': xic[2],                        # list
-                'number_peaks': 0
+                # 'number_peaks': 0,
                 } )
             ii += 1
 
@@ -105,6 +105,7 @@ class Sample:
 
     def get_peaks(self, min_intensity_threshold=10000, min_fwhm=3, min_prominence_threshold=5000, snr=2):
         '''
+        Initial elution peak detection; will do another round of peak detection on compositeMap.
         '''
         list_peaks = []
         for xic in self.list_mass_traces:
@@ -156,6 +157,8 @@ class Sample:
 
     def get_empCompounds(self):
         '''
+        update self.list_empCpds
+        e.g. [{'id': 358, 'list_peaks': [(4215, 'anchor'), (4231, '13C/12C'), (4339, 'anchor,+NH4')]}, ...]
         '''
         ECCON = epdsConstructor(self.list_peaks)
         self.list_empCpds = ECCON.peaks_to_epds()
@@ -171,7 +174,6 @@ class Sample:
 #
 # not used now
 # 
-
 
 
 class Sample_old:
@@ -352,12 +354,6 @@ class Sample_old:
 
 
 
-
-#
-# -----------------------------------------------------------------------------
-#
-
-
 class Sample_openms(Sample):
     '''
     Reusing Sample class; only modifying mass trace functions as RT is used differently.
@@ -434,8 +430,4 @@ class Sample_openms(Sample):
                         self.dict_masstraces[mz_str] = [M]
 
         return xics
-
-
-
-
 

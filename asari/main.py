@@ -8,7 +8,7 @@ python3 -m asari.main neg /Users/shuzhao/li.projects/asari/T03
 '''
 
 import sys
-from .lcms_experiment import *
+from .workflow import *
 
 
 PARAMETERS = {

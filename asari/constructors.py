@@ -32,22 +32,50 @@ from scipy.stats import norm as normal_distribution
 from .search import *
 
 
-class FeatureMap:
+class 
+
+
+
+class CompositeMap:
+    '''
+    The CMap is consisted of a list of massTraces, which contain Peaks.
+    Steps:
+    1. Among the initial samples, the sample of most empCpds is used to seed the CMap.
+    2. EmpCpds from each sample are aligned to the seed sample (mass_epdtree_mapping),
+    then CMap is augmented by matched empCpds not in the seed sample. This step establishes m/z grid.
+    3. Optional, m/z calibration to refDB.
+    4. Determine RT DTW function per sample, by matching to selective epd pairs.
+    5. Build composite elution profile by cumulative sum of mass traces from all samples after RT correction.
+    6. New samples are added to CMap, both aligning to the CMap and augment the CMap by new features.
+    7. After all samples are processed, peak detection is performed carefully on each massTrace in CMap, 
+    to determine number and range of peaks.
+    8. Report peaks per sample based on the peak definition in CMap.
+    9. New round of Annotation; add remaining features to epds or group into new epds.
+    '''
 
     def __init__(self, experiment):
+        '''
+        composite mass traces, with study-wide peaks
+        '''
 
         self.experiment = experiment
-
-        self.init_index = []
-
+        self.c_mass_traces = []
         self.db_ref = []
-
         self.featuremap = []
 
+
+
+
     def construct_mz_map(self):
+        
         pass
 
     def set_RT_reference(self):
+        '''
+        Because RT will not match precisely btw samples, 
+        DTW should remap to a common set of time coordinates.
+        '''
+
         pass
 
 
@@ -72,6 +100,7 @@ class epdsConstructor:
     To get list of empCpds, run
     ECCON = epdsConstructor(list_peaks)
     list_empCpds = ECCON.peaks_to_epds()
+    # e.g. {'id': 358, 'list_peaks': [(4215, 'anchor'), (4231, '13C/12C'), (4339, 'anchor,+NH4')]},
     '''
 
     def __init__(self, peak_list, mode='pos'):
@@ -90,9 +119,9 @@ class epdsConstructor:
         
         We build indexed centurion trees here to assist searches.
 
-        Result
+        Return
         ======
-        This updates self.epds, [{'id': ii, 'list_peaks': [(peak_id, ion), (), ...],}, ...]
+        list_empCpds, [{'id': ii, 'list_peaks': [(peak_id, ion), (), ...],}, ...]
             The first peak is anchor ion.
         '''
         list_empCpds = []
@@ -151,4 +180,25 @@ class epdsConstructor:
                     if is_coeluted(P1, P2):
                         matched.append( (P2['id_number'], relation +','+ adduct[1]) )
         return matched
+
+    def extend_empCpds_by_adducts(self, seed_list_empCpds, list_peaks, adduct_patterns, mz_tolerance_ppm=5):
+        '''
+        Search list_peaks for adducts that fit patterns relative to anchor ions (?? ) in existing empCpds.
+        Co-elution required.
+
+        in progress -
+
+        '''
+        
+        mztree = build_centurion_tree(list_peaks)
+        for EPD in seed_list_empCpds:
+            P1, relation = EPD['list_peaks'][0]
+            for adduct in adduct_patterns:
+                # (1.0078, 'H'), (21.9820, 'Na/H'), ...
+                tmp = find_all_matches_centurion_indexed_list( P1['mz'] + adduct[0], mztree, mz_tolerance_ppm )
+                for P2 in tmp:
+                    if is_coeluted(P1, P2):
+                        EPD['list_peaks'].append( (P2['id_number'], relation +','+ adduct[1]) )
+
+        return seed_list_empCpds
 
