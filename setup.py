@@ -5,11 +5,11 @@ with open("README.md", "r") as fh:
 
 setup(
   name='asari-metabolomics',
-  version='0.8.1',
+  version='0.8.3',
 
   author='Shuzhao Li',
   author_email='shuzhao.li@gmail.com',
-  description='Simple metabolomics data preprocessing',
+  description='LC-MS metabolomics data preprocessing',
   long_description=long_description,
   long_description_content_type="text/markdown",
   url='https://github.com/shuzhao-li/asari',

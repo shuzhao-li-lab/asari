@@ -3,9 +3,8 @@ Asari
 
 Version 0.8
 
-Simple Python program for LC-MS metabolomics data preprocessing.
-This focuses on high-resolution data, where most features are specific to a formula based mass, 
-and baseline is rarely a problem in peak detection.
+Python program for high-resolution LC-MS metabolomics data preprocessing, 
+with a design focus to be trackable and scalable.
 
 - only for high resolution data. Prioritized leverage of high mass resolution.
 - Simple peak dection based on local maxima and prominence.
@@ -43,11 +42,8 @@ Algorithms
 - Use information on observed features and epdTrees in the first few samples to guide data extraction and assembly in the remaining data.
 
 
-Each sample is checked for mass accuracy. Mass calibration is done if systematic shift > 5 pm.
-
-Because peak detection uses lenient default parameters (high quality peaks used to guide major steps),
-weak signal reovery is not implemented nor desired. The missing peaks are considered under limit of detection.
-One can impute with minimal detected values in each feature (row) in downstream analysis. 
+Each sample is checked for mass accuracy. 
+Each sample has a recorded function of mass calibration and a function of RT calibration.
 
 Use
 ===
@@ -59,17 +55,8 @@ The two arguments are ionization_mode and data_directory.
 Next to-do
 ==========
 
-Update FeatureMap algorithm (borrowed name from OpenMS).
-
 The reference DB is not finalized. 
-
-Group features into empicical compounds via mass2chem.
-
 Add SQLite DB for storage.
-Before then, we may consider to process data in limited sizes. But without caching mass traces, the memory use is small.
-
-More work is needed for estimation of mass stdev. The current method is too dependent on the limit window. 
-Also, if users have spike-in controls, they should be allowed to use first.
 
 
 Repository

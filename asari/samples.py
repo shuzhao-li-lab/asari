@@ -7,15 +7,24 @@ The implicit lists are used sparely as they have reduced clarity.
 Namedtuple is immutable, then limited applications. 
 In-memory searches are conducted using indexed dictionaries or dataframes.
 
+SimpleSample is used by default asari workflow. 
+For different purposes, one can use Sample or other classes.
+
 Data formats:
 ===============
-XICs as [( mz, rtlist, intensities ), ...].
+mass tracks as [( mz, rtlist, intensities ), ...].
 Peak format: 
 {
     'id_number': 0, 'mz', 'apex', 'left_base', 'right_base', 'height', 'parent_masstrace_id', 
     'rtime', 'peak_area', 'goodness_fitting'
 }
 isotopic_patterns = [(1.003355, 'M(13C)', 0, 0.2), ...]
+
+Mass Tracks
+===========
+They are used for full RT ranges, thus each mass track has a unique m/z. 
+Some chromatogram builders separate the mass traces if there are gaps in RT scans, 
+but that creates complexity in m/z alignment and searches. 
 
 Peak detection
 ==============
@@ -35,54 +44,117 @@ from pyopenms import MSExperiment, MzMLFile
 
 # from mass2chem.annotate import annotate_formula_mass, massDict_hmdb
 
-from .chromatograms import extract_massTraces
+from .chromatograms import extract_massTracks_        # extract_massTraces, 
 from .functions import *
 from .sql import *
 
 from .constructors import epdsConstructor
 
-class Sample:
+
+class SimpleSample:
     '''
-    Simplified LC-MS Sample instance with few dependencies, 
-    to generate mass traces and peaks from a mzML file.
-    This can be used externally for data mining, inferring m/z relationships (i.e. to construct epdTrees), etc.
-    
-    More a utility,
-    minimal filtering,
-    no correction on RT and m/z values.
-    Use scan numbers whereas possible.
+    LC-MS Sample to get mass tracks from a mzML file, and as a container for peaks and empCpds.
+
+    Use scan numbers whereas possible. initial peak detection for assembling empCpds only.
 
     Use dictionary formats for mass_trace, peak and empCpd for clarity.
+
+    Registry for mass traces, peaks & empCpds.
+
+    RT and m/z values will have calibration functions after CompositeMap.
+
     '''
-    def __init__(self, mode='pos', input_file=''):
+    def __init__(self, experiment=None, mode='pos', input_file=''):
+
         self.input_file = input_file
+        if experiment:
+            self.experiment = experiment
+            self.id = self.experiment.list_input_files.index(input_file)
+        else:
+            self.id = input_file
+        
         self.mode = mode
         self.parameters = {}
         self.rt_numbers = []                                # list of scans, starting from 0
         self.list_retention_time = []                       # full RT time points in sample
+        
         # lists to store data
-        self.list_mass_traces = []                          # list of EICs
+        self.list_mass_tracks = []                          # index number = id_number, in ascending order of m/z
+        self.anchor_mz_pairs = []
+        
+        # will populate after CMAP
         self.list_peaks = []   
-        self.list_empCpds = []   
+        self.list_empCpds = []
+        
         # dict for future use
+        self.list_mass_traces = []
         self.dict_mass_traces = {}
         self.dict_peaks = {}
+
 
     def process(self):
         '''
         From input file to list_MassTraces with detected peaks and selectivity on peaks.
         '''
-        self.get_masstraces()
-        self.get_peaks()
-        
-        self.get_empCompounds()
+        self.get_mass_tracks_()
+        self.get_anchor_mz_pairs()
+        # to send to SQL DB here
 
+
+    def get_mass_tracks_(self, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5):
+        '''
+        A mass track is an EIC for full RT range, without separating the mass traces,
+        using asari.chromatograms algorithm.
+        tracks as [( mz, rtlist, intensities ), ...].
+
+        '''
+        exp = MSExperiment()                                                                                          
+        MzMLFile().load(self.input_file, exp)
+        xdict = extract_massTracks_(exp, 
+                    mz_tolerance_ppm=mz_tolerance_ppm, min_intensity=min_intensity, min_timepoints=min_timepoints)
+        self.rt_numbers = xdict['rt_numbers']            # list of scans, starting from 0
+        self.list_retention_time = xdict['rt_times']     # full RT time points in sample
+        ii = 0
+        # already in ascending order of m/z from extract_massTracks_, get_thousandth_regions
+        for tk in xdict['tracks']:                         
+            self.list_mass_tracks.append( {
+                'id_number': ii, 
+                'mz': tk[0],
+                'rt_scan_numbers': tk[1],                  # list
+                'intensity': tk[2],                        # list
+                } )
+            ii += 1
+
+        print("Processing %s, found %d mass tracks." %(self.input_file, ii))
+
+    def get_anchor_mz_pairs(self):
+        '''
+        update self.get_anchor_mz_pairs
+        e.g. [(5, 8), (6, 13), (17, 25), (20, 27), ...]
+        '''
+        self.anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(self.list_mass_tracks, mz_tolerance_ppm=5)
+        
+        print(len(self.anchor_mz_pairs), self.anchor_mz_pairs[:8])
+        
+
+
+
+#---------------------------------------------------------------------------------------------------------------
+
+class Sample(SimpleSample):
+    '''
+    LC-MS Sample with fuller functions on mass traces and peak detections.
+    This can be used externally for data mining, inferring m/z relationships (i.e. to construct epdTrees), etc.
+    '''
+        
     def get_masstraces(self, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5):
         '''
         Get chromatograms, this class is using asari.chromatograms algorithm.
         Use another class for a different algorithm (e.g. Sample_openms).
         XICs as [( mz, rtlist, intensities ), ...].
         mass_trace format: {'id_number':0, 'mz', 'rt_scan_numbers', 'intensity', 'number_peaks':0}
+        
+        Multiple mass tracess can have the same m/z values, i.e. they belong to the same `mass track`.
         '''
         exp = MSExperiment()                                                                                          
         MzMLFile().load(self.input_file, exp)
@@ -132,7 +204,7 @@ class Sample:
         prominence = max(min_prominence_threshold, 0.05*max(list_intensity))
         peaks, properties = find_peaks(list_intensity, height=min_intensity_threshold, width=min_fwhm, 
                                                         prominence=prominence) 
-        _noise_level_ = self.__get_noise_level__(list_intensity, peaks, properties)
+        _noise_level_ = self.get_noise_level__(list_intensity, peaks, properties)
         for ii in range(peaks.size):
             if properties['peak_heights'][ii] > snr*_noise_level_:
                 list_peaks.append({
@@ -145,7 +217,7 @@ class Sample:
                 })
         return list_peaks
 
-    def __get_noise_level__(self, list_intensity, peaks, properties):
+    def get_noise_level__(self, list_intensity, peaks, properties):
         peak_data_points = []
         for ii in range(peaks.size):
             peak_data_points += range(properties['left_bases'][ii], properties['right_bases'][ii]+1)
@@ -163,6 +235,22 @@ class Sample:
         ECCON = epdsConstructor(self.list_peaks)
         self.list_empCpds = ECCON.peaks_to_epds()
 
+    def export_peaklist(self):                                  # for diagnosis etc.
+        '''
+        in progress -
+        '''
+        outfile = os.path.join(self.experiment.output_dir, self.name.replace('.mzML', '') + '.peaklist')
+        header = ['m/z', 'retention time', 'area', 'shape_quality', 'gaussian_amplitude', 'gaussian_variance', 'mz_selectivity']
+        peaklist = []
+        for P in self.good_peaks:
+            formatted = [str(round(P.mz, 6)), str(round(P.rtime, 2)), str(int(P.peak_area)), str(round(P.goodness_fitting, 2)), 
+                            str(int(P.gaussian_parameters[0])), str(round(P.gaussian_parameters[2], 2)), str(round(P.selectivity, 2)),]
+            if P.mzstr in self.mzstr_2_formula_mass:
+                formatted.append(self.mzstr_2_formula_mass[P.mzstr])
+            peaklist.append(formatted)
+
+        with open(outfile, 'w') as O:
+            O.write( '\t'.join(header) + '\n' + '\n'.join([ '\t'.join(L) for L in peaklist ]) + '\n' )
 
 
 

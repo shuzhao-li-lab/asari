@@ -3,23 +3,20 @@ We use a similar concept of FeatureMap as in OpenMS here,
 but the correspondence algorithms take adavantage of high m/z resolution first, 
 then utilizes MS1_pseudo spectra and cumulative elution profiles.
 
-Steps in corespondence in asari:
-1. mz alignment of high selectivity peaks; keep remaining peaks in queue.
-2. 
-
-
+Steps in corespondence 
 to move to constructors.py
 
 
 
 '''
+import os
+import random
 
 from metDataModel.core import Experiment
 
+from .samples import SimpleSample
+from .constructors import CompositeMap
 
-#
-# -----------------------------------------------------------------------------
-#
 # General data processing steps are in this class
 class ext_Experiment(Experiment):
     '''
@@ -29,7 +26,7 @@ class ext_Experiment(Experiment):
     def __init2__(self, list_input_files, dict_meta_data, parameters, output_dir):
         '''
         This is the overall container for all data in an experiment/project.
-        We don't sort sample orders. One can sort after getting the feature table.
+        Samples are sorted by name and assigned unique IDs.
 
         Input
         -----
@@ -38,24 +35,69 @@ class ext_Experiment(Experiment):
         parameters: including 'ionization_mode', 'min_intensity_threshold', 'min_timepoints'. See main.py.
 
         '''
-        self.list_input_files = list_input_files
+        self.list_input_files = sorted(list_input_files)        # ordered by name
         self.output_dir = output_dir
-        self.samples = []                   # out of initial input order in samples
-        self.ordered_sample_names = []      # will populate after sample processing, enforced in assembling featuretable
-        self.name_to_Sample = {}
-        self.HOT_DB = {}                    # pd.DataFrame
-        self.feature_table = {}             # 
-        
         self.number_of_samples = len(list_input_files)
+
         self.files_meta_data = dict_meta_data
+        
         self.parameters = parameters
         self.max_rtime = parameters['max_rtime']
         self.mode = parameters['mode']
 
         self.initiation_samples = self.__choose_initiation_samples__()
 
+        # SAMPLE_REGISTRY
+        self.samples = []                   # list of Sample instances
+        self.samples_by_id = {}             # sample ID: Sample instance
+        self.samples_by_name = {}           # input file name: Sample instance
+
         
     def process_all(self):
+        '''
+        
+        if refDB:
+            self.CMAP.align_to_refdb(refDB)
+
+        '''
+        self.CMAP = CompositeMap(self)
+        initiation_Samples = self.process_initiation_samples()
+        self.CMAP.initiate_mass_grid( initiation_Samples )
+
+        for f in self.list_input_files:                                 # run remaining samples, 
+            if f not in self.initiation_samples:
+                SM = self.process_single_sample(f)
+                # not via DB
+                self.CMAP.add_sample(SM)
+
+        self.CMAP.set_RT_reference()
+        self.global_peak_detection(self.CMAP)
+
+
+    def process_initiation_samples(self):
+        init_sm = [self.process_single_sample(f) for f in self.initiation_samples]
+        return [SM for SM in init_sm if SM]
+
+    def process_single_sample(self, input_file):
+        '''
+
+        To add DB function in HERE
+        '''
+        try:
+            SM = SimpleSample(self, self.mode, input_file)
+            SM.process()
+            # sample id, assigned by index in self.list_input_files.
+            # DB commit
+            return SM
+        except IndexError:
+            print("Input error in sample %s, dropped from processing." %f)
+            return None
+        
+
+
+    #---------------------------------------------------------------------------------------------------------------
+
+    def __obsolete__process_all(self):
         '''
         This will shift to a DB design in next version.
         '''
@@ -87,6 +129,7 @@ class ext_Experiment(Experiment):
             print("Ionization mode is either `pos` or `neg`.")
         return tsv2refDB(dbfile)
 
+
     def init_hot_db(self, DFDB):
         '''
         Use three samples to initiate a hot DB to house feature annotation specific to this Experiment, and speed up subsequent search.
@@ -116,6 +159,8 @@ class ext_Experiment(Experiment):
         #export_hot_db, without last col
         self.HOT_DB.iloc[:, :-1].to_csv(os.path.join(self.output_dir, '__intermediary__' + self.parameters['annotation_filename']), sep="\t")
         
+
+
     def calibrate_retention_time(self, method='spline', smoothing_factor=0.5):
         '''
         Calibrate (align) RT using selected `good` peaks.
@@ -291,14 +336,14 @@ class ext_Experiment(Experiment):
         print("The main feature table (%s) has %d samples and %d features.\n\n\n" %(
             self.parameters['output_filename'], len(self.ordered_sample_names), len(high_quality_features)))
 
+
+
+
     def __choose_initiation_samples__(self):
-        if self.parameters['initiation_samples']:
-            return self.parameters['initiation_samples'][:3]
-        else:
-            if self.number_of_samples < 4:
-                return self.list_input_files
+        '''
+
+        To consider using meta data??
             elif not self.files_meta_data:
-                return random.sample(self.list_input_files, 3)
             else:
                 chosen = []
                 POOLED = [f for f in self.list_input_files if self.files_meta_data[f] == 'POOLED']
@@ -310,12 +355,13 @@ class ext_Experiment(Experiment):
                 OTHERS = [f for f in self.list_input_files if self.files_meta_data[f] not in ['POOLED', 'QC', 'BLANK']]
                 chosen += random.sample(OTHERS, 3)
                 return chosen[:3]
-
-
-
-
-
-
-
-
+        
+        '''
+        if self.parameters['initiation_samples']:
+            return self.parameters['initiation_samples']
+        else:
+            if self.number_of_samples < 4:
+                return self.list_input_files
+            else:
+                return random.sample(self.list_input_files, 3)
 

@@ -74,6 +74,7 @@ def build_centurion_tree(list_peaks):
     Return a dictionary, indexing mzList by 100*mz bins.
     Because most high-resolution mass spectrometers measure well under 0.01 amu, 
     one only needs to search the corresponding 0.01 bin and two adjacent bins (to capture bordering values).
+    list_mass_tracks has similar format as list_peaks.
     '''
     d = {}
     for p in list_peaks:
@@ -135,7 +136,7 @@ def find_best_match_centurion_indexed_list(query_mz, mz_centurion_tree, limit_pp
         L = mz_centurion_tree.get(ii, [])
         for peak in L:
             _d = abs(peak['mz']-query_mz)
-            if _d < min(result[1], mz_tol):
+            if _d < min(result[1], mz_tol):     # enforce mz_tol here
                 result = (peak, _d)
                 
     return result[0]
@@ -218,9 +219,30 @@ def find_adduct_signatures(list_peaks, mztree, adduct_patterns, mz_tolerance_ppm
     return signatures
 
 
+def find_mzdiff_pairs_from_masstracks(list_mass_tracks, list_mz_diff=[1.003355, 21.9820], mz_tolerance_ppm=5):
+    '''
+    Find all pairs in list_mass_tracks that match a pattern in list_mz_diff, and return their id_numbers as pairs.
+    This function does not use coeluction (rtime) rules. 
 
+    Input
+    =====
+    list_mass_tracks: [{ 'id_number': ii,  'mz': xic[0], 'rt_scan_numbers': xic[1],  'intensity': xic[2],  }, ...]
+    list_mz_diff: defaul 1.003355, 21.9820 are 13C/12C, Na/H. Dependent on ionization mode.
+    
+    Return
+    ======
+    list of pairs of mass tracks numbers.
+    '''
+    pairs = []
+    # list_mass_tracks has similar format as list_peaks.
+    mztree = build_centurion_tree(list_mass_tracks)
+    for mzdiff in list_mz_diff:
+        for P1 in list_mass_tracks:
+            P2 = find_best_match_centurion_indexed_list(P1['mz'] + mzdiff, mztree, mz_tolerance_ppm)
+            if P2:
+                pairs.append((P1['id_number'], P2['id_number']))
 
-
+    return pairs
 
 
 
@@ -405,7 +427,6 @@ def find_isotopic_pairs(list_peaks, mztree, isotopic_pair, mz_tolerance_ppm=5, r
     return pairs
 
 
-
 def init_eTrees_by_isotopic_signatures(isotopic_signatures, iso_type, peak_list):
     '''
     An example of isotopic_signatures: 
@@ -413,8 +434,6 @@ def init_eTrees_by_isotopic_signatures(isotopic_signatures, iso_type, peak_list)
     
 
     '''
-
-
     eTrees = []
     (P1, P2) = iso_pairs
     for pp in iso_pairs:
@@ -423,10 +442,6 @@ def init_eTrees_by_isotopic_signatures(isotopic_signatures, iso_type, peak_list)
         ET.isotope_peaks = [P1['id_number'], P2['id_number']]
         ET.peak_relationships.append(( P1['id_number'], P2['id_number'], iso_type ))
     return eTrees
-
-
-
-
 
 def merge_isotopic_eTrees(list_eTrees):
     '''

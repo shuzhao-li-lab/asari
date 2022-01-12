@@ -4,6 +4,20 @@ Use SQLite3 as backend database to store all sample-related data.
 This relieves the memory requirement and provides persistence to stop/resume operations.
 Multiple processes can visit the same database, thus potentially enabling parallel processing.
 
+
+
+TABLE SAMPLES
+    for each sample, construct:
+TABLE MASSTRACES
+TABLE PEAKS
+
+
+
+
+
+
+
+
 Moving pos_ref_DBs to mass2chem.
 
 
@@ -36,7 +50,8 @@ The former is more efficient for larger DBs??
 
 
 import sqlite3 as sql
-import sqlalchemy as db
+
+# import sqlalchemy as db
 
 
 

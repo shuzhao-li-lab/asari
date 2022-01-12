@@ -18,25 +18,6 @@ import numpy as np
 from scipy.signal import find_peaks 
 
 
-def extract_massTraces(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5):
-    '''
-    ms_expt: pyopenms MSExperiment instance, loaded with LC-MS data.
-    return 
-    rt_numbers, rt_times,
-    XICs as [( mz, rtlist, intensities ), ...]
-    '''
-    rt_numbers = range(ms_expt.getNrSpectra())
-    rt_times = [spec.getRT() for spec in ms_expt]
-    good_bins = get_thousandth_regions(ms_expt, mz_tolerance_ppm, min_intensity, min_timepoints)
-    xics = []
-    for bin in good_bins:
-        xics += bin_to_xics(bin, mz_tolerance_ppm, gap_allowed=2, min_timepoints=5)
-    return {
-        'rt_numbers': rt_numbers,
-        'rt_times': rt_times,
-        'xics': xics,
-    }
-
 def get_thousandth_regions(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5):
     '''
     Process all LC-MS spectral data into flexible bins by units of 0.001 amu.
@@ -79,7 +60,7 @@ def get_thousandth_regions(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_t
             mzTree[ii] = [x]
 
     del alldata
-    ks = sorted([k for k,v in mzTree.items() if len(v) >= min_timepoints]) # ascending order
+    ks = sorted([k for k,v in mzTree.items() if len(v) >= min_timepoints]) # ascending order enforced
     bins_of_bins = []
     tmp = [ks[0]]
     for ii in range(1, len(ks)):
@@ -98,12 +79,37 @@ def get_thousandth_regions(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_t
         for b in bin:
             datatuples += mzTree[b]
         # check the presence of min consecutive RT in small traces, to filter out more noises
-        # e.g. in this datafile, 5958 reduced to 4511 traces
+        # e.g. in an example datafile, 5958 reduced to 4511 traces
         if __rough_check_consecutive_scans__(datatuples):
             good_bins.append(datatuples)
     
     # del mzTree
     return good_bins
+
+
+# -----------------------------------------------------------------------------
+# mass Traces
+# -----------------------------------------------------------------------------
+
+def extract_massTraces(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5):
+    '''
+    ms_expt: pyopenms MSExperiment instance, loaded with LC-MS data.
+    return 
+    rt_numbers, rt_times,
+    XICs as [( mz, rtlist, intensities ), ...]
+    '''
+    rt_numbers = range(ms_expt.getNrSpectra())
+    rt_times = [spec.getRT() for spec in ms_expt]
+    good_bins = get_thousandth_regions(ms_expt, mz_tolerance_ppm, min_intensity, min_timepoints)
+    xics = []
+    for bin in good_bins:
+        xics += bin_to_xics(bin, mz_tolerance_ppm, gap_allowed=2, min_timepoints=5)
+        
+    return {
+        'rt_numbers': rt_numbers,
+        'rt_times': rt_times,
+        'xics': xics,
+    }
 
 def bin_to_xics(bin_data_tuples, mz_tolerance_ppm=5, gap_allowed=2, min_timepoints=5):
     '''
@@ -120,7 +126,7 @@ def bin_to_xics(bin_data_tuples, mz_tolerance_ppm=5, gap_allowed=2, min_timepoin
         hist, bin_edges = np.histogram([x[0] for x in bin_data_tuples], num_steps)
         # example hist: array([  8,   33,  11,  24,  31,  50,  81, 164, 269,  28,   7])
         hist_starts = [0] + [hist[:ii].sum() for ii in range(1,num_steps+1)]
-        # find_peaks returns array([ 1, 8]), {}. distance=3 because it's edge of tolerance
+        # find_peaks returns e.g. array([ 1, 8]), {}. distance=3 because it's edge of tolerance
         peaks, _ = find_peaks(hist, distance=3)
         if peaks.any():
             XICs = []
@@ -162,3 +168,77 @@ def extract_single_trace(bin, gap_allowed=2, min_timepoints=5):
         XICs.append(( mz, rtlist, intensities ))
     
     return XICs
+
+
+# -----------------------------------------------------------------------------
+# mass Tracks
+# -----------------------------------------------------------------------------
+
+def extract_massTracks_(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5):
+    '''
+    A mass track is an EIC for full RT range, without separating the mass traces. 
+    ms_expt: pyopenms MSExperiment instance, loaded with LC-MS data.
+    return 
+    rt_numbers, rt_times,
+    tracks as [( mz, rtlist, intensities ), ...]
+    '''
+    rt_numbers = range(ms_expt.getNrSpectra())
+    rt_times = [spec.getRT() for spec in ms_expt]
+    good_bins = get_thousandth_regions(ms_expt, mz_tolerance_ppm, min_intensity, min_timepoints)
+    tracks = []
+    for bin in good_bins:
+        tracks += bin_to_mass_tracks(bin, mz_tolerance_ppm)
+        
+    return {
+        'rt_numbers': rt_numbers,
+        'rt_times': rt_times,
+        'tracks': tracks,
+    }
+
+def extract_single_track_(bin):
+    '''
+    A mass track is an EIC for full RT range, without separating the mass traces. 
+    input bins in format of [(mz_int, scan_num, intensity_int), ...].
+    return a massTrack as ( mz, rtlist, intensities )
+    '''
+    mz = np.mean([x[0] for x in bin])
+    bin.sort(key=itemgetter(1))   # sort by increasing RT (scan number)
+    _d = {}
+    for r in bin: 
+        _d[r[1]] = 0
+    for r in bin:     # this gets max intensity on the same RT scan
+        _d[r[1]] = max(r[2], _d[r[1]])
+    rtlist = sorted(list(_d))
+    intensities = [_d[x] for x in rtlist]
+    return ( mz, rtlist, intensities )
+
+def bin_to_mass_tracks(bin_data_tuples, mz_tolerance_ppm=5):
+    '''
+    input a flexible bin by units of 0.001 amu, in format of [(mz_int, scan_num, intensity_int), ...].
+    A mass track is an EIC for full RT range, without separating the mass traces. 
+    return massTracks as [( mz, rtlist, intensities ), ...]
+    '''
+    bin_data_tuples.sort()   # by m/z, ascending
+    mz_range = bin_data_tuples[-1][0] - bin_data_tuples[0][0]
+    mz_tolerance = bin_data_tuples[0][0] * 0.000001 * mz_tolerance_ppm   
+    if mz_range < mz_tolerance:
+        return [extract_single_track_(bin_data_tuples)]
+    else:
+        num_steps = int(5*mz_range/mz_tolerance)     # step in 1/5 mz_tolerance
+        hist, bin_edges = np.histogram([x[0] for x in bin_data_tuples], num_steps)
+        # example hist: array([  8,   33,  11,  24,  31,  50,  81, 164, 269,  28,   7])
+        hist_starts = [0] + [hist[:ii].sum() for ii in range(1,num_steps+1)]
+        # find_peaks returns e.g. array([ 1, 8]), {}. distance=3 because it's edge of tolerance
+        peaks, _ = find_peaks(hist, distance=3)
+        if peaks.any():
+            tracks = []
+            for p in peaks:
+                left = max(0, p-2)
+                right = min(p+3, num_steps)
+                tracks.append( extract_single_track_(bin_data_tuples[hist_starts[left]: hist_starts[right]]) )
+            return tracks
+        else:
+            peak = np.argmax(hist)  # if find_peaks fails, get position of max value
+            left = max(0, peak-2)
+            right = min(peak+3, num_steps)
+            return [extract_single_track_(bin_data_tuples[hist_starts[left]: hist_starts[right]])]

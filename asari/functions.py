@@ -16,24 +16,13 @@ numba JITC
 import numpy as np
 
 
-from scipy.interpolate import UnivariateSpline
-
+# from scipy.interpolate import UnivariateSpline
 
 
 from collections import namedtuple
 # from scipy.stats import norm as normal_distribution
 
 from .search import *
-
-#
-# -----------------------------------------------------------------------------
-# feature id will be assigned at the end; intensities is a list; mass_id links to MassTrace
-Feature = namedtuple('Feature', ['feature_id', 'mass_id', 'mz', 'rtime', 'rt_min', 'rt_max', 
-                                'peak_quality_max', 'peak_quality_median', 'number_peaks', 'perc_peaks',
-                                'selectivity_combined', 'selectivity_mz', 'intensity_mean',
-                                'intensities'])
-
-
 
 
 def gaussian_function__(x, a, mu, sigma):
@@ -105,30 +94,6 @@ def bin_by_median(List_of_tuples, func_tolerance):
         PL.append([X[1] for X in L])
     return PL
 
-# not used now
-def _get_downstair_neighbor_mixedlist_(all_sorted_list, ii, ii_limit=0):
-    # return nearest m/z neighbor of same list_origin in sorted [(mz, list_origin, index_origin), ...]
-    # -1 indicates none found
-    list_origin = all_sorted_list[ii][1]        # from list 1 or 2
-    ii -= 1
-    while ii >= ii_limit and all_sorted_list[ii][1] != list_origin:
-        ii -= 1
-    if all_sorted_list[ii][1] == list_origin:
-        return ii
-    else:
-        return -1
-
-def _get_upstair_neighbor_mixedlist_(all_sorted_list, ii, ii_limit):
-    # return nearest m/z neighbor of same list_origin in sorted [(mz, list_origin, index_origin), ...]
-    # -1 indicates none found
-    list_origin = all_sorted_list[ii][1]        # from list 1 or 2
-    ii += 1
-    while ii < ii_limit and all_sorted_list[ii][1] != list_origin:
-        ii += 1
-    if all_sorted_list[ii][1] == list_origin:
-        return ii
-    else:
-        return -1
 
 
 # can be numba optimized
@@ -152,7 +117,7 @@ def mass_paired_mapping(list1, list2, std_ppm=5):
     Return
     ======
     mapped: mapping list [(index from list1, index from list2), ...]
-    ratio_deltas: mean m/z ratio shift between two lists. This is ppm*10^6. No need to convert btw ppm here.
+    ratio_deltas: mean m/z ratio shift between two lists. This is ppm*10^-6. No need to convert btw ppm here.
 
     Test
     ====
@@ -217,7 +182,7 @@ def mass_paired_mapping_with_correction(list1, list2, std_ppm=5, correction_tole
     Return
     ======
     mapped: mapping list [(index from list1, index from list2), ...]
-    _r: correction ration on list2
+    _r: correction ratios on list2
     # ratio_deltas, corrected_list2
     '''
     corrected_list2 = []
@@ -235,21 +200,61 @@ def mass_paired_mapping_with_correction(list1, list2, std_ppm=5, correction_tole
 
 
 
-def mass_epdtree_mapping(epdtrees1, epdtrees2):
+
+
+
+
+
+
+
+
+
+
+
+def epd_paired_mapping_with_correction(empCpd_mzlist_1, empCpd_mzlist_2, std_ppm=5, correction_tolerance_ppm=1):
     '''
+    Match empCpds as grouped m/z values.
+    empCpds:
+    [{'id': 358, 'list_peaks': [(4215, 'anchor'), (4231, '13C/12C'), (4339, 'anchor,+NH4')]},...]
+    to be converted to 
+    # [(id, anchor_peak_mz, other m/z ...), ...]
+
+    Steps:
+    1. check anchor m/z matches, not enforcing selectivity here
+
+    2. verify at least another ion matches following the anchor ions
+    3. mass correction on list 2 if 
 
 
-    To-do
+    Return
+    ======
+    mapped: mapping list [(index from list1, index from list2), ...]
 
+    list1, list2 = [x[1] for x in empCpd_flatlist_1], [x[1] for x in empCpd_flatlist_2]
 
+    mapped, ratio_deltas = mass_paired_mapping(
+        
+        list1, list2, std_ppm)
     '''
     mapped = []
+    # to do
     return mapped
 
 
 
 
 
+
+#
+# -----------------------------------------------------------------------------
+#
+# Not used now
+# -----------------------------------------------------------------------------
+# feature id will be assigned at the end; intensities is a list; mass_id links to MassTrace
+Feature = namedtuple('Feature', ['feature_id', 'mass_id', 'mz', 'rtime', 'rt_min', 'rt_max', 
+                                'peak_quality_max', 'peak_quality_median', 'number_peaks', 'perc_peaks',
+                                'selectivity_combined', 'selectivity_mz', 'intensity_mean',
+                                'intensities'])
 
 def peaks_to_features(peak_dict, rtime_tolerance, ordered_sample_names):
     
@@ -294,4 +299,58 @@ def peaks_to_features(peak_dict, rtime_tolerance, ordered_sample_names):
     return FeatureList
 
 
+# not used now
+def _get_downstair_neighbor_mixedlist_(all_sorted_list, ii, ii_limit=0):
+    # return nearest m/z neighbor of same list_origin in sorted [(mz, list_origin, index_origin), ...]
+    # -1 indicates none found
+    list_origin = all_sorted_list[ii][1]        # from list 1 or 2
+    ii -= 1
+    while ii >= ii_limit and all_sorted_list[ii][1] != list_origin:
+        ii -= 1
+    if all_sorted_list[ii][1] == list_origin:
+        return ii
+    else:
+        return -1
+
+def _get_upstair_neighbor_mixedlist_(all_sorted_list, ii, ii_limit):
+    # return nearest m/z neighbor of same list_origin in sorted [(mz, list_origin, index_origin), ...]
+    # -1 indicates none found
+    list_origin = all_sorted_list[ii][1]        # from list 1 or 2
+    ii += 1
+    while ii < ii_limit and all_sorted_list[ii][1] != list_origin:
+        ii += 1
+    if all_sorted_list[ii][1] == list_origin:
+        return ii
+    else:
+        return -1
+
+
+def combine_mass_traces(list_mass_traces, mz_tolerance=0.0002):
+    '''
+    Combine mass traces of same m/z in the input list.
+    We bypass this by using mass tracks instead of mass traces.
+    
+    Input
+    =====
+    list_mass_traces: likely to contain multiple entries per m/z, due to different retention time.
+        They will be combined into unique m/z bins, but float m/z values may have very minor discrepency,
+        thus they are verified by comparisons under mz_tolerance.
+        mass_trace format: {'id_number': 99, 'mz': 87.0551970014688, 'rt_scan_numbers': [], 'intensity': []}
+
+    Return
+    ======
+    dict_combined_mass_traces: {index: (mz, id1, id2), ...}
+    '''
+    mz_mass_traces = sorted([(mt['mz'], mt) for mt in list_mass_traces])
+    new = {}  
+    ii = 0
+    new[ii] = [mz_mass_traces[0][0], mz_mass_traces[0][1]['id_number'], ]
+    for jj in range(1, len(mz_mass_traces)):
+        if mz_mass_traces[jj][0] - mz_mass_traces[jj-1][0] < mz_tolerance:
+            new[ii].append(mz_mass_traces[jj][1]['id_number'])
+        else:
+            ii += 1
+            new[ii] = [mz_mass_traces[jj][0], mz_mass_traces[jj][1]['id_number']]
+                
+    return new
 
