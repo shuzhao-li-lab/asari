@@ -17,6 +17,8 @@ from metDataModel.core import Experiment
 from .samples import SimpleSample
 from .constructors import CompositeMap
 
+from .sql import *
+
 # General data processing steps are in this class
 class ext_Experiment(Experiment):
     '''
@@ -60,6 +62,9 @@ class ext_Experiment(Experiment):
             self.CMAP.align_to_refdb(refDB)
 
         '''
+        # start SQLite database
+        self.cursor = connect_sqlite_db(self.parameters['project_name'])
+        
         self.CMAP = CompositeMap(self)
         initiation_Samples = self.process_initiation_samples()
         self.CMAP.initiate_mass_grid( initiation_Samples )

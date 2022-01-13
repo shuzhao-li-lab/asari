@@ -12,6 +12,8 @@ from .workflow import *
 
 
 PARAMETERS = {
+    'project_name': 'test_asari',
+    
     'min_intensity_threshold': 5000,    # minimal peak height
     'min_timepoints': 5,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
     'signal_noise_ratio': 2,            # peak height at least x fold over noise, which is median of non-peak data points.

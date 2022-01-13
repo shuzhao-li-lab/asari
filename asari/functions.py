@@ -197,11 +197,17 @@ def mass_paired_mapping_with_correction(list1, list2, std_ppm=5, correction_tole
 
 
 
+def anchor_guided_mapping():
+    pass
 
 
 
 
 
+
+
+def __compelete_interval_mapping():
+    pass
 
 
 

@@ -13,11 +13,6 @@ TABLE PEAKS
 
 
 
-
-
-
-
-
 Moving pos_ref_DBs to mass2chem.
 
 
@@ -54,9 +49,43 @@ import sqlite3 as sql
 # import sqlalchemy as db
 
 
+# import pandas as pd
+# from mass2chem.annotate import compute_adducts_formulae
 
-import pandas as pd
-from mass2chem.annotate import compute_adducts_formulae
+
+def connect_sqlite_db(database_name):
+    con = sqlite3.connect(database_name)            # This creates DB if not existant
+    cur = con.cursor()
+    return cur
+    
+
+def sql_add_experiment_tables(cur, data):
+    pass
+
+
+def sql_add_sample_masstracts(cur, data):
+    pass
+
+
+def sql_add_sample_peaks(cur, data):
+    pass
+
+
+
+
+def sql_push_mass_grid(cur, data):
+    pass
+
+
+def sql_push_feature_grid(cur, data):
+    pass
+
+
+
+
+
+
+#---------------------------------------------------------------------------------------------------------------
 
 
 #

@@ -45,16 +45,14 @@ class CompositeMap:
 
     Steps:
 
-    Build Mass Grid first.
+    1. Build Mass Grid first. Starting with the initial samples.
     mass correspondence is unique by using mass tracks. One grid can have maxium one mass track in one sample.
-    MassGridDict = {id_mz_str: [m/z, {sample_id: massTrack id}], ...}
+    Reference m/z will be concensus among initial samples.
+    Alignment is guided by matched isotope/adduct pairs.
+    2. Add remaining samples to MassGrid, same anchor guided alignment.
+    Reference m/z is not recalculated for performance reason.
 
-
-    1. Among the initial samples, the sample of most empCpds is used to seed the CMap.
-    2. EmpCpds from each sample are aligned to the seed sample,
-    then CMap is augmented by matched empCpds not in the seed sample. This step establishes m/z grid.
     3. Optional, m/z calibration to refDB.
-
 
     4. Determine RT DTW function per sample, by matching to selective epd pairs.
     5. Build composite elution profile by cumulative sum of mass traces from all samples after RT correction.
@@ -69,16 +67,15 @@ class CompositeMap:
 
     def __init__(self, experiment):
         '''
-        composite mass traces, with study-wide peaks.
-
-        masster_mz_registry has the pointers to individual samples
+        Composite map of mass tracks and features, with pointers to individual samples.
         '''
         
         self.experiment = experiment
         self.list_input_files = experiment.list_input_files
 
-        self.MassGrid = None                    # will be DF
+        self.MassGrid = None                        # will be DF
         self.FeatureGrid = None
+        self.reference_anchor_pairs = []            # (mz_str, mz_str), use mz str as identifiers 
 
         self.reference_mzdict = {}
         self.ref_empCpds = []
@@ -104,7 +101,6 @@ class CompositeMap:
         row_indices = [ (str(round(x['mz'], 4)), x['mz']) for x in list_samples[0].list_mass_tracks ]
         self.reference_mzdict = dict(row_indices)
         row_indices = [x[0] for x in row_indices]
-        self.reference_anchor_pairs = []             # (mz_str, mz_str), use mz str as identifiers 
         for pair in list_samples[0].anchor_mz_pairs:
             self.reference_anchor_pairs.append(( row_indices[pair[0]], row_indices[pair[1]] ))
         # DataFrame for MassGrid
@@ -115,16 +111,10 @@ class CompositeMap:
         )
         self.MassGrid[ self.list_input_files[0] ] = [ x['id_number'] for x in list_samples[0].list_mass_tracks ]
 
-        print(self.MassGrid[:8])
-
-        '''
-        sample_id = list_samples[0].id
-        for x in list_samples[0].list_mass_tracks:
-            self.MassGridDict[ str(round(x['mz'], 4)) ] = [ x['mz'], { sample_id: x['id_number'], } ]
-
+        #print(self.MassGrid[:8])
         for SM in list_samples[1:]:
             self.__update_mass_grid_by_init_sample__(SM)
-        '''
+        
         
 
 
@@ -138,6 +128,9 @@ class CompositeMap:
         mass_paired_mapping functions return positions of input lists -> 
         which refer to positions in anchor_pairs ->
         which refer to positions in list_mass_tracks or MassGridDict.
+
+        Moving to functions.anchor_guided_mapping
+
         '''
         # first align to reference_anchor_pairs
         ref_anchors_1 = [self.MassGridDict[x[0]][0] for x in self.reference_anchor_pairs]
@@ -165,32 +158,6 @@ class CompositeMap:
 
         # now align everything between anchors
 
-
-
-
-
-
-        LL = sorted([(len(SM.list_empCpds), SM) for SM in list_samples], reverse=True)
-
-
-
-        init_dict = combine_mass_traces(LL[0][1].list_mass_traces)
-
-        
-        self.ref_mass_traces = []
-
-
-        
-        
-        self.ref_empCpds = LL[0][1].list_empCpds
-        
-         
-        
-        self.master_masstrace_registry = {}
-
-
-
-
         
         empCpd_mzlist_1, empCpd_mzlist_2 = self.convert_empCpd_mzlist(LL[0][1]), self.convert_empCpd_mzlist(LL[1][1])
         aligned = init_cmap(empCpd_mzlist_1, empCpd_mzlist_2)
@@ -199,10 +166,7 @@ class CompositeMap:
             aligned.add_sample(SM[1])
 
 
-
-
         self.cmap = aligned
-
 
 
 
@@ -226,13 +190,12 @@ class CompositeMap:
 
 
 
-
-
     def set_RT_reference(self):
         '''
         Because RT will not match precisely btw samples, 
         DTW should remap to a common set of time coordinates.
 
+        Start with an initial sample of most peaks.
 
         Do a quick peak detection for good peaks;
                 but only masstracks with single peaks will be used for RT alignment,
@@ -241,6 +204,49 @@ class CompositeMap:
         '''
 
         pass
+
+
+
+    def match_ref_db(self):
+        pass
+
+
+
+    def detect_peaks(self, mass_trace, min_intensity_threshold=10000, min_fwhm=3, min_prominence_threshold=5000, snr=2):
+        '''
+
+        to rewrite, applying to composite mass tracks
+
+
+
+        Return list of peaks. No stringent filtering of peaks. 
+        Reported left/right bases are not based on Gaussian shape or similar, just local maxima.
+        Prominence has a key control of how peaks are considered, but peak shape evaluation later can filter out most bad peaks.
+        Peak format: {
+            'id_number': 0, 'mz', 'apex', 'left_base', 'right_base', 'height', 'parent_masstrace_id', 
+            'rtime', 'peak_area', 'goodness_fitting'
+        }
+        '''
+        list_peaks = []
+        rt_numbers, list_intensity = mass_trace['rt_scan_numbers'], mass_trace['intensity']
+        # 
+        prominence = max(min_prominence_threshold, 0.05*max(list_intensity))
+        peaks, properties = find_peaks(list_intensity, height=min_intensity_threshold, width=min_fwhm, 
+                                                        prominence=prominence) 
+        _noise_level_ = self.get_noise_level__(list_intensity, peaks, properties)
+        for ii in range(peaks.size):
+            if properties['peak_heights'][ii] > snr*_noise_level_:
+                list_peaks.append({
+                    'parent_masstrace_id': mass_trace['id_number'],
+                    'mz': mass_trace['mz'],
+                    'apex': rt_numbers[peaks[ii]], 
+                    'height': properties['peak_heights'][ii],
+                    'left_base': rt_numbers[properties['left_bases'][ii]],
+                    'right_base': rt_numbers[properties['right_bases'][ii]],
+                })
+        return list_peaks
+
+
 
 
 
@@ -256,7 +262,6 @@ class CompositeMap:
                 {'id': EC['id'], 'mz_peaks': [SM.list_peaks[x[0]]['mz'] for x in EC['list_peaks']]}
             )
         return new
-
 
 
 
