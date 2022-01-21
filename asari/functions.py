@@ -24,12 +24,25 @@ from collections import namedtuple
 
 from .search import *
 
+def flatten_tuplelist(L):
+    '''Reformat [(a,b), ...] to [a, b, ...].'''
+    return [x[0] for x in L] + [x[1] for x in L]
 
 def gaussian_function__(x, a, mu, sigma):
     return a*np.exp(-(x-mu)**2/(2*sigma**2)) 
 
 def goodness_fitting__(y_orignal, y_fitted):                  # R^2 as goodness of fitting
     return 1 - (np.sum((y_fitted-y_orignal)**2) / np.sum((y_orignal-np.mean(y_orignal))**2))
+
+def check_close_mzs(mzlist, ppm_tol=5):
+    '''check potentially overlapping m/z values in a sample. mzlist already in ascending order.'''
+    warning = []
+    for ii in range(1, len(mzlist)):
+        _tolerance = mzlist[ii] * ppm_tol * 0.000001
+        _d = mzlist[ii] - mzlist[ii-1]
+        if _d < _tolerance:
+            warning.append( (mzlist[ii], mzlist[ii-1]) )
+    return warning
 
 def calculate_selectivity(sorted_mz_list, std_ppm=5):
     '''
@@ -124,13 +137,7 @@ def mass_paired_mapping(list1, list2, std_ppm=5):
     list1 = [101.0596, 101.061, 101.0708, 101.0708, 101.1072, 101.1072, 101.1072, 102.0337, 102.0337, 102.0548, 102.0661, 102.0912, 102.0912, 102.1276, 102.1276, 103.0501, 103.0501, 103.0541, 103.0865, 103.0865, 103.9554, 104.0368, 104.0705, 104.0705, 104.1069, 104.1069, 104.9922, 105.0422, 105.0698, 105.0698, 105.0738, 105.1039, 105.1102, 105.9955, 106.0497, 106.065, 106.065, 106.0683, 106.0683, 106.0861, 106.0861, 106.0861, 106.1111, 106.9964, 107.0475, 107.0602, 107.0653, 107.0895, 107.9667, 108.0443, 108.0555, 108.0807, 109.0632, 109.0759]
     list2 = [101.0087, 101.035, 101.0601, 101.0601, 101.0601, 101.0601, 101.0713, 101.0714, 101.1077, 101.1077, 101.1077, 101.1077, 101.1077, 101.1158, 101.1158, 102.0286, 102.0376, 102.0468, 102.0539, 102.0554, 102.0554, 102.0554, 102.0554, 102.0666, 102.0917, 102.0917, 102.0917, 102.0918, 102.1281, 102.1281, 102.1282, 103.0394, 103.0505, 103.0507, 103.0547, 103.1233, 103.8162, 103.956, 103.956, 103.956, 104.0532, 104.0533, 104.0641, 104.0709, 104.071, 104.0831, 104.0878, 104.0895, 104.0953, 104.1073, 104.1073, 104.1074, 104.1074, 104.1182, 104.1199, 104.1265, 104.1318, 104.1354, 104.1725, 104.3998, 104.9927, 104.9927, 104.9927, 104.9927, 105.0654, 105.0703, 105.1043, 105.1133, 106.049, 106.0503, 106.0655, 106.0688, 106.0866, 106.0867, 106.0867, 106.0867, 106.114, 107.048, 107.0481, 107.0496, 107.0608, 107.0658, 108.0109, 108.0482, 108.0604, 108.0812, 108.0812, 108.9618, 109.0507, 109.0637, 109.0637, 109.0764, 109.1015]
     mass_paired_mapping(list1, list2) >>>
-        ([(33, 34),
-        (94, 95),
-        (97, 98),
-        (106, 107),
-        (109, 110),
-        (127, 128),
-        (144, 145)],
+        ([(10, 23), (29, 65), (31, 66), (36, 70), (38, 71), (46, 81), (53, 91)],
         [4.898762180656323e-06,
         4.758718686464085e-06,
         3.805743437700149e-06,
@@ -143,29 +150,75 @@ def mass_paired_mapping(list1, list2, std_ppm=5):
     # [(mz, list_origin, index_origin), ...]
     all.sort()
     NN = len(all)
+    # Add a mock entry to allow loop goes through NN.
+    all.append((999999, 2, None))
     mapped, ratio_deltas = [], []
-    for ii in range(1, NN-1):
+    for ii in range(1, NN):
         if all[ii][1] != all[ii-1][1]:          # from two diff list_origin
             _tolerance = all[ii][0] * std_ppm * 0.000001
             _d = all[ii][0]-all[ii-1][0]
             if _d < _tolerance and all[ii+1][0]-all[ii][0] > _tolerance:
                 # not allowing ii to be matched to both ii-1 and ii+1
-                if all[ii][1] > all[ii-1][1]:   # list1, list2
-                    mapped.append( (ii-1, ii) )
+                if all[ii][1] > all[ii-1][1]:   # always ordered as list1, list2
+                    mapped.append( (all[ii-1][2], all[ii][2]) )
                     ratio_deltas.append( _d/all[ii][0] )
                 else:
-                    mapped.append( (ii, ii-1) )
+                    mapped.append( (all[ii][2], all[ii-1][2]) )
                     ratio_deltas.append( -_d/all[ii][0] )
 
-    #check if (NN-2, NN-1) is valid
-    if mapped[-1][1] < NN-2 and all[NN-1][1] != all[NN-2][1]:
-        _tolerance = all[NN-2][0] * std_ppm * 0.000001
-        _d = all[NN-1][0] - all[NN-2][0]
-        if _d < _tolerance:
-            mapped.append( (NN-2, NN-1) )
-            ratio_deltas.append( _d/all[NN-2][0] )
-
     return mapped, ratio_deltas
+
+
+def complete_mass_paired_mapping(list1, list2, std_ppm=5):
+    '''
+    Similar to mass_paired_mapping, but not enforcing unique matching within std_ppm, 
+    choosing the optimal matches. Singletons are included in returned result if no matches are found.
+    Do not calculate ratio_deltas.
+
+    Return
+    ======
+    mapped: E.g. [(33, 151), (34, None), ...] 
+    list1_unmapped, 
+    list2_unmapped
+
+    Test
+    ====
+    complete_mass_paired_mapping(list1, list2) >>>
+    [(0, 2), (3, 6), (6, 8), (10, 23), (12, 24), (14, 28), (16, 32), (23, 43), (25, 49), (26, 60), (29, 65), (31, 66), (36, 70), (38, 71), (41, 72), (44, 77), (46, 81), (51, 85), 
+    (52, 89), (53, 91), (1, None), (2, None), (4, None), (5, None), (7, None), ...]
+    '''
+    all = [(list1[ii], 1, ii) for ii in range(len(list1))] + [(list2[jj], 2, jj) for jj in range(len(list2))]
+    # [(mz, list_origin, index_origin), ...]
+    all.sort()
+    NN = len(all)
+    mapped = []
+    for ii in range(1, NN):
+        if all[ii][1] != all[ii-1][1]:          # from two diff list_origin
+            _tolerance = all[ii][0] * std_ppm * 0.000001
+            _d = all[ii][0]-all[ii-1][0]
+            if _d < _tolerance:
+                if all[ii][1] > all[ii-1][1]:   # always ordered as list1, list2
+                    mapped.append( (all[ii-1][2], _d, all[ii][2]) )
+                else:
+                    mapped.append( (all[ii][2], _d, all[ii-1][2]) )
+
+    # Now deal with multiple matches in either List1 or List2, smallest _d wins
+    mapped2 = []
+    mapped.append( (-1, -1, -1) )           # mock entry to allow loop below completes
+    staged = mapped[0]
+    for ii in range(1, len(mapped)):
+        if mapped[ii][0] == staged[0] or mapped[ii][2] == staged[2]:
+            if mapped[ii][1] < staged[1]:   # smaller _d 
+                staged = mapped[ii]
+        else:
+            mapped2.append(staged)
+            staged =  mapped[ii]         
+
+    mapped = [(x[0], x[2]) for x in mapped2]
+    # Now deal with singletons
+    list1_unmapped = [x for x in range(len(list1)) if x not in [y[0] for y in mapped]]
+    list2_unmapped = [x for x in range(len(list2)) if x not in [y[1] for y in mapped]]
+    return mapped, list1_unmapped, list2_unmapped
 
 
 def mass_paired_mapping_with_correction(list1, list2, std_ppm=5, correction_tolerance_ppm=1):
@@ -195,24 +248,144 @@ def mass_paired_mapping_with_correction(list1, list2, std_ppm=5, correction_tole
     # return mapped, ratio_deltas, corrected_list2
     return mapped, _r
 
+def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks, 
+                            SM_mzlist, SM_landmarks, std_ppm=5, correction_tolerance_ppm=1):
+    '''
+    Align the mzlists btw CMAP (i.e. REF) and a new Sample,
+    prioritizing paired anchors (from isotope/adduct patterns).
+    Similar to anchor_guided_mapping, but simplified by using flat lists of m/z landmarks.
+
+    The mzlists are already in ascending order when a Sample is processed,
+    but the order of REF_reference_mzlist will be disrupted during building MassGrid.
+    Do correciton on list2 if m/z shift exceeds correction_tolerance_ppm.
+
+    Return
+    ======
+    new_reference_mzlist: combined list of all unique m/z values, 
+        maintaining original order of REF_reference_mzlist but updating the values as mean of the two lists.
+        m/z values are updated here because this is the best place to do it: 
+        SM_mzlist is already corrected if needed; no need to look up irregular values in MassGrid.
+        This mixes features from samples and they need to be consistent on how they are calibrated
+    new_reference_map2: mapping index numbers from SM_malist, to be used to update MassGrid[Sample.input_file]
+    REF_landmarks: updated landmark m/z values using the new index numbers as part of new_reference_mzlist
+    _r: correction ratios on SM_mzlist, to be attached to Sample class instance
+    '''
+    _N1 = len(REF_reference_mzlist)
+    _d2 = {}                                                # tracking how SM_mzlist is mapped to ref
+    for ii in range(_N1): 
+        _d2[ii] = None
+    # first align to landmark mz values
+    anchors_1 = [REF_reference_mzlist[x] for x in REF_landmarks]
+    anchors_2 = [SM_mzlist[x] for x in SM_landmarks]
+
+    mapped, ratio_deltas = mass_paired_mapping(anchors_1, anchors_2, std_ppm)
+    _r = np.mean(ratio_deltas)
+    if abs(_r) > correction_tolerance_ppm*0.000001:          # do m/z correction
+        SM_mzlist = [x/(1+_r) for x in SM_mzlist]
+        # rerun after mz correction
+        anchors_2 = [SM_mzlist[x] for x in SM_landmarks]
+        mapped, ratio_deltas = mass_paired_mapping(anchors_1, anchors_2, std_ppm)
+
+    # convert back to index numbers in mzlists
+    mapped = [( REF_landmarks[x[0]], SM_landmarks[x[1]] ) for x in mapped]
+    # move onto remaining ions
+    indices_remaining1 = [ii for ii in range(len(REF_reference_mzlist)) if ii not in [x[0] for x in mapped]]
+    indices_remaining2 = [ii for ii in range(len(SM_mzlist)) if ii not in [x[1] for x in mapped]]
+    mapped2, list1_unmapped, list2_unmapped = complete_mass_paired_mapping(
+            [REF_reference_mzlist[ii] for ii in indices_remaining1], [SM_mzlist[ii] for ii in indices_remaining2], 
+            std_ppm)
+
+    list2_unmapped = [indices_remaining2[ii] for ii in list2_unmapped]
+    mapped_pairs = mapped + [ ( indices_remaining1[x[0]], indices_remaining2[x[1]] ) for x in mapped2 ]
+    print("mapped pairs = %d / %d " %(len(mapped_pairs), len(SM_mzlist)))
+    for p in mapped_pairs: 
+        _d2[p[0]] = p[1]
+        # updating ref m/z here
+        REF_reference_mzlist[p[0]] = 0.5*( REF_reference_mzlist[p[0]] + SM_mzlist[p[1]] )
+    for ii in range(len(list2_unmapped)): 
+        _d2[_N1 + ii] = list2_unmapped[ii]
+        # update landmark m/z values using the new index numbers as part of new_reference_mzlist
+        if list2_unmapped[ii] in SM_landmarks:
+            REF_landmarks.append(_N1 + ii)
+    new_reference_mzlist = REF_reference_mzlist + [SM_mzlist[ii] for ii in list2_unmapped]
+    new_reference_map2 = [_d2[x] for x in range(len(new_reference_mzlist))]
+
+    return new_reference_mzlist, new_reference_map2, REF_landmarks, _r
 
 
-def anchor_guided_mapping():
-    pass
+
+def anchor_guided_mapping(REF_reference_mzlist, REF_reference_anchor_pairs, 
+                            SM_mzlist, SM_anchor_mz_pairs, std_ppm=5, correction_tolerance_ppm=1):
+    '''
+    Align the mzlists btw CMAP (i.e. REF) and a new Sample,
+    prioritizing paired anchors (from isotope/adduct patterns).
+    The mzlists are already in ascending order when a Sample is processed.
+    Do correciton on list2 if m/z shift exceeds correction_tolerance_ppm.
+    The anchor_pairs use corresponding indices.
+
+    Nested indices are: 
+        mass_paired_mapping functions return positions of input lists -> 
+        which refer to positions in anchor_pairs ->
+        which refer to positions in list_mass_tracks or MassGridDict.
 
 
+    reference_anchor_pairs?
 
 
+    Return
+    ======
+    new_reference_mzlist, new_reference_map2, _r
 
+    mapped, list1_unmapped, list2_unmapped
+    _r: correction ratios on SM_mzlist, to be attached to Sample class instance
 
+    Updated reference list:  because it mixes features from samples 
+    and they need to be consistent on how they are calibrated.
 
-def __compelete_interval_mapping():
-    pass
+    '''
+    _N1 = len(REF_reference_mzlist)
+    _d2 = {}                                                # tracking how SM_mzlist is mapped to ref
+    for ii in range(_N1): 
+        _d2[ii] = None
+    # first align to reference_anchor_pairs
+    anchors_1 = [REF_reference_mzlist[x[0]] for x in REF_reference_anchor_pairs]
+    anchors_2 = [SM_mzlist[x[0]] for x in SM_anchor_mz_pairs]
 
+    mapped, ratio_deltas = mass_paired_mapping(anchors_1, anchors_2, std_ppm)
+    _r = np.mean(ratio_deltas)
+    if abs(_r) > correction_tolerance_ppm*0.000001:          # do m/z correction
+        SM_mzlist = [x/(1+_r) for x in SM_mzlist]
+        # rerun after mz correction
+        anchors_2 = [SM_mzlist[x[0]] for x in SM_anchor_mz_pairs]
+        mapped, ratio_deltas = mass_paired_mapping(anchors_1, anchors_2, std_ppm)
 
+    # move onto paired ion in anchors
+    anchors_1 = [REF_reference_mzlist[x[1]] for x in REF_reference_anchor_pairs]
+    anchors_2 = [SM_mzlist[x[1]] for x in SM_anchor_mz_pairs]
+    mapped2, ratio_deltas = mass_paired_mapping(anchors_1, anchors_2, std_ppm)
+    # mapped & mapped2 refer to indices in anchor pairs, and have to be converted back to indices of mzlists
+    mapped_pairs = [
+        ( REF_reference_anchor_pairs[x[0]][0], SM_anchor_mz_pairs[x[1]][0] ) for x in mapped
+    ] + [
+        ( REF_reference_anchor_pairs[x[0]][1], SM_anchor_mz_pairs[x[1]][1] ) for x in mapped2
+    ]
+    # move onto remaining ions
+    indices_remaining1 = [ii for ii in range(len(REF_reference_mzlist)) if ii not in [x[0] for x in mapped_pairs]]
+    indices_remaining2 = [ii for ii in range(len(SM_mzlist)) if ii not in [x[1] for x in mapped_pairs]]
+    mapped, list1_unmapped, list2_unmapped = complete_mass_paired_mapping(
+            [REF_reference_mzlist[ii] for ii in indices_remaining1], [SM_mzlist[ii] for ii in indices_remaining2], 
+            std_ppm)
 
+    mapped_pairs += mapped
+    for p in mapped_pairs: 
+        _d2[p[0]] = p[1]
+    for ii in range(len(list2_unmapped)): 
+        _d2[_N1 + ii] = list2_unmapped[ii]
+    new_reference_mzlist = REF_reference_mzlist + [SM_mzlist[ii] for ii in list2_unmapped]
+    new_reference_map2 = [_d2[x] for x in range(len(new_reference_mzlist))]
 
-
+    # return mapped_pairs, list1_unmapped, list2_unmapped, _r, REF_reference_mzlist
+    return new_reference_mzlist, new_reference_map2, _r
 
 
 
@@ -245,7 +418,6 @@ def epd_paired_mapping_with_correction(empCpd_mzlist_1, empCpd_mzlist_2, std_ppm
     mapped = []
     # to do
     return mapped
-
 
 
 

@@ -47,7 +47,7 @@ class ext_Experiment(Experiment):
         self.max_rtime = parameters['max_rtime']
         self.mode = parameters['mode']
 
-        self.initiation_samples = self.__choose_initiation_samples__()
+        self.initiation_samples = self.__choose_initiation_samples__(N=6)
 
         # SAMPLE_REGISTRY
         self.samples = []                   # list of Sample instances
@@ -57,31 +57,44 @@ class ext_Experiment(Experiment):
         
     def process_all(self):
         '''
+        initiation_Samples are used to select one most representative sample to seed MassGrid and RT alignment.
+        If refDB is used, it's better to be used after all samples are processed, 
+        because the m/z values of samples are closer to other samples than refDB.
         
         if refDB:
             self.CMAP.align_to_refdb(refDB)
 
         '''
         # start SQLite database
-        self.cursor = connect_sqlite_db(self.parameters['project_name'])
+        # self.cursor = connect_sqlite_db(self.parameters['project_name'])
         
         self.CMAP = CompositeMap(self)
         initiation_Samples = self.process_initiation_samples()
         self.CMAP.initiate_mass_grid( initiation_Samples )
 
+        print("Done initiation_Samples. \n\n")
         for f in self.list_input_files:                                 # run remaining samples, 
             if f not in self.initiation_samples:
                 SM = self.process_single_sample(f)
                 # not via DB
                 self.CMAP.add_sample(SM)
 
-        self.CMAP.set_RT_reference()
-        self.global_peak_detection(self.CMAP)
+        self.CMAP.optimize_mass_grid()
+        self.CMAP.MassGrid.to_csv("__test_mass_grid.csv")
+        
+        self.CMAP.align_retention_time()
+        self.CMAP.global_peak_detection()
+
+        self.annotate_final()
+        self.export_feature_table()
+        self.export_empcpd_map()
 
 
     def process_initiation_samples(self):
         init_sm = [self.process_single_sample(f) for f in self.initiation_samples]
-        return [SM for SM in init_sm if SM]
+        # order by number of mass tracks
+        init_sm = sorted([(SM._number_anchor_mz_pairs_, SM) for SM in init_sm if SM], reverse=True)
+        return [x[1] for x in init_sm]
 
     def process_single_sample(self, input_file):
         '''
@@ -95,9 +108,34 @@ class ext_Experiment(Experiment):
             # DB commit
             return SM
         except IndexError:
-            print("Input error in sample %s, dropped from processing." %f)
+            print("Input error in sample %s, dropped from processing." %input_file)
             return None
         
+    def __choose_initiation_samples__(self, N=3):
+        '''
+
+        To consider using meta data??
+            elif not self.files_meta_data:
+            else:
+                chosen = []
+                POOLED = [f for f in self.list_input_files if self.files_meta_data[f] == 'POOLED']
+                if POOLED:
+                    chosen.append(random.choice(POOLED))
+                QC = [f for f in self.list_input_files if self.files_meta_data[f] == 'QC']
+                if QC:
+                    chosen.append( random.choice(QC) )
+                OTHERS = [f for f in self.list_input_files if self.files_meta_data[f] not in ['POOLED', 'QC', 'BLANK']]
+                chosen += random.sample(OTHERS, 3)
+                return chosen[:3]
+        
+        '''
+        if self.parameters['initiation_samples']:
+            return self.parameters['initiation_samples']
+        else:
+            if self.number_of_samples < N+1:
+                return self.list_input_files
+            else:
+                return random.sample(self.list_input_files, N)
 
 
     #---------------------------------------------------------------------------------------------------------------
@@ -344,29 +382,4 @@ class ext_Experiment(Experiment):
 
 
 
-    def __choose_initiation_samples__(self):
-        '''
-
-        To consider using meta data??
-            elif not self.files_meta_data:
-            else:
-                chosen = []
-                POOLED = [f for f in self.list_input_files if self.files_meta_data[f] == 'POOLED']
-                if POOLED:
-                    chosen.append(random.choice(POOLED))
-                QC = [f for f in self.list_input_files if self.files_meta_data[f] == 'QC']
-                if QC:
-                    chosen.append( random.choice(QC) )
-                OTHERS = [f for f in self.list_input_files if self.files_meta_data[f] not in ['POOLED', 'QC', 'BLANK']]
-                chosen += random.sample(OTHERS, 3)
-                return chosen[:3]
-        
-        '''
-        if self.parameters['initiation_samples']:
-            return self.parameters['initiation_samples']
-        else:
-            if self.number_of_samples < 4:
-                return self.list_input_files
-            else:
-                return random.sample(self.list_input_files, 3)
 

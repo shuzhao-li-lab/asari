@@ -77,10 +77,14 @@ class SimpleSample:
         self.parameters = {}
         self.rt_numbers = []                                # list of scans, starting from 0
         self.list_retention_time = []                       # full RT time points in sample
+
+        self.mz_calibration_ratio = None
+        self.rt_calibration_function = None
         
         # lists to store data
         self.list_mass_tracks = []                          # index number = id_number, in ascending order of m/z
         self.anchor_mz_pairs = []
+        self._number_anchor_mz_pairs_ = 0
         
         # will populate after CMAP
         self.list_peaks = []   
@@ -98,6 +102,9 @@ class SimpleSample:
         '''
         self.get_mass_tracks_()
         self.get_anchor_mz_pairs()
+        print("_number_anchor_mz_pairs_ = %d \n" %self._number_anchor_mz_pairs_)
+
+        self._mz_landmarks_ = flatten_tuplelist(self.anchor_mz_pairs)
         # to send to SQL DB here
 
 
@@ -126,6 +133,9 @@ class SimpleSample:
             ii += 1
 
         print("Processing %s, found %d mass tracks." %(self.input_file, ii))
+        # For diagnosis only - check m/z split
+        # warnings = check_close_mzs([x['mz'] for x in self.list_mass_tracks], mz_tolerance_ppm)
+        # print("Warning - some mass tracks are too close to each other: ", len(warnings), warnings[:5])
 
     def get_anchor_mz_pairs(self):
         '''
@@ -133,8 +143,8 @@ class SimpleSample:
         e.g. [(5, 8), (6, 13), (17, 25), (20, 27), ...]
         '''
         self.anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(self.list_mass_tracks, mz_tolerance_ppm=5)
+        self._number_anchor_mz_pairs_ = len(self.anchor_mz_pairs)
         
-        print(len(self.anchor_mz_pairs), self.anchor_mz_pairs[:8])
         
 
 

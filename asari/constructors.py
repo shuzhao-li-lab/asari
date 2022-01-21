@@ -25,9 +25,9 @@ d. epdTree can be improved in future based on real data statistics and more stru
 from .utils import *
 from .sql import *
 '''
-import os
 
 from scipy.stats import norm as normal_distribution
+
 import pandas as pd
 
 from .search import *
@@ -68,20 +68,22 @@ class CompositeMap:
     def __init__(self, experiment):
         '''
         Composite map of mass tracks and features, with pointers to individual samples.
+            self.reference_anchor_pairs = []            # (mz_str, mz_str), use mz str as identifiers 
         '''
         
         self.experiment = experiment
+        self._number_of_samples_ = experiment.number_of_samples
         self.list_input_files = experiment.list_input_files
 
         self.MassGrid = None                        # will be DF
         self.FeatureGrid = None
-        self.reference_anchor_pairs = []            # (mz_str, mz_str), use mz str as identifiers 
-
+        self._mz_landmarks_ = []                      # keeping anchor pairs as landmarks
+        #
         self.reference_mzdict = {}
         self.ref_empCpds = []
         
 
-    def initiate_mass_grid(self, list_samples):
+    def initiate_mass_grid(self, list_samples, recalculate_ref=False):
         '''
         Use list_samples (list of Sample instances) to initiate MassGrid.
         Each Sample has list_mass_tracks and anchor_mz_pairs.
@@ -95,99 +97,108 @@ class CompositeMap:
         1. create a reference based on anchor pairs
         2. align each sample to the reference_anchor_pairs
 
-        MassGridDict = {id_mz_str: [m/z, {sample_id: massTrack id}], ...}
-        '''
-        # initiation using the first Sample
-        row_indices = [ (str(round(x['mz'], 4)), x['mz']) for x in list_samples[0].list_mass_tracks ]
+        MassGrid = {id_mz_str: [massTrack id, ...], ...}
+
+
+        keep both int index and str index; so that the ascending order is used in segmentations.
+
+        Do str index at the end; need sorting while aligning with new samples.
+
+        row_indices = [ (str(round(x['mz'], 4)), x['mz']) for x in list_samples[0].list_mass_tracks ] # index=row_indices,
         self.reference_mzdict = dict(row_indices)
         row_indices = [x[0] for x in row_indices]
         for pair in list_samples[0].anchor_mz_pairs:
             self.reference_anchor_pairs.append(( row_indices[pair[0]], row_indices[pair[1]] ))
-        # DataFrame for MassGrid
+
+
+        '''
+        # initiation using the first Sample
+        print("Initiating MassGrid, ...", list_samples[0].input_file)
+        self.reference_anchor_pairs = list_samples[0].anchor_mz_pairs
+        self._mz_landmarks_ = flatten_tuplelist(list_samples[0].anchor_mz_pairs)
+        reference_mzlist = [ x['mz'] for x in list_samples[0].list_mass_tracks ]
+        # setting up DataFrame for MassGrid
         self.MassGrid = pd.DataFrame(
-            np.zeros((len(row_indices), len(self.list_input_files)), dtype=int),
-            index=row_indices,
-            columns=self.list_input_files,
+            np.full((len(reference_mzlist), 1+self._number_of_samples_), None),
+            columns=['mz'] + self.list_input_files,
         )
-        self.MassGrid[ self.list_input_files[0] ] = [ x['id_number'] for x in list_samples[0].list_mass_tracks ]
-
-        #print(self.MassGrid[:8])
+        # Add ref mz as a column to MassGrid; ref mzlist will be dynamic updated in MassGrid["mz"]
+        self.MassGrid['mz'] = reference_mzlist
+        self.MassGrid[ list_samples[0].input_file ] = [ x['id_number'] for x in list_samples[0].list_mass_tracks ]
+        
         for SM in list_samples[1:]:
-            self.__update_mass_grid_by_init_sample__(SM)
+            self.add_sample(SM, database_cursor=None)
         
-        
-
-
-    def __update_mass_grid_by_init_sample__(self, Sample):
+    def add_sample(self, sample, database_cursor=None):
         '''
-        Update self.MassGrid, self.reference_anchor_pairs after adding another initiation sample.
-        in MassGrid, mz is updated by taking mean values; 
-        and mapping is updated by adding reference `sample_id: masstrack id`.
+        Add Sample instance to and update MassGrid. 
+        To add: push each sample to SQLDB, - database_cursor;
 
-        Nested indices are: 
-        mass_paired_mapping functions return positions of input lists -> 
-        which refer to positions in anchor_pairs ->
-        which refer to positions in list_mass_tracks or MassGridDict.
+        recalculate_ref is not done here, because it's easier to include unmatched features from Sample.
+        If needed, the reference m/z values should be updated by revisiting DB samples.
+        But the recalculation should be based on calibrated m/z values so that they are consistent across samples.
 
-        Moving to functions.anchor_guided_mapping
+        push Sample to SQLDB
 
         '''
-        # first align to reference_anchor_pairs
-        ref_anchors_1 = [self.MassGridDict[x[0]][0] for x in self.reference_anchor_pairs]
-        anchors_2 = [Sample.list_mass_tracks[pair[0]]['mz'] for pair in Sample.anchor_mz_pairs]
-        mapped, correction_ = mass_paired_mapping_with_correction(
-                        ref_anchors_1, anchors_2, std_ppm=5, correction_tolerance_ppm=1)
-        updated_list2 = [x['mz']/(1+correction_) for x in Sample.list_mass_tracks]
+        print("Adding sample to MassGrid ", sample.input_file)
+        mzlist = [x['mz'] for x in sample.list_mass_tracks]
+        new_reference_mzlist, new_reference_map2, updated_REF_landmarks, _r = landmark_guided_mapping(
+                        list(self.MassGrid['mz']),   self._mz_landmarks_, mzlist, sample._mz_landmarks_)
+        # print("_r = %f, new_reference_mzlist = %d" %(_r, len(new_reference_mzlist)))
 
-        # mapped has () from lists 1 and 2; now check the paired values
-        check_pattern_2 = [self.reference_anchor_pair[ii[0]][1] for ii in mapped]   # positions 
-        check_pattern_2 = [self.MassGridDict[x][0] for x in check_pattern_2]        # m/z values to check, ordered as in mapped
-        anchors_2_2 = [Sample.anchor_mz_pairs[ii[1]][1] for ii in mapped]        
-        anchors_2_2 = [updated_list2[x] for x in anchors_2_2]
-        mapped2, _ = mass_paired_mapping(check_pattern_2, anchors_2_2, std_ppm=5)
-
-        # now tally pairs matched btw ref and samples - these two lists below are in right order of matches
-        validated_ref_anchors = [self.reference_anchor_pairs[x] for x in [ mapped[ii[0]] for ii in mapped2 ]]
-        validated_sample_anchors = [Sample.anchor_mz_pairs[x] for x in [ mapped[ii[1]] for ii in mapped2 ]]
-
-        aligned_anchors = []
-        for ii in range(len(validated_ref_anchors)):
-            a,b = validated_ref_anchors[ii]
-            c,d = validated_sample_anchors[ii]
-            aligned_anchors += [(a, c), (b, d)]
-
-        # now align everything between anchors
-
-        
-        empCpd_mzlist_1, empCpd_mzlist_2 = self.convert_empCpd_mzlist(LL[0][1]), self.convert_empCpd_mzlist(LL[1][1])
-        aligned = init_cmap(empCpd_mzlist_1, empCpd_mzlist_2)
-
-        for SM in LL[2:]:
-            aligned.add_sample(SM[1])
+        NewGrid = pd.DataFrame(
+            np.full((len(new_reference_mzlist), 1+self._number_of_samples_), None),
+            columns=['mz'] + self.list_input_files,
+        )
+        NewGrid[ :self.MassGrid.shape[0]] = self.MassGrid
+        NewGrid['mz'] = new_reference_mzlist
+        NewGrid[ sample.input_file ] = new_reference_map2
+        self.MassGrid = NewGrid
+        self._mz_landmarks_ = updated_REF_landmarks
+        sample.mz_calibration_ratio = _r
 
 
-        self.cmap = aligned
-
-
-
-
-    def add_sample_to_map(self, sample, recalculate_ref=False):
+    def optimize_mass_grid(self):
         '''
-        Use initial samples to start CMAP;
-        push each sample to SQLDB, 
-        Not keeping them in memory
-        
-        
-        If recalculate_ref is True, update the ref mass trace m/z values.
-        But this should not be used for regular samples after the initial ones.
+        This inspects split or misaligned regions of m/z tracks.
+        Problematic definition will persist in each sample's mass tracks,
+        e.g. about 50 mass tracks are too close to each other in our plasma data; 200 in Zurich E. coli data.
 
-        
+        merge close mass tracks unless MassGrid suggests multiple features; 
+        for split tracks in same samples, replace them by merged tracks and new id_numbers.
+
+        to implement -
+
         '''
 
-        
+
         pass
 
 
+
+    def align_retention_time(self):
+        '''
+        Do alignment function using high-selectivity mass tracks.
+        Step 1. get high-selectivity mass tracks among landmarks.
+        2. for tracks of highest intensities, do quick peak detection to identify RT apexes.
+        3. use RT from 2, do DWT conversion. Only masstracks with single peaks will be used for RT alignment,
+
+        For low-selectivity mass tracks, could do 2-D deconvolution. Also see optimize_mass_grid
+
+        '''
+
+        
+
+
+
+
+
+    def get_reference_RT_peaks(self):
+        '''
+        Use anchor mass trakcs, do quick peak detection. Use tracks of single peaks for RT alignment.
+        '''
+        pass
 
 
     def set_RT_reference(self):
@@ -198,7 +209,7 @@ class CompositeMap:
         Start with an initial sample of most peaks.
 
         Do a quick peak detection for good peaks;
-                but only masstracks with single peaks will be used for RT alignment,
+                
         to avoid ambiguity in peak definitions.
 
         '''
@@ -208,8 +219,12 @@ class CompositeMap:
 
 
     def match_ref_db(self):
+
         pass
 
+
+    def global_peak_detection(self):
+        pass
 
 
     def detect_peaks(self, mass_trace, min_intensity_threshold=10000, min_fwhm=3, min_prominence_threshold=5000, snr=2):
@@ -262,6 +277,10 @@ class CompositeMap:
                 {'id': EC['id'], 'mz_peaks': [SM.list_peaks[x[0]]['mz'] for x in EC['list_peaks']]}
             )
         return new
+
+    def __update_mass_grid_by_init_samples__(self):
+        pass
+
 
 
 
