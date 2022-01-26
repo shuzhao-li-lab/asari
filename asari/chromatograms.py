@@ -16,6 +16,8 @@ from itertools import combinations
 from operator import itemgetter
 import numpy as np
 from scipy.signal import find_peaks 
+from scipy import interpolate
+from statsmodels.nonparametric.smoothers_lowess import lowess       # xvals problem in v 0.13
 
 
 def get_thousandth_regions(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5):
@@ -199,16 +201,19 @@ def extract_single_track_(bin):
     '''
     A mass track is an EIC for full RT range, without separating the mass traces. 
     input bins in format of [(mz_int, scan_num, intensity_int), ...].
-    return a massTrack as ( mz, rtlist, intensities )
+    RT gaps are filled by zeros to create one continuous trace, to be used for later peak detection.
+    return a massTrack as ( mz, rtlist, intensities ), using continuous RT numbers.
     '''
     mz = np.mean([x[0] for x in bin])
-    bin.sort(key=itemgetter(1))   # sort by increasing RT (scan number)
-    _d = {}
-    for r in bin: 
-        _d[r[1]] = 0
-    for r in bin:     # this gets max intensity on the same RT scan
+    rtlist = [x[1] for x in bin]
+    min_rt, max_rt = min(rtlist), max(rtlist)
+    rtlist = range(min_rt, max_rt+1)    # filling gaps of RT this way if needed, and sorted
+    # bin.sort(key=itemgetter(1))   # sort by increasing RT (scan number), not needed any more
+    _d = {}                             # dict to hold rt to intensity mapping
+    for ii in rtlist: 
+        _d[ii] = 0
+    for r in bin:                       # this gets max intensity on the same RT scan
         _d[r[1]] = max(r[2], _d[r[1]])
-    rtlist = sorted(list(_d))
     intensities = [_d[x] for x in rtlist]
     return ( mz, rtlist, intensities )
 
@@ -242,3 +247,69 @@ def bin_to_mass_tracks(bin_data_tuples, mz_tolerance_ppm=5):
             left = max(0, peak-2)
             right = min(peak+3, num_steps)
             return [extract_single_track_(bin_data_tuples[hist_starts[left]: hist_starts[right]])]
+
+
+
+# -----------------------------------------------------------------------------
+# retention time alignment
+# -----------------------------------------------------------------------------
+
+def rt_lowess_calibration(good_landmark_peaks, selected_reference_landmark_peaks, full_rt_range):
+    '''
+    Use LOWESS, Locally Weighted Scatterplot Smoothing
+    checked available in statsmodels.nonparametric.smoothers_lowess, v 0.12, 0.13+
+        https://www.statsmodels.org/stable/generated/statsmodels.nonparametric.smoothers_lowess.lowess.html    
+
+    Input
+    =====
+    good_landmark_peaks and selected_reference_landmark_peaks are equal-length lists of peaks,
+    selected from working sample and reference sample as landmarks for RT alignment. 
+    full_rt_range: all scan numbers in this sample.
+
+    Return
+    ======
+    rt_remap_dict, dictionary converting scan number in full_rt_range to calibrated integer values.
+                    so no need to recalculate every time for each track.
+    '''
+    # force left and right ends, to prevent runaway curve functions
+    rt_rightend_ = 1.1 * max(full_rt_range)
+    xx, yy = [0, 0, 0, ], [0, 0, 0, ]
+    rt_cal = sorted([(x[0]['apex'], x[1]['apex']) for x in zip(good_landmark_peaks, selected_reference_landmark_peaks)])
+
+    xx += [L[0] for L in rt_cal] + [rt_rightend_]*3
+    yy += [L[1] for L in rt_cal] + [rt_rightend_]*3
+    lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=1, 
+                                            xvals=full_rt_range) # will replace w/ lowess when its bug is fixed
+
+    return dict(zip( full_rt_range, [round(ii,ndigits=None) for ii in lowess_predicted] ))
+
+def __hacked_lowess__(yy, xx, frac, it, xvals):
+    '''
+    Problem with Statsmodel 0.13; workaround
+    Not checking possible range error
+    '''
+    lxy = lowess(yy, xx, frac, it)
+    newx, newy = list(zip(*lxy))
+    interf = interpolate.interp1d(newx, newy)
+    return interf(xvals)
+
+
+def savitzky_golay_spline(good_landmark_peaks, selected_reference_landmark_peaks, full_rt_range):
+    '''
+    Modified Savitzky-Golay filter followed by spline fitting - pls follow format in rt_lowess.
+    Because our data are not equally spaced, sav-gol method may produce undesired errors.
+    # UnivariateSpline can't handle redundant values -
+    spl = UnivariateSpline(xx, yy, )
+    sample.rt_calibration_function = spl
+    # rt_remap_dict will be used for index mapping to the reference sample; 
+    for ii in sample.rt_numbers:
+        sample.rt_remap_dict[ii] = round(spl(ii), None)
+    '''
+    pass
+
+def dwt_rt_calibrate(good_landmark_peaks, selected_reference_landmark_peaks, full_rt_range):
+    '''Other RT alignment method to include - pls follow format in rt_lowess.
+    not implemented.
+    '''
+    pass
+

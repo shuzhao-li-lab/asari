@@ -44,13 +44,16 @@ class ext_Experiment(Experiment):
         self.files_meta_data = dict_meta_data
         
         self.parameters = parameters
-        self.max_rtime = parameters['max_rtime']
+        self.max_rtime = parameters['max_rtime'] # to update from each sample
+        # to update when samples are processed
+        self.number_scans = 0
         self.mode = parameters['mode']
 
         self.initiation_samples = self.__choose_initiation_samples__(N=6)
 
         # SAMPLE_REGISTRY
-        self.samples = []                   # list of Sample instances
+        self.allSamples = []                # list of Sample instances
+        self.samples_nonreference = []
         self.samples_by_id = {}             # sample ID: Sample instance
         self.samples_by_name = {}           # input file name: Sample instance
 
@@ -83,9 +86,11 @@ class ext_Experiment(Experiment):
         self.CMAP.MassGrid.to_csv("__test_mass_grid.csv")
         
         self.CMAP.align_retention_time()
+        # some samples could fail alignment; can be processed and aligned at the end
         self.CMAP.global_peak_detection()
 
-        self.annotate_final()
+        self.annotate()
+        
         self.export_feature_table()
         self.export_empcpd_map()
 
@@ -98,6 +103,7 @@ class ext_Experiment(Experiment):
 
     def process_single_sample(self, input_file):
         '''
+        Some parameters can be automatically determined here.
 
         To add DB function in HERE
         '''
@@ -137,6 +143,12 @@ class ext_Experiment(Experiment):
             else:
                 return random.sample(self.list_input_files, N)
 
+
+    def annotate(self):
+
+
+        
+        pass
 
     #---------------------------------------------------------------------------------------------------------------
 

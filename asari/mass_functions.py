@@ -14,9 +14,8 @@ numba JITC
 '''
 
 import numpy as np
+from scipy.signal import find_peaks 
 
-
-# from scipy.interpolate import UnivariateSpline
 
 
 from collections import namedtuple
@@ -25,8 +24,17 @@ from collections import namedtuple
 from .search import *
 
 def flatten_tuplelist(L):
-    '''Reformat [(a,b), ...] to [a, b, ...].'''
-    return [x[0] for x in L] + [x[1] for x in L]
+    '''Reformat [(a,b), ...] to [a, b, ...], keep unique entries'''
+    return list(set([x[0] for x in L] + [x[1] for x in L]))
+
+def sum_dict(dict1, dict2):
+    new = {}
+    for k in dict2:
+        if k in dict1:
+            new[k] = dict1[k] + dict2[k]
+        else:
+            new[k] = dict2[k]
+    return new
 
 def gaussian_function__(x, a, mu, sigma):
     return a*np.exp(-(x-mu)**2/(2*sigma**2)) 
@@ -271,7 +279,7 @@ def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks,
     _r: correction ratios on SM_mzlist, to be attached to Sample class instance
     '''
     _N1 = len(REF_reference_mzlist)
-    _d2 = {}                                                # tracking how SM_mzlist is mapped to ref
+    _d2, _r = {}, None                                                # tracking how SM_mzlist is mapped to ref
     for ii in range(_N1): 
         _d2[ii] = None
     # first align to landmark mz values
@@ -279,12 +287,14 @@ def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks,
     anchors_2 = [SM_mzlist[x] for x in SM_landmarks]
 
     mapped, ratio_deltas = mass_paired_mapping(anchors_1, anchors_2, std_ppm)
-    _r = np.mean(ratio_deltas)
-    if abs(_r) > correction_tolerance_ppm*0.000001:          # do m/z correction
-        SM_mzlist = [x/(1+_r) for x in SM_mzlist]
-        # rerun after mz correction
-        anchors_2 = [SM_mzlist[x] for x in SM_landmarks]
-        mapped, ratio_deltas = mass_paired_mapping(anchors_1, anchors_2, std_ppm)
+    # check number of mapped, to avoid forcing outlier sample into mass correction
+    if len(mapped) > 0.2*_N1:
+        _r = np.mean(ratio_deltas)
+        if abs(_r) > correction_tolerance_ppm*0.000001:          # do m/z correction
+            SM_mzlist = [x/(1+_r) for x in SM_mzlist]
+            # rerun after mz correction
+            anchors_2 = [SM_mzlist[x] for x in SM_landmarks]
+            mapped, ratio_deltas = mass_paired_mapping(anchors_1, anchors_2, std_ppm)
 
     # convert back to index numbers in mzlists
     mapped = [( REF_landmarks[x[0]], SM_landmarks[x[1]] ) for x in mapped]
@@ -313,113 +323,24 @@ def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks,
     return new_reference_mzlist, new_reference_map2, REF_landmarks, _r
 
 
-
-def anchor_guided_mapping(REF_reference_mzlist, REF_reference_anchor_pairs, 
-                            SM_mzlist, SM_anchor_mz_pairs, std_ppm=5, correction_tolerance_ppm=1):
+def quick_detect_unique_elution_peak(rt_numbers, list_intensity, 
+                            min_intensity_threshold=100000, min_fwhm=3, min_prominence_threshold_ratio=0.2):
+    '''Quick peak detection, only looking for highest peak with high prominence.
+    This is used for quick check on good peaks, or selecting landmarks for alignment purposes.
+    rt_numbers, list_intensity are matched vectors from a mass trace/track.
     '''
-    Align the mzlists btw CMAP (i.e. REF) and a new Sample,
-    prioritizing paired anchors (from isotope/adduct patterns).
-    The mzlists are already in ascending order when a Sample is processed.
-    Do correciton on list2 if m/z shift exceeds correction_tolerance_ppm.
-    The anchor_pairs use corresponding indices.
-
-    Nested indices are: 
-        mass_paired_mapping functions return positions of input lists -> 
-        which refer to positions in anchor_pairs ->
-        which refer to positions in list_mass_tracks or MassGridDict.
-
-
-    reference_anchor_pairs?
-
-
-    Return
-    ======
-    new_reference_mzlist, new_reference_map2, _r
-
-    mapped, list1_unmapped, list2_unmapped
-    _r: correction ratios on SM_mzlist, to be attached to Sample class instance
-
-    Updated reference list:  because it mixes features from samples 
-    and they need to be consistent on how they are calibrated.
-
-    '''
-    _N1 = len(REF_reference_mzlist)
-    _d2 = {}                                                # tracking how SM_mzlist is mapped to ref
-    for ii in range(_N1): 
-        _d2[ii] = None
-    # first align to reference_anchor_pairs
-    anchors_1 = [REF_reference_mzlist[x[0]] for x in REF_reference_anchor_pairs]
-    anchors_2 = [SM_mzlist[x[0]] for x in SM_anchor_mz_pairs]
-
-    mapped, ratio_deltas = mass_paired_mapping(anchors_1, anchors_2, std_ppm)
-    _r = np.mean(ratio_deltas)
-    if abs(_r) > correction_tolerance_ppm*0.000001:          # do m/z correction
-        SM_mzlist = [x/(1+_r) for x in SM_mzlist]
-        # rerun after mz correction
-        anchors_2 = [SM_mzlist[x[0]] for x in SM_anchor_mz_pairs]
-        mapped, ratio_deltas = mass_paired_mapping(anchors_1, anchors_2, std_ppm)
-
-    # move onto paired ion in anchors
-    anchors_1 = [REF_reference_mzlist[x[1]] for x in REF_reference_anchor_pairs]
-    anchors_2 = [SM_mzlist[x[1]] for x in SM_anchor_mz_pairs]
-    mapped2, ratio_deltas = mass_paired_mapping(anchors_1, anchors_2, std_ppm)
-    # mapped & mapped2 refer to indices in anchor pairs, and have to be converted back to indices of mzlists
-    mapped_pairs = [
-        ( REF_reference_anchor_pairs[x[0]][0], SM_anchor_mz_pairs[x[1]][0] ) for x in mapped
-    ] + [
-        ( REF_reference_anchor_pairs[x[0]][1], SM_anchor_mz_pairs[x[1]][1] ) for x in mapped2
-    ]
-    # move onto remaining ions
-    indices_remaining1 = [ii for ii in range(len(REF_reference_mzlist)) if ii not in [x[0] for x in mapped_pairs]]
-    indices_remaining2 = [ii for ii in range(len(SM_mzlist)) if ii not in [x[1] for x in mapped_pairs]]
-    mapped, list1_unmapped, list2_unmapped = complete_mass_paired_mapping(
-            [REF_reference_mzlist[ii] for ii in indices_remaining1], [SM_mzlist[ii] for ii in indices_remaining2], 
-            std_ppm)
-
-    mapped_pairs += mapped
-    for p in mapped_pairs: 
-        _d2[p[0]] = p[1]
-    for ii in range(len(list2_unmapped)): 
-        _d2[_N1 + ii] = list2_unmapped[ii]
-    new_reference_mzlist = REF_reference_mzlist + [SM_mzlist[ii] for ii in list2_unmapped]
-    new_reference_map2 = [_d2[x] for x in range(len(new_reference_mzlist))]
-
-    # return mapped_pairs, list1_unmapped, list2_unmapped, _r, REF_reference_mzlist
-    return new_reference_mzlist, new_reference_map2, _r
-
-
-
-
-def epd_paired_mapping_with_correction(empCpd_mzlist_1, empCpd_mzlist_2, std_ppm=5, correction_tolerance_ppm=1):
-    '''
-    Match empCpds as grouped m/z values.
-    empCpds:
-    [{'id': 358, 'list_peaks': [(4215, 'anchor'), (4231, '13C/12C'), (4339, 'anchor,+NH4')]},...]
-    to be converted to 
-    # [(id, anchor_peak_mz, other m/z ...), ...]
-
-    Steps:
-    1. check anchor m/z matches, not enforcing selectivity here
-
-    2. verify at least another ion matches following the anchor ions
-    3. mass correction on list 2 if 
-
-
-    Return
-    ======
-    mapped: mapping list [(index from list1, index from list2), ...]
-
-    list1, list2 = [x[1] for x in empCpd_flatlist_1], [x[1] for x in empCpd_flatlist_2]
-
-    mapped, ratio_deltas = mass_paired_mapping(
-        
-        list1, list2, std_ppm)
-    '''
-    mapped = []
-    # to do
-    return mapped
-
-
+    max_intensity = max(list_intensity)
+    prominence = min_prominence_threshold_ratio * max_intensity
+    unique_peak = None
+    if max_intensity > min_intensity_threshold:
+        peaks, properties = find_peaks(list_intensity, height=min_intensity_threshold, width=min_fwhm, 
+                                                        prominence=prominence) 
+        if peaks.size == 1:
+            unique_peak = {
+                'apex': rt_numbers[peaks[0]], 
+                'height': properties['peak_heights'][0], # not used now
+            }
+    return unique_peak
 
 
 
@@ -428,6 +349,9 @@ def epd_paired_mapping_with_correction(empCpd_mzlist_1, empCpd_mzlist_2, std_ppm
 #
 # Not used now
 # -----------------------------------------------------------------------------
+
+
+
 # feature id will be assigned at the end; intensities is a list; mass_id links to MassTrace
 Feature = namedtuple('Feature', ['feature_id', 'mass_id', 'mz', 'rtime', 'rt_min', 'rt_max', 
                                 'peak_quality_max', 'peak_quality_median', 'number_peaks', 'perc_peaks',
@@ -501,34 +425,4 @@ def _get_upstair_neighbor_mixedlist_(all_sorted_list, ii, ii_limit):
         return ii
     else:
         return -1
-
-
-def combine_mass_traces(list_mass_traces, mz_tolerance=0.0002):
-    '''
-    Combine mass traces of same m/z in the input list.
-    We bypass this by using mass tracks instead of mass traces.
-    
-    Input
-    =====
-    list_mass_traces: likely to contain multiple entries per m/z, due to different retention time.
-        They will be combined into unique m/z bins, but float m/z values may have very minor discrepency,
-        thus they are verified by comparisons under mz_tolerance.
-        mass_trace format: {'id_number': 99, 'mz': 87.0551970014688, 'rt_scan_numbers': [], 'intensity': []}
-
-    Return
-    ======
-    dict_combined_mass_traces: {index: (mz, id1, id2), ...}
-    '''
-    mz_mass_traces = sorted([(mt['mz'], mt) for mt in list_mass_traces])
-    new = {}  
-    ii = 0
-    new[ii] = [mz_mass_traces[0][0], mz_mass_traces[0][1]['id_number'], ]
-    for jj in range(1, len(mz_mass_traces)):
-        if mz_mass_traces[jj][0] - mz_mass_traces[jj-1][0] < mz_tolerance:
-            new[ii].append(mz_mass_traces[jj][1]['id_number'])
-        else:
-            ii += 1
-            new[ii] = [mz_mass_traces[jj][0], mz_mass_traces[jj][1]['id_number']]
-                
-    return new
 

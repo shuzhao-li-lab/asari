@@ -41,6 +41,7 @@ PARAMETERS = {
     'prominence_window': 30,
     'gaussian_shape': 0.3,              # min cutoff
     }
+    
 PARAMETERS['min_prominence_threshold'] = PARAMETERS['min_intensity_threshold']/3.0
 
 
