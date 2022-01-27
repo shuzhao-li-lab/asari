@@ -80,7 +80,7 @@ class CompositeMap:
         self.MassGrid = None                        # will be DF
         #self.list_cmap_peaks = []
 
-        self.FeatureList = None
+        self.FeatureList = []
 
         self._mz_landmarks_ = []                    # keeping anchor pairs as landmarks
         #
@@ -290,9 +290,12 @@ class CompositeMap:
         print(str(self.experiment.samples_nonreference[2].rt_cal_dict)[:300])
 
         self.composite_mass_tracks = self.make_composite_mass_tracks()
-        for mass_track in self.composite_mass_tracks:
-            self.FeatureList +=  self.detect_peaks_cmap_( mass_track )
-        
+        for _, mass_track in self.composite_mass_tracks.items():
+            if mass_track['intensity']:
+                self.FeatureList +=  self.detect_peaks_cmap_( mass_track 
+                        )           # to specify parameters here according to Experiment parameters
+            else:
+                print("No intensity found on mass track ", mass_track['mz'])
 
 
     def make_composite_mass_tracks(self):
@@ -302,6 +305,7 @@ class CompositeMap:
         Return:
         Dict of dict {mz_index_number: {'rt_scan_numbers': xx, 'intensity':yy }, ...}
         '''
+        mzDict = dict(self.MassGrid['mz'])
         mzlist = list(self.MassGrid.index)              # this gets indices as keys, per mass track
         _comp_dict = {}
         for k in mzlist: 
@@ -326,20 +330,25 @@ class CompositeMap:
         result = {}
         for k,vdict in _comp_dict.items():
             rt_scan_numbers = sorted(list(vdict.keys()))
-            result[k] = { 'id_number': k, 'rt_scan_numbers': rt_scan_numbers, 'intensity': [vdict[x] for x in rt_scan_numbers], }
+            result[k] = { 'id_number': k, 'mz': mzDict[k], 'rt_scan_numbers': rt_scan_numbers, 
+                                                'intensity': [vdict[x] for x in rt_scan_numbers], }
         return result
 
 
-    def detect_peaks_cmap_(self, mass_track, min_intensity_threshold=10000, min_fwhm=3, min_prominence_threshold=5000, snr=2):
+    def detect_peaks_cmap_(self, mass_track, 
+                    min_intensity_threshold=10000, min_fwhm=3, min_prominence_threshold=5000, snr=3, 
+                    min_prominence_ratio=0.5, iterations=2):
         '''
         Peak detection on composite mass tracks; because this is at Experiment level, these are deemed as features.
         Mass tracks are expected to be continuous per m/z value, with 0s for gaps.
 
         Input
         =====
-        mass_track: {'id_number': k, 'rt_scan_numbers': [..], 'intensity': [..]}
-
-
+        mass_track: {'id_number': k, 'mz': mz, 'rt_scan_numbers': [..], 'intensity': [..]}
+        iterations: default 2, must >=1. Number of iterations of peak detection; each done on remaining data points.
+                    The 2nd iteration may catch small peaks overshadowed by big ones. No clear need to go over 2.
+        snr: signal to noise ratio. 
+        min_prominence_ratio: require ratio of prominence relative to peak height.
 
         Return list of peaks. 
         Reported left/right bases are not based on Gaussian shape or similar, just local maxima.
@@ -355,39 +364,55 @@ class CompositeMap:
         }
         '''
         list_peaks = []
-        rt_numbers, list_intensity = mass_track['rt_scan_numbers'], mass_track['intensity']
-        # 
-        prominence = max(min_prominence_threshold, 0.05*max(list_intensity))
+        # peak_data_points = []
+        list_intensity = mass_track['intensity']
+        new_list_intensity = list_intensity.copy()                              # to substract peaks on the go
+        prominence = max(min_prominence_threshold, 
+                        min_prominence_ratio * max(list_intensity))               # larger prominence gets cleaner data
         peaks, properties = find_peaks(list_intensity, height=min_intensity_threshold, width=min_fwhm, 
                                                         prominence=prominence) 
-        _noise_level_ = self.get_noise_level__(list_intensity, peaks, properties)
         for ii in range(peaks.size):
-            if properties['peak_heights'][ii] > snr*_noise_level_:
-                list_peaks.append({
-                    'parent_masstrace_id': mass_trace['id_number'],
-                    'mz': mass_trace['mz'],
-                    'apex': rt_numbers[peaks[ii]], 
-                    'height': properties['peak_heights'][ii],
-                    'left_base': rt_numbers[properties['left_bases'][ii]],
-                    'right_base': rt_numbers[properties['right_bases'][ii]],
-                })
+            list_peaks.append(self.__convert_peak_json__(ii, mass_track, peaks, properties))
+            for jj in range(properties['left_bases'][ii], properties['right_bases'][ii]+1):
+                new_list_intensity[jj] = 0
+
+        # new iterations by lowering prominence
+        for iter in range(iterations-1): 
+            prominence = max(min_prominence_threshold, min_prominence_ratio * max(new_list_intensity))
+            peaks, properties = find_peaks(new_list_intensity, height=min_intensity_threshold, width=min_fwhm, 
+                                                            prominence=prominence) 
+            for ii in range(peaks.size):
+                list_peaks.append(self.__convert_peak_json__(ii, mass_track, peaks, properties))
+                for jj in range(properties['left_bases'][ii], properties['right_bases'][ii]+1):
+                    new_list_intensity[jj] = 0
+
+        # control snr
+        _noise_level_ = [x for x in new_list_intensity if x]                        # count non-zero values
+        if _noise_level_:
+            _noise_level_ = np.mean(_noise_level_)   # mean more stringent than median
+            list_peaks = [P for P in list_peaks if P['height'] > snr * _noise_level_]
+
+
+        # evaluate peak quality by goodness_fitting of Gaussian model
+        # Peak area and height are taken as average by sample number.
+
+
         return list_peaks
 
 
+    def __convert_peak_json__(self, ii, mass_track, peaks, properties):
+        '''peaks, properties as from find_peaks; rt_numbers from mass_track'''
+        rt_numbers  = mass_track['rt_scan_numbers']
+        return {
+                'parent_masstrace_id': mass_track['id_number'],
+                'mz': mass_track['mz'],
+                'apex': rt_numbers[peaks[ii]], 
+                'height': properties['peak_heights'][ii],
+                'left_base': rt_numbers[properties['left_bases'][ii]],
+                'right_base': rt_numbers[properties['right_bases'][ii]],
+        }
 
 
-    def get_noise_level__(self, list_intensity, peaks, properties):
-        '''
-        Noise level is defined as mean value of data points not in a peak.
-        '''
-        peak_data_points = []
-        for ii in range(peaks.size):
-            peak_data_points += range(properties['left_bases'][ii], properties['right_bases'][ii]+1)
-        noise_data_points = [ii for ii in range(len(list_intensity)) if ii not in peak_data_points]
-        if noise_data_points:
-            return np.mean([list_intensity[ii] for ii in noise_data_points])        # mean more stringent than median
-        else:
-            return 0
 
     def evaluate_peak_model(self):
         '''
