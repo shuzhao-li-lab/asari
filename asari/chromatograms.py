@@ -15,8 +15,11 @@ from itertools import combinations
 
 from operator import itemgetter
 import numpy as np
+
 from scipy.signal import find_peaks 
 from scipy import interpolate
+from scipy.ndimage import uniform_filter1d
+
 from statsmodels.nonparametric.smoothers_lowess import lowess       # xvals problem in v 0.13
 
 
@@ -313,3 +316,14 @@ def dwt_rt_calibrate(good_landmark_peaks, selected_reference_landmark_peaks, ful
     '''
     pass
 
+
+# -----------------------------------------------------------------------------
+# smoothing function
+# -----------------------------------------------------------------------------
+
+def smooth_moving_average(list_intensity, size=9):
+    '''
+    Smooth data for very noisy mass tracks.
+    Using simple moving average here; LOWESS does not look good for this.
+    '''
+    return uniform_filter1d(list_intensity, size, mode='nearest')

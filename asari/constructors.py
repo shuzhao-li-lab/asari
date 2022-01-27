@@ -33,7 +33,7 @@ import pandas as pd
 
 from .search import *
 from .mass_functions import *
-from .chromatograms import rt_lowess_calibration
+from .chromatograms import rt_lowess_calibration, smooth_moving_average
 
 class CompositeMap:
     '''
@@ -386,8 +386,19 @@ class CompositeMap:
                 for jj in range(properties['left_bases'][ii], properties['right_bases'][ii]+1):
                     new_list_intensity[jj] = 0
 
-        # control snr
         _noise_level_ = [x for x in new_list_intensity if x]                        # count non-zero values
+        
+        # smooth noisy data, i.e. when >2 initial peaks are detected
+        if len(list_peaks) > 2:
+            list_peaks = []
+            new_list_intensity = smooth_moving_average(list_intensity)
+            prominence = max(min_prominence_threshold, min_prominence_ratio * max(new_list_intensity))
+            peaks, properties = find_peaks(new_list_intensity, height=min_intensity_threshold, width=min_fwhm, 
+                                                            prominence=prominence) 
+            for ii in range(peaks.size):
+                list_peaks.append(self.__convert_peak_json__(ii, mass_track, peaks, properties))
+
+        # control snr
         if _noise_level_:
             _noise_level_ = np.mean(_noise_level_)   # mean more stringent than median
             list_peaks = [P for P in list_peaks if P['height'] > snr * _noise_level_]
@@ -395,7 +406,6 @@ class CompositeMap:
 
         # evaluate peak quality by goodness_fitting of Gaussian model
         # Peak area and height are taken as average by sample number.
-
 
         return list_peaks
 
