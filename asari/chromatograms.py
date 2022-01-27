@@ -19,9 +19,57 @@ import numpy as np
 from scipy.signal import find_peaks 
 from scipy import interpolate
 from scipy.ndimage import uniform_filter1d
+from scipy.optimize import curve_fit 
 
-from statsmodels.nonparametric.smoothers_lowess import lowess       # xvals problem in v 0.13
+from statsmodels.nonparametric.smoothers_lowess import lowess
 
+
+def sum_dict(dict1, dict2):
+    new = {}
+    for k in dict2:
+        if k in dict1:
+            new[k] = dict1[k] + dict2[k]
+        else:
+            new[k] = dict2[k]
+    return new
+
+
+# -----------------------------------------------------------------------------
+# peak evaluation
+# -----------------------------------------------------------------------------
+
+def gaussian_function__(x, a, mu, sigma):
+    return a*np.exp(-(x-mu)**2/(2*sigma**2)) 
+
+def goodness_fitting__(y_orignal, y_fitted):                  # R^2 as goodness of fitting
+    return 1 - (np.sum((y_fitted-y_orignal)**2) / np.sum((y_orignal-np.mean(y_orignal))**2))
+
+def evaluate_gaussian_peak(mass_track, peak):
+    '''
+    Use Gaussian models to fit peaks, R^2 as goodness of fitting.
+    mass_track: {'id_number': k, 'mz': mz, 'rt_scan_numbers': [..], 'intensity': [..]}
+    Peak: {'parent_masstrace_id': 2812, 'mz': 359.9761889867791, 'apex': 91.0, 'height': 491241.0, 'left_base': 49.0, 'right_base': 267.0}
+    return: goodness_fitting
+    '''
+    goodness_fitting = 0
+    xx = mass_track['rt_scan_numbers'][peak['left_index']: peak['right_index']+1]
+    yy = mass_track['intensity'][peak['left_index']: peak['right_index']+1]
+    # set initial parameters
+    a, mu, sigma =  peak['height'], peak['apex'], np.std(xx)
+    try:
+        popt, pcov = curve_fit(gaussian_function__, xx, yy, p0=[a, mu, sigma])
+        goodness_fitting = goodness_fitting__( yy, gaussian_function__(xx, *popt))
+    # failure to fit
+    except (RuntimeError, ValueError):
+        # about 50 occurancies on one dataset # print(peak['parent_masstrace_id'], peak['apex'])
+        goodness_fitting = 0
+
+    return goodness_fitting
+
+
+# -----------------------------------------------------------------------------
+# indexing function
+# -----------------------------------------------------------------------------
 
 def get_thousandth_regions(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5):
     '''
@@ -186,6 +234,8 @@ def extract_massTracks_(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_time
     return 
     rt_numbers, rt_times,
     tracks as [( mz, rtlist, intensities ), ...]
+
+    To-do: check how rtlist becomes float numbers while they should be integers.
     '''
     rt_numbers = range(ms_expt.getNrSpectra())
     rt_times = [spec.getRT() for spec in ms_expt]
@@ -262,6 +312,7 @@ def rt_lowess_calibration(good_landmark_peaks, selected_reference_landmark_peaks
     Use LOWESS, Locally Weighted Scatterplot Smoothing
     checked available in statsmodels.nonparametric.smoothers_lowess, v 0.12, 0.13+
         https://www.statsmodels.org/stable/generated/statsmodels.nonparametric.smoothers_lowess.lowess.html    
+        But xvals have to be forced as float array.
 
     Input
     =====
@@ -281,14 +332,14 @@ def rt_lowess_calibration(good_landmark_peaks, selected_reference_landmark_peaks
 
     xx += [L[0] for L in rt_cal] + [rt_rightend_]*3
     yy += [L[1] for L in rt_cal] + [rt_rightend_]*3
-    lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=1, 
-                                            xvals=full_rt_range) # will replace w/ lowess when its bug is fixed
+    # float conversion on xvals is to bypass a bug in statsmodels, which was fixed today 2022-01-27
+    lowess_predicted = lowess(yy, xx, frac= .2, it=1, xvals=np.array(full_rt_range, dtype=float)) 
 
     return dict(zip( full_rt_range, [round(ii,ndigits=None) for ii in lowess_predicted] ))
 
 def __hacked_lowess__(yy, xx, frac, it, xvals):
     '''
-    Problem with Statsmodel 0.13; workaround
+    This was workaround of a problem with Statsmodel 0.13, which was dealt by casting xvals as floats.
     Not checking possible range error
     '''
     lxy = lowess(yy, xx, frac, it)

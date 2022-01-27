@@ -93,6 +93,8 @@ class ext_Experiment(Experiment):
         
         self.export_feature_table()
 
+        # to-do: feature back track to samples --
+
         # self.export_empcpd_map()
 
 
@@ -157,7 +159,7 @@ class ext_Experiment(Experiment):
 
         with open( outfile, 'w') as O:
             O.write(
-                '\n'.join([str(F)[:300] for F in self.CMAP.FeatureList])
+                '\n'.join([str(F) for F in self.CMAP.FeatureList])
             )
 
 

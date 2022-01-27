@@ -21,20 +21,16 @@ b. Adducts and isotopes are combinatorial, under restriction of chemical formula
 c. We curated isotopic/adduct patterns in this package.
 d. epdTree can be improved in future based on real data statistics and more structured cheminformatics.
 
-
+from scipy.interpolate import UnivariateSpline
 from .utils import *
 from .sql import *
 '''
-
-
-from scipy.interpolate import UnivariateSpline
 
 import pandas as pd
 
 from .search import *
 from .mass_functions import *
-from .chromatograms import rt_lowess_calibration, smooth_moving_average
-
+from .chromatograms import *
 class CompositeMap:
     '''
     Each experiment is summarized into a CompositeMap (CMAP), as a master feature map.
@@ -284,11 +280,9 @@ class CompositeMap:
     def global_peak_detection(self):
         '''
         print(self.experiment.samples_nonreference[2].input_file)
-        
+        print(str(self.experiment.samples_nonreference[2].rt_cal_dict)[:300])
         # print(self.composite_mass_tracks[55])
         '''
-        print(str(self.experiment.samples_nonreference[2].rt_cal_dict)[:300])
-
         self.composite_mass_tracks = self.make_composite_mass_tracks()
         for _, mass_track in self.composite_mass_tracks.items():
             if mass_track['intensity']:
@@ -337,7 +331,7 @@ class CompositeMap:
 
     def detect_peaks_cmap_(self, mass_track, 
                     min_intensity_threshold=10000, min_fwhm=3, min_prominence_threshold=5000, snr=3, 
-                    min_prominence_ratio=0.5, iterations=2):
+                    min_prominence_ratio=0.3, iterations=2):
         '''
         Peak detection on composite mass tracks; because this is at Experiment level, these are deemed as features.
         Mass tracks are expected to be continuous per m/z value, with 0s for gaps.
@@ -403,9 +397,9 @@ class CompositeMap:
             _noise_level_ = np.mean(_noise_level_)   # mean more stringent than median
             list_peaks = [P for P in list_peaks if P['height'] > snr * _noise_level_]
 
-
         # evaluate peak quality by goodness_fitting of Gaussian model
-        # Peak area and height are taken as average by sample number.
+        for peak in list_peaks:
+            peak['goodness_fitting'] = evaluate_gaussian_peak(mass_track, peak)
 
         return list_peaks
 
@@ -413,46 +407,23 @@ class CompositeMap:
     def __convert_peak_json__(self, ii, mass_track, peaks, properties):
         '''peaks, properties as from find_peaks; rt_numbers from mass_track'''
         rt_numbers  = mass_track['rt_scan_numbers']
+        left_index, right_index = properties['left_bases'][ii], properties['right_bases'][ii]   # index positions on mass track
+        left_base, right_base = int(rt_numbers[left_index]), int(rt_numbers[right_index])
+        # Peak area and height are taken as average by sample number.
+        peak_area = sum(mass_track['intensity'][left_base: right_base+1]) / self._number_of_samples_
         return {
                 'parent_masstrace_id': mass_track['id_number'],
                 'mz': mass_track['mz'],
                 'apex': rt_numbers[peaks[ii]], 
-                'height': properties['peak_heights'][ii],
-                'left_base': rt_numbers[properties['left_bases'][ii]],
-                'right_base': rt_numbers[properties['right_bases'][ii]],
+                'rtime': rt_numbers[peaks[ii]], 
+                'peak_area': peak_area,
+                'height': properties['peak_heights'][ii]/self._number_of_samples_,
+                'left_base': left_base,
+                'right_base': right_base,
+                'left_index': left_index,
+                'right_index': right_index,
         }
 
-
-
-    def evaluate_peak_model(self):
-        '''
-        Use Gaussian models to fit peaks, R^2 as goodness of fitting.
-        Peak area is defined by Gaussian model, the integral of a Gaussian function being a * c *sqrt(2*pi).
-        Good: Left to right base may not be full represenation of the peak. The Gaussian function will propose a good boundary.
-        Less good: peaks are not always in Gaussian shape. But we are comparing same features across samples, 
-        same bias in peak shape is applied to all samples.
-        '''
-        xx = self.parent_mass_trace.list_retention_time[self.left_base: self.right_base+1]
-        # set initial parameters
-        a, mu, sigma =  self.peak_height, \
-                        self.parent_mass_trace.list_retention_time[self.apex], \
-                        np.std(xx)
-        try:
-            popt, pcov = curve_fit(gaussian_function__, 
-                            xx, self.parent_mass_trace.list_intensity[self.left_base: self.right_base+1],
-                            p0=[a, mu, sigma])
-            self.gaussian_parameters = popt
-            self.rtime = popt[1]
-            self.peak_area = popt[0]*abs(popt[2])*2.506628274631        # abs because curve_fit may return negative sigma
-            self.goodness_fitting = goodness_fitting__(
-                            self.parent_mass_trace.list_intensity[self.left_base: self.right_base+1], 
-                            gaussian_function__(xx, *popt))
-
-        # failure to fit
-        except RuntimeError:
-            self.rtime = mu
-            self.peak_area = a*sigma*2.506628274631
-            self.goodness_fitting = 0
 
 
     #---------------------------------------------------------------------------------------------------------------

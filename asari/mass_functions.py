@@ -27,20 +27,6 @@ def flatten_tuplelist(L):
     '''Reformat [(a,b), ...] to [a, b, ...], keep unique entries'''
     return list(set([x[0] for x in L] + [x[1] for x in L]))
 
-def sum_dict(dict1, dict2):
-    new = {}
-    for k in dict2:
-        if k in dict1:
-            new[k] = dict1[k] + dict2[k]
-        else:
-            new[k] = dict2[k]
-    return new
-
-def gaussian_function__(x, a, mu, sigma):
-    return a*np.exp(-(x-mu)**2/(2*sigma**2)) 
-
-def goodness_fitting__(y_orignal, y_fitted):                  # R^2 as goodness of fitting
-    return 1 - (np.sum((y_fitted-y_orignal)**2) / np.sum((y_orignal-np.mean(y_orignal))**2))
 
 def check_close_mzs(mzlist, ppm_tol=5):
     '''check potentially overlapping m/z values in a sample. mzlist already in ascending order.'''
