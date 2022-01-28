@@ -119,8 +119,11 @@ class CompositeMap:
 
         '''
         # initiation using the first Sample
-        self.reference_sample = self.experiment.reference_sample = reference_sample = list_samples[0]
-        self.experiment.reference_sample.rt_cal_dict = {}       # note: other samples are aligned to this ref
+        reference_sample = list_samples[0]
+        _d = dict(zip(reference_sample.rt_numbers, reference_sample.rt_numbers))
+        reference_sample.rt_cal_dict = reference_sample.reverse_rt_cal_dict = _d
+        self.reference_sample = self.experiment.reference_sample = reference_sample
+        # note: other samples are aligned to this ref
 
         print("Initiating MassGrid, ...", reference_sample.input_file)
         self.reference_anchor_pairs = reference_sample.anchor_mz_pairs
@@ -242,8 +245,11 @@ class CompositeMap:
         _NN = len(good_landmark_peaks)
         # only do RT calibration if MIN_PEAK_NUM is met
         if _NN >  MIN_PEAK_NUM:
-            sample.rt_cal_dict = calibration_fuction( good_landmark_peaks, selected_reference_landmark_peaks, sample.rt_numbers )
-
+            sample.rt_cal_dict, sample.reverse_rt_cal_dict = calibration_fuction( 
+                                good_landmark_peaks, selected_reference_landmark_peaks, 
+                                sample.rt_numbers,
+                                # list(range( max(self.experiment.number_scans, len(sample.rt_numbers)) )) 
+                                )     # max scans to cover predicted range
         else:
             sample.rt_cal_dict = None
             print("\n\n*** Warning on %s, RT regression not performed due to too few aligned features (%d) ***" 
@@ -348,22 +354,20 @@ class CompositeMap:
                     The 2nd iteration may catch small peaks overshadowed by big ones. No clear need to go over 2.
         snr: signal to noise ratio. 
         min_prominence_ratio: require ratio of prominence relative to peak height.
+        wlen: impacts the peak detection window. Peak boundaries should be re-examined in noisy tracks.
 
         Return list of peaks. 
         Reported left/right bases are not based on Gaussian shape or similar, just local maxima.
         Prominence has a key control of how peaks are considered, but peak shape evaluation later can filter out most bad peaks.
 
         peak area is integrated by summing up intensities of included scans.
-        Peak area and height are taken as average by sample number.
+        Peak area and height are cumulated from all samples. Not trying to average because some peaks are only few samples.
 
 
         Peak format: {
             'id_number': 0, 'mz', 'apex', 'left_base', 'right_base', 'height', 'parent_masstrace_id', 
             'rtime', 'peak_area', 'goodness_fitting'
         }
-
-
-
         '''
         list_peaks = []
         # peak_data_points = []
@@ -408,7 +412,7 @@ class CompositeMap:
         # evaluate peak quality by goodness_fitting of Gaussian model
         for peak in list_peaks:
             peak['goodness_fitting'] = evaluate_gaussian_peak(mass_track, peak)
-            peak['height'] = peak['height']/self._number_of_samples_
+            # peak['height'] = peak['height']/self._number_of_samples_
 
         return list_peaks
 
@@ -418,8 +422,7 @@ class CompositeMap:
         rt_numbers  = mass_track['rt_scan_numbers']
         left_index, right_index = properties['left_bases'][ii], properties['right_bases'][ii]   # index positions on mass track
         left_base, right_base = int(rt_numbers[left_index]), int(rt_numbers[right_index])
-        # Peak area and height are taken as average by sample number.
-        peak_area = sum(mass_track['intensity'][left_index: right_index+1]) / self._number_of_samples_
+        peak_area = sum(mass_track['intensity'][left_index: right_index+1])                     #/ self._number_of_samples_
         return {
                 'parent_masstrack_id': mass_track['id_number'],
                 'mz': mass_track['mz'],
@@ -427,16 +430,14 @@ class CompositeMap:
                 # 'rtime': rt_numbers[peaks[ii]], 
                 'peak_area': peak_area,
                 'height': properties['peak_heights'][ii],
-                'left_base': left_base,
-                'right_base': right_base,
-                'left_index': left_index,
+                'left_base': left_base,                                                         # rt_numbers
+                'right_base': right_base,   
+                'left_index': left_index,                                                       # specific to the referred mass track
                 'right_index': right_index,
         }
 
 
-
     def generate_feature_table(self):
-        '''
         '''
         cmap_header = ['feature_id', 'cmap_masstrack_id', 'mz', 'rtime', 'rt_min', 'rt_max', 
                 'peak_quality', 'selectivity_mz', 'height_mean', 'peak_area_mean', ]
@@ -444,16 +445,28 @@ class CompositeMap:
         FeatureTable = pd.DataFrame( 
                 np.zeros((len(self.FeatureList), len(header))), columns=header, )
 
-        for SM in self.experiment.samples_nonreference:
-            pass
+        '''
+        FeatureTable = pd.DataFrame(self.FeatureList)
+        for SM in [self.experiment.reference_sample] + self.experiment.samples_nonreference:
+            FeatureTable[SM.input_file] = self.extract_features_per_sample(SM)
+        self.FeatureTable = FeatureTable
 
+    def extract_features_per_sample(self, sample):
+        fList = []
+        mass_track_map = self.MassGrid[sample.input_file]
+        for peak in self.FeatureList:
+            track_number = mass_track_map[peak['parent_masstrack_id']]
+            peak_area = 0
+            if not pd.isna(track_number):           # watch out dtypes
+                mass_track = sample.list_mass_tracks[ int(track_number) ]
+                left_base, right_base = sample.reverse_rt_cal_dict[peak['left_base']], sample.reverse_rt_cal_dict[peak['right_base']]
+                for ii in range(len(mass_track['rt_scan_numbers'])):
+                    if left_base <= mass_track['rt_scan_numbers'][ii] <= right_base:
+                        peak_area += mass_track['intensity'][ii]
 
+            fList.append( peak_area )
 
-
-        # concatenate cmap values and sample values
-        self.FeatureTable = pd.DataFrame(self.FeatureList) # + FeatureTable
-
-
+        return fList
 
 
 class epdsConstructor:

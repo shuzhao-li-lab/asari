@@ -38,7 +38,8 @@ prominence = max(min_prominence_threshold, 0.05*max(list_intensity)).
 import os
 import random
 import numpy as np
-from scipy.signal import find_peaks 
+# from scipy.signal import find_peaks 
+# from scipy import interpolate
 
 from pyopenms import MSExperiment, MzMLFile
 
@@ -82,7 +83,7 @@ class SimpleSample:
         self.mz_calibration_ratio = None
         self.rt_calibration_function = None
         self.rt_cal_dict = {}                              # index mapping to the reference sample
-        
+
         self.reverse_rt_cal_dict = {}
         
         # lists to store data
@@ -151,5 +152,4 @@ class SimpleSample:
         '''
         self.anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(self.list_mass_tracks, mz_tolerance_ppm=5)
         self._number_anchor_mz_pairs_ = len(self.anchor_mz_pairs)
-        
         

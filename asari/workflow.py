@@ -160,6 +160,7 @@ class ext_Experiment(Experiment):
 
 
     def export_feature_table(self, outfile='feature_table.json'):
+        
         self.CMAP.FeatureTable.to_csv("cmap_feature_table.csv")
 
 

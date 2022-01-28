@@ -237,8 +237,9 @@ def extract_massTracks_(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_time
 
     To-do: check how rtlist becomes float numbers while they should be integers.
     '''
-    rt_numbers = range(ms_expt.getNrSpectra())
+    # rt_numbers = range(ms_expt.getNrSpectra())
     rt_times = [spec.getRT() for spec in ms_expt]
+    rt_numbers = list(range(len(rt_times)))
     good_bins = get_thousandth_regions(ms_expt, mz_tolerance_ppm, min_intensity, min_timepoints)
     tracks = []
     for bin in good_bins:
@@ -322,8 +323,9 @@ def rt_lowess_calibration(good_landmark_peaks, selected_reference_landmark_peaks
 
     Return
     ======
-    rt_remap_dict, dictionary converting scan number in full_rt_range to calibrated integer values.
+    rt_cal_dict, dictionary converting scan number in full_rt_range to calibrated integer values.
                     so no need to recalculate every time for each track.
+    reverse_rt_cal_dict, from ref RT scan numbers to sample RT scan numbers.
     '''
     # force left and right ends, to prevent runaway curve functions
     rt_rightend_ = 1.1 * max(full_rt_range)
@@ -336,7 +338,21 @@ def rt_lowess_calibration(good_landmark_peaks, selected_reference_landmark_peaks
     lowess_predicted = lowess(yy, xx, frac= .2, it=1, xvals=np.array(full_rt_range, dtype=float)) 
     # lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=1, xvals=full_rt_range)
 
-    return dict(zip( full_rt_range, [round(ii,ndigits=None) for ii in lowess_predicted] ))
+    rt_cal_dict = dict(zip( full_rt_range, [round(ii,ndigits=None) for ii in lowess_predicted] ))
+
+    interf = interpolate.interp1d(lowess_predicted, full_rt_range, fill_value="extrapolate")
+    new_rt_range = list(range(int(1.1*max(full_rt_range))))
+    ref_interpolated = interf( new_rt_range )
+    #
+    # will redo using intrapolate; watch out for diff full_rt_range btw ref and sample - to fix
+    #
+    # ref_interpolated = lowess(xx, yy, frac= .2, it=1, xvals=np.array(full_rt_range, dtype=float)) 
+
+    reverse_rt_cal_dict = dict(zip( new_rt_range, [round(ii,ndigits=None) for ii in ref_interpolated] ))
+    
+    return rt_cal_dict, reverse_rt_cal_dict
+
+
 
 def __hacked_lowess__(yy, xx, frac, it, xvals):
     '''
