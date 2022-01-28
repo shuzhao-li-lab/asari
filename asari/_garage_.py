@@ -253,6 +253,22 @@ class Sample(SimpleSample):
 
 
 
+    #---------------------------------------------------------------------------------------------------------------
+
+
+
+    def convert_empCpd_mzlist(self, SM):
+        '''
+        Convert [{'id': 358, 'list_peaks': [(4215, 'anchor'), (4231, '13C/12C'), (4339, 'anchor,+NH4')]}, ...]
+        to [{'id': 358, 'mz_peaks': [mz1, mz2, ...]}, ...]
+        '''
+        new = []
+        for EC in SM.list_empCpds:
+            new.append(
+                {'id': EC['id'], 'mz_peaks': [SM.list_peaks[x[0]]['mz'] for x in EC['list_peaks']]}
+            )
+        return new
+
 
 
 #

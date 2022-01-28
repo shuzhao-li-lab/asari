@@ -34,31 +34,34 @@ from .chromatograms import *
 class CompositeMap:
     '''
     Each experiment is summarized into a CompositeMap (CMAP), as a master feature map.
-
-    Use DataFrames to hold 
-    i) MassGrid: a matrix for correspondence of mass tracks to each sample 
-    ii) FeatureGrid: a matrix for feature-peak correspondence
+    i) MassGrid: a matrix (DataFrame) for correspondence of mass tracks to each sample 
+    ii) FeatureList: list of feature definitions, i.e. peaks defined on composite mass tracks.
+    iii) FeatureTable: a matrix for feature intensities per sample
 
     Steps:
 
-    1. Build Mass Grid first. Starting with the initial samples.
-    mass correspondence is unique by using mass tracks. One grid can have maxium one mass track in one sample.
-    Reference m/z will be concensus among initial samples.
-    Alignment is guided by matched isotope/adduct pairs.
-    2. Add remaining samples to MassGrid, same anchor guided alignment.
-    Reference m/z is not recalculated for performance reason.
+    1. Build Mass Grid first. 
+    Choose one reference from the initial samples with largest number of landmark tracks.
 
-    3. Optional, m/z calibration to refDB.
+    2. Add each of remaining samples to MassGrid.
+    Alignment is guided by matched isotope/adduct pairs. Reference m/z is updated every time.
 
-    4. Determine RT spline function per sample, by matching to selective landmark peaks.
+    3. Optimize mass alignment.
 
-    5. Build composite elution profile by cumulative sum of mass traces from all samples after RT correction.
-    6. New samples are added to CMap, both aligning to the CMap and augment the CMap by new features.
-    7. After all samples are processed, peak detection is performed carefully on each massTrace in CMap, 
-    to determine number and range of peaks.
-    8. Report peaks per sample based on the peak definition in CMap.
-    9. New round of Annotation; add remaining features to epds or group into new epds.
+    4. Determine RT alignment function per sample, using selective landmark peaks.
+    Default is a LOWESS function, but open to others to plugin.
 
+    5. Build composite elution profile (composite_mass_tracks)
+    by cumulative sum of mass tracks from all samples after RT correction.
+
+    6. Global peak detection is performed on each composite massTrack, by two rounds -
+    stepping down in prominence. Smoothing (moving average) is performed on tracks with more that 
+    two peaks detected (considered noisy), followed by a fresh round of peak detection.
+
+    7. Mapping global peaks (i.e. features) back to all samples and extract sample specific peak areas.
+    This completes the FeatureTable.
+
+    8. Annotation, grouping features to epds, and DB matching. Optional, m/z calibration to refDB.
 
     '''
 
@@ -74,16 +77,16 @@ class CompositeMap:
         self.reference_sample = None                # designated reference sample; all RT is aligned to this sample
 
         self.MassGrid = None                        # will be DF
-        #self.list_cmap_peaks = []
-
+        self.FeatureTable = None
         self.FeatureList = []
 
         self._mz_landmarks_ = []                    # keeping anchor pairs as landmarks
         #
+        # self.ref_empCpds = []
         self.reference_mzdict = {}
         self.composite_mass_tracks = {}             # following MassGrid indices
 
-        #self.ref_empCpds = []
+        
         
 
     def initiate_mass_grid(self, list_samples, recalculate_ref=False):
@@ -182,6 +185,7 @@ class CompositeMap:
         For low-selectivity mass tracks, could do 2-D deconvolution.
 
         '''
+        # also check for empty tracks after composite?
 
         # watch out for indices used by other variables, e.g. _mz_landmarks_
         pass
@@ -291,6 +295,7 @@ class CompositeMap:
             else:
                 print("No intensity found on mass track ", mass_track['mz'])
 
+        self.generate_feature_table()
 
     def make_composite_mass_tracks(self):
         '''
@@ -330,8 +335,8 @@ class CompositeMap:
 
 
     def detect_peaks_cmap_(self, mass_track, 
-                    min_intensity_threshold=10000, min_fwhm=3, min_prominence_threshold=5000, snr=3, 
-                    min_prominence_ratio=0.3, iterations=2):
+                    min_intensity_threshold=10000, min_fwhm=3, min_prominence_threshold=5000, wlen=50, 
+                    snr=3, min_prominence_ratio=0.1, iterations=2):
         '''
         Peak detection on composite mass tracks; because this is at Experiment level, these are deemed as features.
         Mass tracks are expected to be continuous per m/z value, with 0s for gaps.
@@ -356,6 +361,9 @@ class CompositeMap:
             'id_number': 0, 'mz', 'apex', 'left_base', 'right_base', 'height', 'parent_masstrace_id', 
             'rtime', 'peak_area', 'goodness_fitting'
         }
+
+
+
         '''
         list_peaks = []
         # peak_data_points = []
@@ -364,7 +372,7 @@ class CompositeMap:
         prominence = max(min_prominence_threshold, 
                         min_prominence_ratio * max(list_intensity))               # larger prominence gets cleaner data
         peaks, properties = find_peaks(list_intensity, height=min_intensity_threshold, width=min_fwhm, 
-                                                        prominence=prominence) 
+                                                        prominence=prominence, wlen=wlen) 
         for ii in range(peaks.size):
             list_peaks.append(self.__convert_peak_json__(ii, mass_track, peaks, properties))
             for jj in range(properties['left_bases'][ii], properties['right_bases'][ii]+1):
@@ -374,7 +382,7 @@ class CompositeMap:
         for iter in range(iterations-1): 
             prominence = max(min_prominence_threshold, min_prominence_ratio * max(new_list_intensity))
             peaks, properties = find_peaks(new_list_intensity, height=min_intensity_threshold, width=min_fwhm, 
-                                                            prominence=prominence) 
+                                                            prominence=prominence, wlen=wlen) 
             for ii in range(peaks.size):
                 list_peaks.append(self.__convert_peak_json__(ii, mass_track, peaks, properties))
                 for jj in range(properties['left_bases'][ii], properties['right_bases'][ii]+1):
@@ -388,7 +396,7 @@ class CompositeMap:
             new_list_intensity = smooth_moving_average(list_intensity)
             prominence = max(min_prominence_threshold, min_prominence_ratio * max(new_list_intensity))
             peaks, properties = find_peaks(new_list_intensity, height=min_intensity_threshold, width=min_fwhm, 
-                                                            prominence=prominence) 
+                                                            prominence=prominence, wlen=wlen) 
             for ii in range(peaks.size):
                 list_peaks.append(self.__convert_peak_json__(ii, mass_track, peaks, properties))
 
@@ -400,6 +408,7 @@ class CompositeMap:
         # evaluate peak quality by goodness_fitting of Gaussian model
         for peak in list_peaks:
             peak['goodness_fitting'] = evaluate_gaussian_peak(mass_track, peak)
+            peak['height'] = peak['height']/self._number_of_samples_
 
         return list_peaks
 
@@ -410,14 +419,14 @@ class CompositeMap:
         left_index, right_index = properties['left_bases'][ii], properties['right_bases'][ii]   # index positions on mass track
         left_base, right_base = int(rt_numbers[left_index]), int(rt_numbers[right_index])
         # Peak area and height are taken as average by sample number.
-        peak_area = sum(mass_track['intensity'][left_base: right_base+1]) / self._number_of_samples_
+        peak_area = sum(mass_track['intensity'][left_index: right_index+1]) / self._number_of_samples_
         return {
-                'parent_masstrace_id': mass_track['id_number'],
+                'parent_masstrack_id': mass_track['id_number'],
                 'mz': mass_track['mz'],
                 'apex': rt_numbers[peaks[ii]], 
-                'rtime': rt_numbers[peaks[ii]], 
+                # 'rtime': rt_numbers[peaks[ii]], 
                 'peak_area': peak_area,
-                'height': properties['peak_heights'][ii]/self._number_of_samples_,
+                'height': properties['peak_heights'][ii],
                 'left_base': left_base,
                 'right_base': right_base,
                 'left_index': left_index,
@@ -426,20 +435,23 @@ class CompositeMap:
 
 
 
-    #---------------------------------------------------------------------------------------------------------------
-    def convert_empCpd_mzlist(self, SM):
+    def generate_feature_table(self):
         '''
-        Convert [{'id': 358, 'list_peaks': [(4215, 'anchor'), (4231, '13C/12C'), (4339, 'anchor,+NH4')]}, ...]
-        to [{'id': 358, 'mz_peaks': [mz1, mz2, ...]}, ...]
         '''
-        new = []
-        for EC in SM.list_empCpds:
-            new.append(
-                {'id': EC['id'], 'mz_peaks': [SM.list_peaks[x[0]]['mz'] for x in EC['list_peaks']]}
-            )
-        return new
+        cmap_header = ['feature_id', 'cmap_masstrack_id', 'mz', 'rtime', 'rt_min', 'rt_max', 
+                'peak_quality', 'selectivity_mz', 'height_mean', 'peak_area_mean', ]
+        header = cmap_header + self.list_input_files
+        FeatureTable = pd.DataFrame( 
+                np.zeros((len(self.FeatureList), len(header))), columns=header, )
+
+        for SM in self.experiment.samples_nonreference:
+            pass
 
 
+
+
+        # concatenate cmap values and sample values
+        self.FeatureTable = pd.DataFrame(self.FeatureList) # + FeatureTable
 
 
 

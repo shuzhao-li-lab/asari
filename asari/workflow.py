@@ -70,6 +70,10 @@ class ext_Experiment(Experiment):
         '''
         # start SQLite database
         # self.cursor = connect_sqlite_db(self.parameters['project_name'])
+        # if self.number_of_samples > NNN:
+        #      finish in memory first
+        # else:
+        #      start DB after init
         
         self.CMAP = CompositeMap(self)
         initiation_Samples = self.process_initiation_samples()
@@ -156,11 +160,7 @@ class ext_Experiment(Experiment):
 
 
     def export_feature_table(self, outfile='feature_table.json'):
-
-        with open( outfile, 'w') as O:
-            O.write(
-                '\n'.join([str(F) for F in self.CMAP.FeatureList])
-            )
+        self.CMAP.FeatureTable.to_csv("cmap_feature_table.csv")
 
 
 

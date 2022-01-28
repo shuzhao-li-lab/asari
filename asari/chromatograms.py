@@ -334,6 +334,7 @@ def rt_lowess_calibration(good_landmark_peaks, selected_reference_landmark_peaks
     yy += [L[1] for L in rt_cal] + [rt_rightend_]*3
     # float conversion on xvals is to bypass a bug in statsmodels, which was fixed today 2022-01-27
     lowess_predicted = lowess(yy, xx, frac= .2, it=1, xvals=np.array(full_rt_range, dtype=float)) 
+    # lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=1, xvals=full_rt_range)
 
     return dict(zip( full_rt_range, [round(ii,ndigits=None) for ii in lowess_predicted] ))
 
