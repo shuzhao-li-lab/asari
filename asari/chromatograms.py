@@ -269,7 +269,8 @@ def extract_single_track_(bin):
     for r in bin:                       # this gets max intensity on the same RT scan
         _d[r[1]] = max(r[2], _d[r[1]])
     intensities = [_d[x] for x in rtlist]
-    return ( mz, rtlist, intensities )
+    # range object is not desired - use list
+    return ( mz, list(rtlist), intensities )
 
 def bin_to_mass_tracks(bin_data_tuples, mz_tolerance_ppm=5):
     '''
@@ -308,47 +309,43 @@ def bin_to_mass_tracks(bin_data_tuples, mz_tolerance_ppm=5):
 # retention time alignment
 # -----------------------------------------------------------------------------
 
-def rt_lowess_calibration(good_landmark_peaks, selected_reference_landmark_peaks, full_rt_range):
+def rt_lowess_calibration(good_landmark_peaks, selected_reference_landmark_peaks, sample_rt_numbers, reference_rt_numbers):
     '''
-    Use LOWESS, Locally Weighted Scatterplot Smoothing
+    Use LOWESS, Locally Weighted Scatterplot Smoothing, to reate correspondence between sample_rt_numbers, reference_rt_numbers.
     checked available in statsmodels.nonparametric.smoothers_lowess, v 0.12, 0.13+
         https://www.statsmodels.org/stable/generated/statsmodels.nonparametric.smoothers_lowess.lowess.html    
-        But xvals have to be forced as float array.
+        But xvals have to be forced as float array until the fix is in new release.
 
     Input
     =====
     good_landmark_peaks and selected_reference_landmark_peaks are equal-length lists of peaks,
     selected from working sample and reference sample as landmarks for RT alignment. 
-    full_rt_range: all scan numbers in this sample.
+    sample_rt_numbers: all scan numbers in this sample.
+    reference_rt_numbers: all scan numbers in the ref sample.
 
     Return
     ======
-    rt_cal_dict, dictionary converting scan number in full_rt_range to calibrated integer values.
+    rt_cal_dict, dictionary converting scan number in sample_rt_numbers to calibrated integer values.
                     so no need to recalculate every time for each track.
-    reverse_rt_cal_dict, from ref RT scan numbers to sample RT scan numbers.
+    reverse_rt_cal_dict, from ref RT scan numbers to sample RT scan numbers. 
+                No  guaranty dicts are in correct range after mapping.
     '''
     # force left and right ends, to prevent runaway curve functions
-    rt_rightend_ = 1.1 * max(full_rt_range)
+    rt_rightend_ = 1.1 * max(sample_rt_numbers)
     xx, yy = [0, 0, 0, ], [0, 0, 0, ]
     rt_cal = sorted([(x[0]['apex'], x[1]['apex']) for x in zip(good_landmark_peaks, selected_reference_landmark_peaks)])
 
     xx += [L[0] for L in rt_cal] + [rt_rightend_]*3
     yy += [L[1] for L in rt_cal] + [rt_rightend_]*3
     # float conversion on xvals is to bypass a bug in statsmodels, which was fixed today 2022-01-27
-    lowess_predicted = lowess(yy, xx, frac= .2, it=1, xvals=np.array(full_rt_range, dtype=float)) 
+    lowess_predicted = lowess(yy, xx, frac= .2, it=1, xvals=np.array(sample_rt_numbers, dtype=float)) 
     # lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=1, xvals=full_rt_range)
-
-    rt_cal_dict = dict(zip( full_rt_range, [round(ii,ndigits=None) for ii in lowess_predicted] ))
-
-    interf = interpolate.interp1d(lowess_predicted, full_rt_range, fill_value="extrapolate")
-    new_rt_range = list(range(int(1.1*max(full_rt_range))))
-    ref_interpolated = interf( new_rt_range )
-    #
-    # will redo using intrapolate; watch out for diff full_rt_range btw ref and sample - to fix
-    #
-    # ref_interpolated = lowess(xx, yy, frac= .2, it=1, xvals=np.array(full_rt_range, dtype=float)) 
-
-    reverse_rt_cal_dict = dict(zip( new_rt_range, [round(ii,ndigits=None) for ii in ref_interpolated] ))
+    # Force min as 0
+    rt_cal_dict = dict(zip( sample_rt_numbers, [int(round(max(ii,0),ndigits=None)) for ii in lowess_predicted] ))
+    interf = interpolate.interp1d(lowess_predicted, sample_rt_numbers, fill_value="extrapolate")
+    ref_interpolated = interf( reference_rt_numbers )
+    # Force min as 0; still possible going over max rt_number but that should not cause a problem
+    reverse_rt_cal_dict = dict(zip( reference_rt_numbers, [int(round( max(ii,0) , ndigits=None)) for ii in ref_interpolated] ))
     
     return rt_cal_dict, reverse_rt_cal_dict
 
@@ -365,7 +362,7 @@ def __hacked_lowess__(yy, xx, frac, it, xvals):
     return interf(xvals)
 
 
-def savitzky_golay_spline(good_landmark_peaks, selected_reference_landmark_peaks, full_rt_range):
+def savitzky_golay_spline(good_landmark_peaks, selected_reference_landmark_peaks, sample_rt_numbers, reference_rt_numbers):
     '''
     Modified Savitzky-Golay filter followed by spline fitting - pls follow format in rt_lowess.
     Because our data are not equally spaced, sav-gol method may produce undesired errors.
@@ -378,7 +375,7 @@ def savitzky_golay_spline(good_landmark_peaks, selected_reference_landmark_peaks
     '''
     pass
 
-def dwt_rt_calibrate(good_landmark_peaks, selected_reference_landmark_peaks, full_rt_range):
+def dwt_rt_calibrate(good_landmark_peaks, selected_reference_landmark_peaks, sample_rt_numbers, reference_rt_numbers):
     '''Other RT alignment method to include - pls follow format in rt_lowess.
     not implemented.
     '''
@@ -395,3 +392,20 @@ def smooth_moving_average(list_intensity, size=9):
     Using simple moving average here; LOWESS does not look good for this.
     '''
     return uniform_filter1d(list_intensity, size, mode='nearest')
+
+def smooth_rt_intensity_remap(L_rt_scan_numbers, L_intensity):
+    '''
+    After remapping/calibratoing RT, smooth intensity curve.
+    '''
+    _d = dict(zip( L_rt_scan_numbers, L_intensity )) # this overwrites repeated scan numbers by using last intensity value
+    newx = range(min(L_rt_scan_numbers), max(L_rt_scan_numbers))
+    for ii in newx:
+        if ii not in _d:
+            _d[ii] = _d[ii-1]
+    newy = [_d[ii] for ii in newx]
+    # smoothing by averaging 3 consecutive values
+    for ii in newx[1: -1]:
+        _d[ii] = (_d[ii-1]+_d[ii]+_d[ii+1])/3.0
+    return _d
+
+
