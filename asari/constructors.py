@@ -32,6 +32,9 @@ import pandas as pd
 from .search import *
 from .mass_functions import *
 from .chromatograms import *
+from .peaks import *
+
+
 class CompositeMap:
     '''
     Each experiment is summarized into a CompositeMap (CMAP), as a master feature map.
@@ -130,7 +133,7 @@ class CompositeMap:
         self.reference_sample = self.experiment.reference_sample = reference_sample
         # note: other samples are aligned to this ref
 
-        print("\nInitiating MassGrid, ...\n    The reference sample is:\n    |* %s *|\n" %reference_sample.input_file)
+        print("\nInitiating MassGrid, ...\n    The reference sample is:\n    ||* %s *||\n" %reference_sample.input_file)
 
         self.reference_anchor_pairs = reference_sample.anchor_mz_pairs
         self._mz_landmarks_ = flatten_tuplelist(reference_sample.anchor_mz_pairs)
@@ -162,7 +165,7 @@ class CompositeMap:
         But the recalculation should be based on calibrated m/z values so that they are consistent across samples.
 
         '''
-        print("Adding sample to MassGrid ", os.path.basename(sample.input_file))
+        print("Adding sample to MassGrid,", os.path.basename(sample.input_file))
 
         mzlist = [x['mz'] for x in sample.list_mass_tracks]
         new_reference_mzlist, new_reference_map2, updated_REF_landmarks, _r = landmark_guided_mapping(
@@ -222,6 +225,7 @@ class CompositeMap:
         Marked samples that fail in RT alignment, and deal with them at the end.
 
         '''
+        print("\nCalibrating retention time to reference, ...\n")
         self.good_reference_landmark_peaks = self.set_RT_reference()
         for SM in self.experiment.samples_nonreference:
             self.calibrate_sample_RT(SM)
@@ -316,7 +320,8 @@ class CompositeMap:
         print("\nPeak detection on composite mass tracks, ...\n")
         self.composite_mass_tracks = self.make_composite_mass_tracks()
         for _, mass_track in self.composite_mass_tracks.items():
-            self.FeatureList +=  self.detect_peaks_cmap_( mass_track 
+            self.FeatureList +=  detect_peaks_cmap_( mass_track 
+            
                     )           # to specify parameters here according to Experiment parameters
 
         ii = 0
@@ -381,111 +386,6 @@ class CompositeMap:
         return result
 
 
-    def detect_peaks_cmap_(self, mass_track, 
-                    min_intensity_threshold=10000, min_fwhm=3, min_prominence_threshold=5000, wlen=50, 
-                    snr=3, min_prominence_ratio=0.1, iterations=2):
-        '''
-        Peak detection on composite mass tracks; because this is at Experiment level, these are deemed as features.
-        Mass tracks are expected to be continuous per m/z value, with 0s for gaps.
-
-        Input
-        =====
-        mass_track: {'id_number': k, 'mz': mz, 'rt_scan_numbers': [..], 'intensity': [..]}
-        iterations: default 2, must >=1. Number of iterations of peak detection; each done on remaining data points.
-                    The 2nd iteration may catch small peaks overshadowed by big ones. No clear need to go over 2.
-        snr: signal to noise ratio. 
-        min_prominence_ratio: require ratio of prominence relative to peak height.
-        wlen: impacts the peak detection window. Peak boundaries should be re-examined in noisy tracks.
-
-        Return list of peaks. 
-        Reported left/right bases are not based on Gaussian shape or similar, just local maxima.
-        Prominence has a key control of how peaks are considered, but peak shape evaluation later can filter out most bad peaks.
-
-        peak area is integrated by summing up intensities of included scans.
-        Peak area and height are cumulated from all samples. Not trying to average because some peaks are only few samples.
-
-
-        Peak format: {
-            'id_number': 0, 'mz', 'apex', 'left_base', 'right_base', 'height', 'parent_masstrace_id', 
-            'rtime', 'peak_area', 'goodness_fitting'
-        }
-        '''
-        list_peaks = []
-        # peak_data_points = []
-        list_intensity = mass_track['intensity']
-        new_list_intensity = list_intensity.copy()                              # to substract peaks on the go
-        prominence = max(min_prominence_threshold, 
-                        min_prominence_ratio * max(list_intensity))               # larger prominence gets cleaner data
-        peaks, properties = find_peaks(list_intensity, height=min_intensity_threshold, width=min_fwhm, 
-                                                        prominence=prominence, wlen=wlen) 
-        
-        # if > 2 peaks, go to optimization directly?
-        # else: step wise
-        
-
-
-        
-        for ii in range(peaks.size):
-            list_peaks.append(self.__convert_peak_json__(ii, mass_track, peaks, properties))
-            for jj in range(properties['left_bases'][ii], properties['right_bases'][ii]+1):
-                new_list_intensity[jj] = 0
-
-        # new iterations by lowering prominence
-        for iter in range(iterations-1): 
-            prominence = max(min_prominence_threshold, min_prominence_ratio * max(new_list_intensity))
-            peaks, properties = find_peaks(new_list_intensity, height=min_intensity_threshold, width=min_fwhm, 
-                                                            prominence=prominence, wlen=wlen) 
-            for ii in range(peaks.size):
-                list_peaks.append(self.__convert_peak_json__(ii, mass_track, peaks, properties))
-                for jj in range(properties['left_bases'][ii], properties['right_bases'][ii]+1):
-                    new_list_intensity[jj] = 0
-
-        _noise_level_ = [x for x in new_list_intensity if x]                        # count non-zero values
-        
-        # smooth noisy data, i.e. when >2 initial peaks are detected
-        if len(list_peaks) > 2:
-            list_peaks = []
-            new_list_intensity = smooth_moving_average(list_intensity)
-
-            prominence = max(min_prominence_threshold, min_prominence_ratio * max(new_list_intensity))
-            peaks, properties = find_peaks(new_list_intensity, height=min_intensity_threshold, width=min_fwhm, 
-                                                            prominence=prominence, wlen=wlen) 
-            for ii in range(peaks.size):
-                list_peaks.append(self.__convert_peak_json__(ii, mass_track, peaks, properties))
-
-        # control snr
-        if _noise_level_:
-            _noise_level_ = np.mean(_noise_level_)   # mean more stringent than median
-            list_peaks = [P for P in list_peaks if P['height'] > snr * _noise_level_]
-
-        for peak in list_peaks:
-            # evaluate peak quality by goodness_fitting of Gaussian model
-            peak['goodness_fitting'] = evaluate_gaussian_peak(mass_track, peak)
-            # peak['height'] = peak['height']/self._number_of_samples_
-
-        return list_peaks
-
-
-    def __convert_peak_json__(self, ii, mass_track, peaks, properties):
-        '''peaks, properties as from find_peaks; rt_numbers from mass_track
-        '''
-        rt_numbers  = mass_track['rt_scan_numbers']
-        left_index, right_index = properties['left_bases'][ii], properties['right_bases'][ii]   # index positions on mass track
-        left_base, right_base = rt_numbers[left_index], rt_numbers[right_index]
-        peak_area = sum(mass_track['intensity'][left_index: right_index+1])                     #/ self._number_of_samples_
-        return {
-                'parent_masstrack_id': mass_track['id_number'],
-                'mz': mass_track['mz'],
-                'apex': rt_numbers[peaks[ii]], 
-                # 'rtime': rt_numbers[peaks[ii]], 
-                'peak_area': peak_area,
-                'height': properties['peak_heights'][ii],
-                'left_base': left_base,                                                         # rt_numbers
-                'right_base': right_base,   
-                'left_index': left_index,                                                       # specific to the referred mass track
-                'right_index': right_index,
-        }
-
 
     def generate_feature_table(self):
         '''
@@ -530,6 +430,10 @@ class CompositeMap:
             fList.append( peak_area )
 
         return fList
+
+
+
+
 
 
 class epdsConstructor:

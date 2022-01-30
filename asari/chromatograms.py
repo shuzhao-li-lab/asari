@@ -19,7 +19,6 @@ import numpy as np
 from scipy.signal import find_peaks 
 from scipy import interpolate
 from scipy.ndimage import uniform_filter1d
-from scipy.optimize import curve_fit 
 
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
@@ -34,40 +33,6 @@ def sum_dict(dict1, dict2):
         else:
             new[k] = dict2[k]
     return new
-
-
-# -----------------------------------------------------------------------------
-# peak evaluation
-# -----------------------------------------------------------------------------
-
-def gaussian_function__(x, a, mu, sigma):
-    return a*np.exp(-(x-mu)**2/(2*sigma**2)) 
-
-def goodness_fitting__(y_orignal, y_fitted):                  # R^2 as goodness of fitting
-    return 1 - (np.sum((y_fitted-y_orignal)**2) / np.sum((y_orignal-np.mean(y_orignal))**2))
-
-def evaluate_gaussian_peak(mass_track, peak):
-    '''
-    Use Gaussian models to fit peaks, R^2 as goodness of fitting.
-    mass_track: {'id_number': k, 'mz': mz, 'rt_scan_numbers': [..], 'intensity': [..]}
-    Peak: {'parent_masstrace_id': 2812, 'mz': 359.9761889867791, 'apex': 91.0, 'height': 491241.0, 'left_base': 49.0, 'right_base': 267.0}
-    return: goodness_fitting
-    '''
-    goodness_fitting = 0
-    xx = mass_track['rt_scan_numbers'][peak['left_index']: peak['right_index']+1]
-    yy = mass_track['intensity'][peak['left_index']: peak['right_index']+1]
-    # set initial parameters
-    a, mu, sigma =  peak['height'], peak['apex'], np.std(xx)
-    try:
-        popt, pcov = curve_fit(gaussian_function__, xx, yy, p0=[a, mu, sigma])
-        goodness_fitting = goodness_fitting__( yy, gaussian_function__(xx, *popt))
-    # failure to fit
-    except (RuntimeError, ValueError):
-        # about 50 occurancies on one dataset # print(peak['parent_masstrace_id'], peak['apex'])
-        goodness_fitting = 0
-
-    return goodness_fitting
-
 
 # -----------------------------------------------------------------------------
 # indexing function
@@ -365,11 +330,14 @@ def rt_lowess_calibration(good_landmark_peaks, selected_reference_landmark_peaks
 
     xx += [L[0] for L in rt_cal] + [rt_rightend_]*3
     yy += [L[1] for L in rt_cal] + [rt_rightend_]*3
-    # float conversion on xvals is to bypass a bug in statsmodels, which was fixed today 2022-01-27
-    lowess_predicted = lowess(yy, xx, frac= .2, it=1, xvals=np.array(sample_rt_numbers, dtype=float)) 
-    # lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=1, xvals=full_rt_range)
-
     
+    # This requires statsmodels > v 0.12.
+    # float conversion on xvals is to bypass a bug in statsmodels, which was fixed today 2022-01-27
+    #lowess_predicted = lowess(yy, xx, frac= .2, it=1, xvals=np.array(sample_rt_numbers, dtype=float)) 
+    #
+    # downgrade now for compatibility to older statsmodels
+    lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=1, xvals=sample_rt_numbers)
+
     # Force min as 0
     rt_cal_dict = dict(zip( sample_rt_numbers, [int(round(max(ii,0),ndigits=None)) for ii in lowess_predicted] ))
     interf = interpolate.interp1d(lowess_predicted, sample_rt_numbers, fill_value="extrapolate")
@@ -378,7 +346,6 @@ def rt_lowess_calibration(good_landmark_peaks, selected_reference_landmark_peaks
     reverse_rt_cal_dict = dict(zip( reference_rt_numbers, [int(round( max(ii,0) , ndigits=None)) for ii in ref_interpolated] ))
     
     return rt_cal_dict, reverse_rt_cal_dict
-
 
 
 def __hacked_lowess__(yy, xx, frac, it, xvals):
@@ -437,5 +404,4 @@ def smooth_rt_intensity_remap(L_rt_scan_numbers, L_intensity):
     for ii in newx[1: -1]:
         _d[ii] = (_d[ii-1]+_d[ii]+_d[ii+1])/3.0
     return _d
-
 

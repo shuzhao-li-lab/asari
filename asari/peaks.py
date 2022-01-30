@@ -1,5 +1,6 @@
 '''
-Mass traces (i.e. XIC, EIC or chromatogram) and peaks are not instanced as classes in 
+While classes are provided in metDataModel, 
+mass tracks (i.e. XIC, EIC or chromatogram) and peaks are not instanced as classes in asari
 internal processing for efficiency.
 XICs as [( mz, rtlist, intensities ), ...].
 Peak format: 
@@ -7,159 +8,176 @@ Peak format:
     'id_number': 0, 'mz', 'apex', 'left_base', 'right_base', 'height', 'parent_masstrace_id', 
     'rtime', 'peak_area', 'goodness_fitting'
 }
-
-
-To further refine peak detection, 
-    e.g. extra iteration  better deconvolution of overlapping peaks - to determine across samples.
-
-def find_peaks_with_snr(list_intensity):
-    pass
-
-
-
 '''
 
 import numpy as np
 from scipy.signal import find_peaks 
 from scipy.optimize import curve_fit 
 
-from metDataModel.core import MassTrace, Peak
+from .chromatograms import *
 
-from .utils import *
-
-
-
-
-
-
-
-#
 # -----------------------------------------------------------------------------
-#
+# peak evaluation
+# -----------------------------------------------------------------------------
 
+def gaussian_function__(x, a, mu, sigma):
+    return a*np.exp(-(x-mu)**2/(2*sigma**2)) 
 
+def goodness_fitting__(y_orignal, y_fitted):                  # R^2 as goodness of fitting
+    return 1 - (np.sum((y_fitted-y_orignal)**2) / np.sum((y_orignal-np.mean(y_orignal))**2))
 
-
-
-
-
-
-
-
-# peak detection is in this class
-class ext_MassTrace(MassTrace):
+def evaluate_gaussian_peak(mass_track, peak):
     '''
-
-    Extending metDataModel.core.MassTrace
-    Peak detection using scipy.signal.find_peaks, a local maxima method with prominence control.
-    Not keeping Peaks in this class; Peaks are attached to Sample, then to store in SQLite (next version).
-
-
-        Useful to have a 2nd rule on prominence; can mark for review during correspondence.
-        
+    Use Gaussian models to fit peaks, R^2 as goodness of fitting.
+    mass_track: {'id_number': k, 'mz': mz, 'rt_scan_numbers': [..], 'intensity': [..]}
+    Peak: {'parent_masstrace_id': 2812, 'mz': 359.9761889867791, 'apex': 91.0, 'height': 491241.0, 'left_base': 49.0, 'right_base': 267.0}
+    return: goodness_fitting
     '''
-    def __init2__(self, mz, RT, INTS):
-        # np.array or list -
-        self.mz, self.list_retention_time, self.list_intensity = [mz, RT, INTS]
-        # self.cal_list_retention_time = []             # not using now
-        self.formula_mass = None
-        self.raw_mzs = []                               # multiple values possible when merging traces
-        self.__mass_corrected_by_asari__ = False        # True if updated by calibration
-        self.features_assigned = False                  # tracking if assigned to Experiment features
-        self.sample_name = ''
+    goodness_fitting = 0
+    xx = mass_track['rt_scan_numbers'][peak['left_index']: peak['right_index']+1]
+    yy = mass_track['intensity'][peak['left_index']: peak['right_index']+1]
+    # set initial parameters
+    a, mu, sigma =  peak['height'], peak['apex'], np.std(xx)
+    try:
+        popt, pcov = curve_fit(gaussian_function__, xx, yy, p0=[a, mu, sigma])
+        goodness_fitting = goodness_fitting__( yy, gaussian_function__(xx, *popt))
+    # failure to fit
+    except (RuntimeError, ValueError):
+        # about 50 occurancies on one dataset # print(peak['parent_masstrace_id'], peak['apex'])
+        goodness_fitting = 0
 
-    def detect_peaks(self, min_intensity_threshold, min_fwhm, min_prominence_threshold, prominence_window, gaussian_shape, snr):
+    return goodness_fitting
+
+
+# -----------------------------------------------------------------------------
+# peak detection
+# -----------------------------------------------------------------------------
+
+
+def detect_peaks_cmap_( mass_track, 
+                min_intensity_threshold=10000, min_fwhm=3, min_prominence_threshold=5000, wlen=50, 
+                snr=3, min_prominence_ratio=0.1, iterations=2):
+    '''
+    Peak detection on composite mass tracks; because this is at Experiment level, these are deemed as features.
+    Mass tracks are expected to be continuous per m/z value, with 0s for gaps.
+
+    Input
+    =====
+    mass_track: {'id_number': k, 'mz': mz, 'rt_scan_numbers': [..], 'intensity': [..]}
+    iterations: default 2, must >=1. Number of iterations of peak detection; each done on remaining data points.
+                The 2nd iteration may catch small peaks overshadowed by big ones. No clear need to go over 2.
+    snr: signal to noise ratio. 
+    min_prominence_ratio: require ratio of prominence relative to peak height.
+    wlen: impacts the peak detection window. Peak boundaries should be re-examined in noisy tracks.
+
+    Return list of peaks. 
+    Reported left/right bases are not based on Gaussian shape or similar, just local maxima.
+    Prominence has a key control of how peaks are considered, but peak shape evaluation later can filter out most bad peaks.
+
+    peak area is integrated by summing up intensities of included scans.
+    Peak area and height are cumulated from all samples. Not trying to average because some peaks are only few samples.
+
+
+    # take noise level as bottom 10%
+
+
+    Peak format: {
+        'id_number': 0, 'mz', 'apex', 'left_base', 'right_base', 'height', 'parent_masstrace_id', 
+        'rtime', 'peak_area', 'goodness_fitting'
+    }
+    '''
+    list_peaks = []
+    # peak_data_points = []
+    list_intensity = mass_track['intensity']
+    new_list_intensity = list_intensity.copy()                              # to substract peaks on the go
+    prominence = max(min_prominence_threshold, 
+                    min_prominence_ratio * max(list_intensity))               # larger prominence gets cleaner data
+    peaks, properties = find_peaks(list_intensity, height=min_intensity_threshold, width=min_fwhm, 
+                                                    prominence=prominence, wlen=wlen) 
+    
+    # if > 2 peaks, go to optimization directly?
+    # else: step wise
+    
+
+
+    
+    for ii in range(peaks.size):
+        list_peaks.append(convert_peak_json__(ii, mass_track, peaks, properties))
+        for jj in range(properties['left_bases'][ii], properties['right_bases'][ii]+1):
+            new_list_intensity[jj] = 0
+
+    # new iterations by lowering prominence
+    for iter in range(iterations-1): 
+        prominence = max(min_prominence_threshold, min_prominence_ratio * max(new_list_intensity))
+        peaks, properties = find_peaks(new_list_intensity, height=min_intensity_threshold, width=min_fwhm, 
+                                                        prominence=prominence, wlen=wlen) 
+        for ii in range(peaks.size):
+            list_peaks.append(convert_peak_json__(ii, mass_track, peaks, properties))
+            for jj in range(properties['left_bases'][ii], properties['right_bases'][ii]+1):
+                new_list_intensity[jj] = 0
+
+    _noise_level_ = [x for x in new_list_intensity if x]                        # count non-zero values
+    
+    # smooth noisy data, i.e. when >2 initial peaks are detected
+    if len(list_peaks) > 2:
         list_peaks = []
-        peaks, properties = find_peaks(self.list_intensity, height=min_intensity_threshold, width=min_fwhm, 
-                                                        prominence=min_prominence_threshold, wlen=prominence_window) 
-        # This is noise estimate, but doesn't have to correspond to final list of peaks
-        _noise_level_ = self.__get_noise_level__(peaks, properties)
-        if peaks.size > 1:
-            # Rerun, raising min_prominence_threshold. Not relying on peak shape for small peaks, 
-            # because chromatography is often not good so that small peaks can't be separated from noise.
-            _tenth_height = 0.1* max(self.list_intensity)
-            min_prominence_threshold = max(min_prominence_threshold, _tenth_height)
-            peaks, properties = find_peaks(self.list_intensity, height=min_intensity_threshold, width=min_fwhm, 
-                                                        prominence=min_prominence_threshold, wlen=prominence_window)
-        
+        new_list_intensity = smooth_moving_average(list_intensity)
+
+        prominence = max(min_prominence_threshold, min_prominence_ratio * max(new_list_intensity))
+        peaks, properties = find_peaks(new_list_intensity, height=min_intensity_threshold, width=min_fwhm, 
+                                                        prominence=prominence, wlen=wlen) 
         for ii in range(peaks.size):
-            if properties['peak_heights'][ii] > snr*_noise_level_:
-                P = ext_Peak()
-                # scipy.signal.find_peaks works on 1-D array. RT coordinates need to be added back.
-                P.__init2__(parent_mass_trace=self, mz = self.mz, apex = peaks[ii],
-                                peak_height = properties['peak_heights'][ii], left_base = properties['left_bases'][ii],
-                                right_base = properties['right_bases'][ii])
-                P.evaluate_peak_model()
-                if P.goodness_fitting > gaussian_shape:
-                    list_peaks.append(P)
+            list_peaks.append(convert_peak_json__(ii, mass_track, peaks, properties))
 
-        return list_peaks
+    # control snr
+    if _noise_level_:
+        _noise_level_ = np.mean(_noise_level_)   # mean more stringent than median
+        list_peaks = [P for P in list_peaks if P['height'] > snr * _noise_level_]
 
-    def extract_targeted_peak(self, rt_range):
-        pass
+    for peak in list_peaks:
+        # evaluate peak quality by goodness_fitting of Gaussian model
+        peak['goodness_fitting'] = evaluate_gaussian_peak(mass_track, peak)
 
-    def __get_noise_level__(self, peaks, properties):
-        peak_data_points = []
-        for ii in range(peaks.size):
-            peak_data_points += range(properties['left_bases'][ii], properties['right_bases'][ii]+1)
-        noise_data_points = [ii for ii in range(len(self.list_intensity)) if ii not in peak_data_points]
-        if noise_data_points:
-            return np.median([self.list_intensity[ii] for ii in noise_data_points])
-        else:
-            return 0
+    return list_peaks
 
 
-# peak evaluation is in this class
-class ext_Peak(Peak):
+def convert_peak_json__( ii, mass_track, peaks, properties):
+    '''peaks, properties as from find_peaks; rt_numbers from mass_track
     '''
-    Extending metDataModel.core.Peak, 
-    
-    including pointer to parent MassTrace.
-    
-    Not storing RT or intensity arrays, but looking up in MassTrace if needed.
+    rt_numbers  = mass_track['rt_scan_numbers']
+    left_index, right_index = properties['left_bases'][ii], properties['right_bases'][ii]   # index positions on mass track
+    left_base, right_base = rt_numbers[left_index], rt_numbers[right_index]
+    peak_area = sum(mass_track['intensity'][left_index: right_index+1]) 
+    return {
+            'parent_masstrack_id': mass_track['id_number'],
+            'mz': mass_track['mz'],
+            'apex': rt_numbers[peaks[ii]], 
+            # 'rtime': rt_numbers[peaks[ii]], 
+            'peak_area': peak_area,
+            'height': properties['peak_heights'][ii],
+            'left_base': left_base,                                                         # rt_numbers
+            'right_base': right_base,   
+            'left_index': left_index,                                                       # specific to the referred mass track
+            'right_index': right_index,
+    }
+
+
+def quick_detect_unique_elution_peak(rt_numbers, list_intensity, 
+                            min_intensity_threshold=100000, min_fwhm=3, min_prominence_threshold_ratio=0.2):
+    '''Quick peak detection, only looking for highest peak with high prominence.
+    This is used for quick check on good peaks, or selecting landmarks for alignment purposes.
+    rt_numbers, list_intensity are matched vectors from a mass trace/track.
     '''
-    def __init2__(self, parent_mass_trace, mz, apex, peak_height, left_base, right_base):
-        [ self.parent_mass_trace, 
-        self.mz, self.apex, self.peak_height, self.left_base, self.right_base
-                ] = [ parent_mass_trace, mz, apex, peak_height, left_base, right_base ]
+    max_intensity = max(list_intensity)
+    prominence = min_prominence_threshold_ratio * max_intensity
+    unique_peak = None
+    if max_intensity > min_intensity_threshold:
+        peaks, properties = find_peaks(list_intensity, height=min_intensity_threshold, width=min_fwhm, 
+                                                        prominence=prominence) 
+        if peaks.size == 1:
+            unique_peak = {
+                'apex': rt_numbers[peaks[0]], 
+                'height': properties['peak_heights'][0], # not used now
+            }
+    return unique_peak
 
-        self.left_rtime = float(self.parent_mass_trace.list_retention_time[left_base])
-        self.right_rtime = float(self.parent_mass_trace.list_retention_time[right_base])
-
-    def evaluate_peak_model(self):
-        '''
-        Use Gaussian models to fit peaks, R^2 as goodness of fitting.
-        Peak area is defined by Gaussian model, the integral of a Gaussian function being a * c *sqrt(2*pi).
-        Good: Left to right base may not be full represenation of the peak. The Gaussian function will propose a good boundary.
-        Less good: peaks are not always in Gaussian shape. But we are comparing same features across samples, 
-        same bias in peak shape is applied to all samples.
-        '''
-        xx = self.parent_mass_trace.list_retention_time[self.left_base: self.right_base+1]
-        # set initial parameters
-        a, mu, sigma =  self.peak_height, \
-                        self.parent_mass_trace.list_retention_time[self.apex], \
-                        np.std(xx)
-        try:
-            popt, pcov = curve_fit(gaussian_function__, 
-                            xx, self.parent_mass_trace.list_intensity[self.left_base: self.right_base+1],
-                            p0=[a, mu, sigma])
-            self.gaussian_parameters = popt
-            self.rtime = popt[1]
-            self.peak_area = popt[0]*abs(popt[2])*2.506628274631        # abs because curve_fit may return negative sigma
-            self.goodness_fitting = goodness_fitting__(
-                            self.parent_mass_trace.list_intensity[self.left_base: self.right_base+1], 
-                            gaussian_function__(xx, *popt))
-
-        # failure to fit
-        except RuntimeError:
-            self.rtime = mu
-            self.peak_area = a*sigma*2.506628274631
-            self.goodness_fitting = 0
-
-    def extend_model_range(self):
-        # extend model xrange, as the initial peak definition may not be complete, for visualization
-        _extended = self.right_base - self.left_base
-        # negative index does not work here, thus max to 0
-        self.rt_extended = self.parent_mass_trace.list_retention_time[
-                                            max(0, self.apex-_extended): self.apex+_extended]
-        self.y_fitted_extended = gaussian_function__(self.rt_extended, *self.gaussian_parameters)

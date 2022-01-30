@@ -1,11 +1,5 @@
 '''
-
-A few common data structures here:
-
-For two m/z list comparison:
-[(mz, list_origin, index_origin), ...]
-
-
+Functions related to mass operations.
 
 to try performance optimization w/
 numba JITC
@@ -16,12 +10,8 @@ numba JITC
 import numpy as np
 from scipy.signal import find_peaks 
 
-
-
-from collections import namedtuple
-# from scipy.stats import norm as normal_distribution
-
 from .search import *
+
 
 def flatten_tuplelist(L):
     '''Reformat [(a,b), ...] to [a, b, ...], keep unique entries'''
@@ -38,6 +28,7 @@ def check_close_mzs(mzlist, ppm_tol=5):
             warning.append( (ii, ii-1) ) # (mzlist[ii], mzlist[ii-1]) )
 
     return warning
+
 
 def calculate_selectivity(sorted_mz_list, std_ppm=5):
     '''
@@ -103,7 +94,6 @@ def bin_by_median(List_of_tuples, func_tolerance):
     for L in new:
         PL.append([X[1] for X in L])
     return PL
-
 
 
 # can be numba optimized
@@ -315,33 +305,18 @@ def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks,
     return new_reference_mzlist, new_reference_map2, REF_landmarks, _r
 
 
-def quick_detect_unique_elution_peak(rt_numbers, list_intensity, 
-                            min_intensity_threshold=100000, min_fwhm=3, min_prominence_threshold_ratio=0.2):
-    '''Quick peak detection, only looking for highest peak with high prominence.
-    This is used for quick check on good peaks, or selecting landmarks for alignment purposes.
-    rt_numbers, list_intensity are matched vectors from a mass trace/track.
-    '''
-    max_intensity = max(list_intensity)
-    prominence = min_prominence_threshold_ratio * max_intensity
-    unique_peak = None
-    if max_intensity > min_intensity_threshold:
-        peaks, properties = find_peaks(list_intensity, height=min_intensity_threshold, width=min_fwhm, 
-                                                        prominence=prominence) 
-        if peaks.size == 1:
-            unique_peak = {
-                'apex': rt_numbers[peaks[0]], 
-                'height': properties['peak_heights'][0], # not used now
-            }
-    return unique_peak
 
 
-
-#
 # -----------------------------------------------------------------------------
 #
 # Not used now
 # -----------------------------------------------------------------------------
 
+
+
+from collections import namedtuple
+
+# from scipy.stats import norm as normal_distribution
 
 
 # feature id will be assigned at the end; intensities is a list; mass_id links to MassTrace

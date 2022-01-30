@@ -1,43 +1,9 @@
 '''
-asari, LC-MS metabolomics data preprocessing - trackable, scalable.
-
-In the asari/mummichog packages, the data entities are presented in any of the four types: 
-class, namedtuple, JSON style dictionary or implicit list. 
-The implicit lists are used sparely as they have reduced clarity. 
-Namedtuple is immutable, then limited applications. 
-In-memory searches are conducted using indexed dictionaries or dataframes.
-
 SimpleSample is used by default asari workflow. 
 For different purposes, one can use Sample or other classes.
 
-Data formats:
-===============
-mass tracks as [( mz, rtlist, intensities ), ...].
-Peak format: 
-{
-    'id_number': 0, 'mz', 'apex', 'left_base', 'right_base', 'height', 'parent_masstrace_id', 
-    'rtime', 'peak_area', 'goodness_fitting'
-}
-isotopic_patterns = [(1.003355, 'M(13C)', 0, 0.2), ...]
-
-Mass Tracks
-===========
-They are used for full RT ranges, thus each mass track has a unique m/z. 
-Some chromatogram builders separate the mass traces if there are gaps in RT scans, 
-but that creates complexity in m/z alignment and searches. 
-
-Peak detection
-==============
-The main step uses scipy.signal.find_peaks, a local maxima method with prominence control.
-Prominence is important, but it should be more tailored to individual peaks. 
-Here, 
-prominence = max(min_prominence_threshold, 0.05*max(list_intensity)).
-
-
 '''
 import os
-# import random
-import numpy as np
 
 from pyopenms import MSExperiment, MzMLFile
 
@@ -139,6 +105,7 @@ class SimpleSample:
         # warnings = check_close_mzs([x['mz'] for x in self.list_mass_tracks], mz_tolerance_ppm)
         # print("Warning - some mass tracks are too close to each other: ", len(warnings), warnings[:5])
 
+
     def get_anchor_mz_pairs(self):
         '''
         This will be dependent on ion mode
@@ -163,4 +130,3 @@ class SimpleSample:
 
         with open(outfile, 'w') as O:
             O.write( '\t'.join(header) + '\n' + '\n'.join( peaklist ) + '\n' )
-
