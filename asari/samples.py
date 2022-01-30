@@ -36,10 +36,8 @@ prominence = max(min_prominence_threshold, 0.05*max(list_intensity)).
 
 '''
 import os
-import random
+# import random
 import numpy as np
-# from scipy.signal import find_peaks 
-# from scipy import interpolate
 
 from pyopenms import MSExperiment, MzMLFile
 
@@ -49,7 +47,7 @@ from .chromatograms import extract_massTracks_        # extract_massTraces,
 from .mass_functions import *
 from .sql import *
 
-from .constructors import epdsConstructor
+# from .constructors import epdsConstructor
 
 
 class SimpleSample:
@@ -137,7 +135,7 @@ class SimpleSample:
                 } )
             ii += 1
 
-        print("Processing %s, found %d mass tracks." %(self.input_file, ii))
+        print("Processing %s, found %d mass tracks." %(os.path.basename(self.input_file), ii))
         # For diagnosis only - check m/z split
         # warnings = check_close_mzs([x['mz'] for x in self.list_mass_tracks], mz_tolerance_ppm)
         # print("Warning - some mass tracks are too close to each other: ", len(warnings), warnings[:5])
@@ -146,10 +144,24 @@ class SimpleSample:
         '''
         This will be dependent on ion mode
 
-
         update self.get_anchor_mz_pairs
         e.g. [(5, 8), (6, 13), (17, 25), (20, 27), ...]
         '''
         self.anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(self.list_mass_tracks, mz_tolerance_ppm=5)
         self._number_anchor_mz_pairs_ = len(self.anchor_mz_pairs)
         
+
+    def export_mass_traces(self):
+        '''
+         for diagnosis etc.
+        '''
+        outfile = os.path.join(self.experiment.output_dir, 
+                            os.path.basename(self.input_file).replace('.mzML', '.peaklist') )
+        header = ['m/z', 'retention time', 'area', 'shape_quality', 'gaussian_amplitude', 'gaussian_variance', 'mz_selectivity']
+        peaklist = []
+        for P in self.list_mass_tracks:
+            peaklist.append(str(P))
+
+        with open(outfile, 'w') as O:
+            O.write( '\t'.join(header) + '\n' + '\n'.join( peaklist ) + '\n' )
+

@@ -35,7 +35,8 @@ def check_close_mzs(mzlist, ppm_tol=5):
         _tolerance = mzlist[ii] * ppm_tol * 0.000001
         _d = mzlist[ii] - mzlist[ii-1]
         if _d < _tolerance:
-            warning.append( (mzlist[ii], mzlist[ii-1]) )
+            warning.append( (ii, ii-1) ) # (mzlist[ii], mzlist[ii-1]) )
+
     return warning
 
 def calculate_selectivity(sorted_mz_list, std_ppm=5):
@@ -59,6 +60,8 @@ def calculate_selectivity(sorted_mz_list, std_ppm=5):
     def __sel__(x, std_ppm=std_ppm): 
         if x > 100:         # too high, not bother
             return 1
+        elif x < 0.1:
+            return 0
         else:
             return 1 - np.exp(-x/std_ppm)
 
@@ -292,6 +295,9 @@ def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks,
             std_ppm)
 
     list2_unmapped = [indices_remaining2[ii] for ii in list2_unmapped]
+    #
+    # Here we can have a few peaks that should have been merged during extraction of mass tracks
+    #
     mapped_pairs = mapped + [ ( indices_remaining1[x[0]], indices_remaining2[x[1]] ) for x in mapped2 ]
     print("mapped pairs = %d / %d " %(len(mapped_pairs), len(SM_mzlist)))
     for p in mapped_pairs: 

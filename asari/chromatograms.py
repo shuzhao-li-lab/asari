@@ -23,6 +23,8 @@ from scipy.optimize import curve_fit
 
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
+from .mass_functions import check_close_mzs
+
 
 def sum_dict(dict1, dict2):
     new = {}
@@ -96,6 +98,7 @@ def get_thousandth_regions(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_t
             
     tol_ = 0.000001 * mz_tolerance_ppm
     number_spectra = ms_expt.getNrSpectra()
+
     alldata = []
     for ii in range(number_spectra):
         if ms_expt[ii].getMSLevel() == 1:                               # MS Level 1 only
@@ -156,7 +159,8 @@ def extract_massTraces(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timep
     good_bins = get_thousandth_regions(ms_expt, mz_tolerance_ppm, min_intensity, min_timepoints)
     xics = []
     for bin in good_bins:
-        xics += bin_to_xics(bin, mz_tolerance_ppm, gap_allowed=2, min_timepoints=5)
+        xics += bin_to_xics(
+                bin, mz_tolerance_ppm, gap_allowed=2, min_timepoints=5)
         
     return {
         'rt_numbers': rt_numbers,
@@ -166,7 +170,7 @@ def extract_massTraces(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timep
 
 def bin_to_xics(bin_data_tuples, mz_tolerance_ppm=5, gap_allowed=2, min_timepoints=5):
     '''
-    input a flexible bin by units of 0.001 amu, in format of [(mz_int, scan_num, intensity_int), ...].
+    input a flexible bin by units of 0.001 amu, in format of [(mz, scan_num, intensity_int), ...].
     return XICs as [( mz, rtlist, intensities ), ...]
     '''
     bin_data_tuples.sort()   # by m/z, ascending
@@ -180,7 +184,7 @@ def bin_to_xics(bin_data_tuples, mz_tolerance_ppm=5, gap_allowed=2, min_timepoin
         # example hist: array([  8,   33,  11,  24,  31,  50,  81, 164, 269,  28,   7])
         hist_starts = [0] + [hist[:ii].sum() for ii in range(1,num_steps+1)]
         # find_peaks returns e.g. array([ 1, 8]), {}. distance=3 because it's edge of tolerance
-        peaks, _ = find_peaks(hist, distance=3)
+        peaks, _ = find_peaks(hist, distance=5)
         if peaks.any():
             XICs = []
             for p in peaks:
@@ -234,8 +238,6 @@ def extract_massTracks_(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_time
     return 
     rt_numbers, rt_times,
     tracks as [( mz, rtlist, intensities ), ...]
-
-    To-do: check how rtlist becomes float numbers while they should be integers.
     '''
     # rt_numbers = range(ms_expt.getNrSpectra())
     rt_times = [spec.getRT() for spec in ms_expt]
@@ -244,38 +246,55 @@ def extract_massTracks_(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_time
     tracks = []
     for bin in good_bins:
         tracks += bin_to_mass_tracks(bin, mz_tolerance_ppm)
-        
+    #
+    # merge tracks if m/z overlap
+    #
+    tracks.sort()
+    merged, to_remove = [], []
+    tracks_to_merge = check_close_mzs([x[0] for x in tracks], mz_tolerance_ppm)
+    # this returns [(ii, ii-1), ...]
+    for (a,b) in tracks_to_merge:
+        merged.append( merge_two_mass_tracks(tracks[a], tracks[b]) )
+        to_remove += [a, b]
+
+    updated_tracks = [tracks[ii] for ii in range(len(tracks)) if ii not in to_remove] + merged
     return {
         'rt_numbers': rt_numbers,
         'rt_times': rt_times,
-        'tracks': tracks,
+        'tracks': updated_tracks,
     }
 
 def extract_single_track_(bin):
     '''
     A mass track is an EIC for full RT range, without separating the mass traces. 
     input bins in format of [(mz_int, scan_num, intensity_int), ...].
-    RT gaps are filled by zeros to create one continuous trace, to be used for later peak detection.
-    return a massTrack as ( mz, rtlist, intensities ), using continuous RT numbers.
+
+    For peak detection, we need RT as one continuous trace (RT gaps filled by zeros).
+    Peak detection is performed at sample level when landmarks are sought, 
+    but CMAP.MassGrid has its own more careful peak deteciton.
+    
+    return a massTrack as ( mz, rtlist, intensities ).
     '''
     mz = np.mean([x[0] for x in bin])
+    # bin.sort(key=itemgetter(1))   # sort by increasing RT (scan number), not needed any more
     rtlist = [x[1] for x in bin]
     min_rt, max_rt = min(rtlist), max(rtlist)
     rtlist = range(min_rt, max_rt+1)    # filling gaps of RT this way if needed, and sorted
-    # bin.sort(key=itemgetter(1))   # sort by increasing RT (scan number), not needed any more
     _d = {}                             # dict to hold rt to intensity mapping
     for ii in rtlist: 
         _d[ii] = 0
     for r in bin:                       # this gets max intensity on the same RT scan
         _d[r[1]] = max(r[2], _d[r[1]])
     intensities = [_d[x] for x in rtlist]
-    # range object is not desired - use list
-    return ( mz, list(rtlist), intensities )
+    return ( mz, list(rtlist), intensities ) # range object is not desired - use list
+
 
 def bin_to_mass_tracks(bin_data_tuples, mz_tolerance_ppm=5):
     '''
-    input a flexible bin by units of 0.001 amu, in format of [(mz_int, scan_num, intensity_int), ...].
+    input a flexible bin by units of 0.001 amu, in format of [(mz, scan_num, intensity_int), ...].
     A mass track is an EIC for full RT range, without separating the mass traces. 
+    An optimization step is carried out in CMAP.MassGrid, to verify m/z separation.
+
     return massTracks as [( mz, rtlist, intensities ), ...]
     '''
     bin_data_tuples.sort()   # by m/z, ascending
@@ -284,15 +303,16 @@ def bin_to_mass_tracks(bin_data_tuples, mz_tolerance_ppm=5):
     if mz_range < mz_tolerance:
         return [extract_single_track_(bin_data_tuples)]
     else:
-        num_steps = int(5*mz_range/mz_tolerance)     # step in 1/5 mz_tolerance
+        num_steps = int( 5* mz_range/ mz_tolerance )     # step in 1/5 mz_tolerance
         hist, bin_edges = np.histogram([x[0] for x in bin_data_tuples], num_steps)
         # example hist: array([  8,   33,  11,  24,  31,  50,  81, 164, 269,  28,   7])
         hist_starts = [0] + [hist[:ii].sum() for ii in range(1,num_steps+1)]
-        # find_peaks returns e.g. array([ 1, 8]), {}. distance=3 because it's edge of tolerance
-        peaks, _ = find_peaks(hist, distance=3)
+        # find_peaks returns e.g. array([ 1, 8]), {}. distance=5 because it's edge of tolerance
+        peaks, _ = find_peaks( hist, distance = 5 )
         if peaks.any():
             tracks = []
             for p in peaks:
+
                 left = max(0, p-2)
                 right = min(p+3, num_steps)
                 tracks.append( extract_single_track_(bin_data_tuples[hist_starts[left]: hist_starts[right]]) )
@@ -302,6 +322,14 @@ def bin_to_mass_tracks(bin_data_tuples, mz_tolerance_ppm=5):
             left = max(0, peak-2)
             right = min(peak+3, num_steps)
             return [extract_single_track_(bin_data_tuples[hist_starts[left]: hist_starts[right]])]
+
+def merge_two_mass_tracks(T1, T2):
+    '''
+    massTracks as [( mz, rtlist, intensities ), ...]
+    '''
+    mz = 0.5 * (T1[0] + T2[0])
+    d_ = sum_dict( dict(zip(T1[1], T1[2])), dict(zip(T2[1], T2[2])) )
+    return (mz, list(d_.keys()), list(d_.values()))
 
 
 

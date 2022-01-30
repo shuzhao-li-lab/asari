@@ -50,7 +50,7 @@ def read_project_dir(directory, file_pattern='.mzML'):
     This reads centroided LC-MS files.
     For OpenMS based XIC workflow, file_pattern='chrom.mzML'.
     '''
-    print("\nWorking on ", directory)
+    print("Working on ~~ %s ~~ \n\n" %directory)
     return [os.path.join(directory, f) for f in os.listdir(directory) if file_pattern in f]
 
 def metafile_to_dict(infile):

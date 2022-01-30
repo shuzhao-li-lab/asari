@@ -76,17 +76,8 @@ class ext_Experiment(Experiment):
         #      start DB after init
         
         self.CMAP = CompositeMap(self)
-        initiation_Samples = self.process_initiation_samples()
-        self.CMAP.initiate_mass_grid( initiation_Samples )
+        self.CMAP.construct_mass_grid( self.process_initiation_samples() )
 
-        print("Done initiation_Samples. \n\n")
-        for f in self.list_input_files:                                 # run remaining samples, 
-            if f not in self.initiation_samples:
-                SM = self.process_single_sample(f)
-                # not via DB
-                self.CMAP.add_sample(SM)
-
-        self.CMAP.optimize_mass_grid()
         self.CMAP.MassGrid.to_csv("__test_mass_grid.csv")
         
         self.CMAP.align_retention_time()
@@ -103,16 +94,13 @@ class ext_Experiment(Experiment):
 
 
     def process_initiation_samples(self):
-        init_sm = [self.process_single_sample(f) for f in self.initiation_samples]
-        # order by number of mass tracks
-        init_sm = sorted([(SM._number_anchor_mz_pairs_, SM) for SM in init_sm if SM], reverse=True)
-        return [x[1] for x in init_sm]
+        return [self.process_single_sample(f) for f in self.initiation_samples]
 
     def process_single_sample(self, input_file):
         '''
         Some parameters can be automatically determined here.
 
-        To add DB function in HERE
+        To add DB function HERE ??
         '''
         try:
             SM = SimpleSample(self, self.mode, input_file)
@@ -124,6 +112,7 @@ class ext_Experiment(Experiment):
             print("Input error in sample %s, dropped from processing." %input_file)
             return None
         
+
     def __choose_initiation_samples__(self, N=3):
         '''
 
@@ -152,7 +141,6 @@ class ext_Experiment(Experiment):
 
 
     def annotate(self):
-
 
 
         pass

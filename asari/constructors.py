@@ -26,6 +26,7 @@ from .utils import *
 from .sql import *
 '''
 
+import os
 import pandas as pd
 
 from .search import *
@@ -86,11 +87,20 @@ class CompositeMap:
         self.reference_mzdict = {}
         self.composite_mass_tracks = {}             # following MassGrid indices
 
-        
-        
 
-    def initiate_mass_grid(self, list_samples, recalculate_ref=False):
+    def construct_mass_grid(self, init_Samples):
+        self.initiate_mass_grid(init_Samples)
+        # print("Done initiation_Samples.\n")
+        for f in self.list_input_files:                                 # run remaining samples, 
+            if f not in self.experiment.initiation_samples:
+                SM = self.experiment.process_single_sample(f)
+                # not via DB
+                self.add_sample(SM)
+
+
+    def initiate_mass_grid(self, init_samples):
         '''
+        Create MassGrid for whole experiment
         Use list_samples (list of Sample instances) to initiate MassGrid.
         Each Sample has list_mass_tracks and anchor_mz_pairs.
         The m/z of reference is taken as mean of these initiation samples (id_mz_str not updated). Afterwards, 
@@ -103,29 +113,25 @@ class CompositeMap:
         1. create a reference based on anchor pairs
         2. align each sample to the reference_anchor_pairs
 
-        MassGrid = {id_mz_str: [massTrack id, ...], ...}
-
-
-        keep both int index and str index; so that the ascending order is used in segmentations.
-
-        Do str index at the end; need sorting while aligning with new samples.
-
-        row_indices = [ (str(round(x['mz'], 4)), x['mz']) for x in list_samples[0].list_mass_tracks ] # index=row_indices,
-        self.reference_mzdict = dict(row_indices)
-        row_indices = [x[0] for x in row_indices]
-        for pair in list_samples[0].anchor_mz_pairs:
-            self.reference_anchor_pairs.append(( row_indices[pair[0]], row_indices[pair[1]] ))
-
-
         '''
-        # initiation using the first Sample
-        reference_sample = list_samples[0]
+        # initiation using the Sample of most _number_anchor_mz_pairs_
+        tmp, other_list_samples = [init_samples[0]], []
+        for SM in init_samples[1:]:
+            if SM._number_anchor_mz_pairs_ > tmp[0]._number_anchor_mz_pairs_:
+                other_list_samples.append(tmp[0])
+                tmp = [SM]
+            else:
+                other_list_samples.append(SM)
+
+        reference_sample = tmp[0]
+
         _d = dict(zip(reference_sample.rt_numbers, reference_sample.rt_numbers))
         reference_sample.rt_cal_dict = reference_sample.reverse_rt_cal_dict = _d
         self.reference_sample = self.experiment.reference_sample = reference_sample
         # note: other samples are aligned to this ref
 
-        print("Initiating MassGrid, ...", reference_sample.input_file)
+        print("Initiating MassGrid, ...\n    The reference sample is:\n    [[[ %s ]]]\n\n" %reference_sample.input_file)
+
         self.reference_anchor_pairs = reference_sample.anchor_mz_pairs
         self._mz_landmarks_ = flatten_tuplelist(reference_sample.anchor_mz_pairs)
         reference_mzlist = [ x['mz'] for x in reference_sample.list_mass_tracks ]
@@ -138,9 +144,11 @@ class CompositeMap:
         # Add ref mz as a column to MassGrid; ref mzlist will be dynamic updated in MassGrid["mz"]
         self.MassGrid['mz'] = reference_mzlist
         self.MassGrid[ reference_sample.input_file ] = [ x['id_number'] for x in reference_sample.list_mass_tracks ]
+        # self.reference_sample.export_mass_traces()
         
-        for SM in list_samples[1:]:
+        for SM in other_list_samples:
             self.add_sample(SM, database_cursor=None)
+
         
     def add_sample(self, sample, database_cursor=None):
         '''
@@ -154,10 +162,11 @@ class CompositeMap:
         But the recalculation should be based on calibrated m/z values so that they are consistent across samples.
 
         '''
-        print("Adding sample to MassGrid ", sample.input_file)
+        print("Adding sample to MassGrid ", os.path.basename(sample.input_file))
+
         mzlist = [x['mz'] for x in sample.list_mass_tracks]
         new_reference_mzlist, new_reference_map2, updated_REF_landmarks, _r = landmark_guided_mapping(
-                        list(self.MassGrid['mz']),   self._mz_landmarks_, mzlist, sample._mz_landmarks_)
+                                    list(self.MassGrid['mz']),   self._mz_landmarks_, mzlist, sample._mz_landmarks_)
         # print("_r = %f, new_reference_mzlist = %d" %(_r, len(new_reference_mzlist)))
 
         NewGrid = pd.DataFrame(
@@ -184,8 +193,9 @@ class CompositeMap:
         for split tracks in same samples, replace them by merged tracks and new id_numbers.
 
         to implement -
-
         For low-selectivity mass tracks, could do 2-D deconvolution.
+
+        Not really needed now, after mass_tracks in each sample are cleaned up for m/z overlap.
 
         '''
         # also check for empty tracks after composite?
@@ -207,14 +217,20 @@ class CompositeMap:
         The spline function will be recorded for each sample, 
         and applied to all RT scan numbers in the samples when used for CMAP construction.
         
+        print([p['ref_id_num'] for p in self.good_reference_landmark_peaks])
+        print(self.good_reference_landmark_peaks)
+
         '''
         self.good_reference_landmark_peaks = self.set_RT_reference()
-        # print([p['ref_id_num'] for p in self.good_reference_landmark_peaks])
         for SM in self.experiment.samples_nonreference:
             self.calibrate_sample_RT(SM)
         
 
-    def calibrate_sample_RT(self, sample, calibration_fuction=rt_lowess_calibration, MIN_PEAK_NUM=15):
+    def calibrate_sample_RT(self, 
+                                sample, 
+                                calibration_fuction=rt_lowess_calibration, 
+                                cal_peak_intensity_threshold=100000,
+                                MIN_PEAK_NUM=15):
         '''
         Calibrate retention time, via spline func, per sample
         Use anchor mass trakcs, do quick peak detection. Use tracks of single peaks for RT alignment.
@@ -236,7 +252,8 @@ class CompositeMap:
                 rt_numbers, list_intensity = this_mass_track['rt_scan_numbers'], this_mass_track['intensity']
                 # continuity in rt_scan_numbers is implemented in chromatograms.extract_single_track_ 
                 Upeak = quick_detect_unique_elution_peak(rt_numbers, list_intensity, 
-                            min_intensity_threshold=100000, min_fwhm=3, min_prominence_threshold_ratio=0.2)
+                            min_intensity_threshold=cal_peak_intensity_threshold, 
+                            min_fwhm=3, min_prominence_threshold_ratio=0.2)
                 if Upeak:
                     Upeak.update({'ref_id_num': ii})
                     good_landmark_peaks.append(Upeak)
@@ -257,7 +274,7 @@ class CompositeMap:
                                 %(sample.input_file, _NN))
 
 
-    def set_RT_reference(self):
+    def set_RT_reference(self, cal_peak_intensity_threshold=100000):
         '''
         Start with the referecne samples, usually set for an initial sample of most peaks.
         Do a quick peak detection for good peaks; use high selectivity m/z to avoid ambiguity in peak definitions.
@@ -271,11 +288,12 @@ class CompositeMap:
             if selectivities[ii] > 0.99:
                 ref_ii = self.MassGrid[self.reference_sample.input_file][self._mz_landmarks_[ii]]
                 if ref_ii:
-                    this_mass_track = self.reference_sample.list_mass_tracks[ ref_ii ]
+                    this_mass_track = self.reference_sample.list_mass_tracks[ int(ref_ii) ]
                     rt_numbers, list_intensity = this_mass_track['rt_scan_numbers'], this_mass_track['intensity']
                     # continuity in rt_scan_numbers is implemented in chromatograms.extract_single_track_ 
                     Upeak = quick_detect_unique_elution_peak(rt_numbers, list_intensity, 
-                                min_intensity_threshold=100000, min_fwhm=3, min_prominence_threshold_ratio=0.2)
+                                min_intensity_threshold=cal_peak_intensity_threshold, 
+                                min_fwhm=3, min_prominence_threshold_ratio=0.2)
                     if Upeak:
                         Upeak.update({'ref_id_num': self._mz_landmarks_[ii]}) # as in MassGrid index
                         good_reference_landmark_peaks.append(Upeak)
@@ -299,6 +317,11 @@ class CompositeMap:
         for _, mass_track in self.composite_mass_tracks.items():
             self.FeatureList +=  self.detect_peaks_cmap_( mass_track 
                     )           # to specify parameters here according to Experiment parameters
+
+        ii = 0
+        for peak in self.FeatureList:
+            ii += 1
+            peak['feature_id'] = 'F'+str(ii)
 
         self.generate_feature_table()
 
@@ -394,6 +417,8 @@ class CompositeMap:
         # if > 2 peaks, go to optimization directly?
         # else: step wise
         
+
+
         
         for ii in range(peaks.size):
             list_peaks.append(self.__convert_peak_json__(ii, mass_track, peaks, properties))
@@ -428,10 +453,7 @@ class CompositeMap:
             _noise_level_ = np.mean(_noise_level_)   # mean more stringent than median
             list_peaks = [P for P in list_peaks if P['height'] > snr * _noise_level_]
 
-        ii = 0
         for peak in list_peaks:
-            ii += 1
-            peak['feature_id'] = 'F'+str(ii)
             # evaluate peak quality by goodness_fitting of Gaussian model
             peak['goodness_fitting'] = evaluate_gaussian_peak(mass_track, peak)
             # peak['height'] = peak['height']/self._number_of_samples_
@@ -488,13 +510,11 @@ class CompositeMap:
             if not pd.isna(track_number):           # watch out dtypes
                 mass_track = sample.list_mass_tracks[ int(track_number) ]
                 left_base = sample.reverse_rt_cal_dict[peak['left_base']]
-
-
                 try:
                     right_base = sample.reverse_rt_cal_dict[peak['right_base']]
                 except KeyError:
                     right_base = max_rt_number
-                    print("Incompletely eluted peak at ", sample.input_file, mass_track['mz'])
+                    print("    [~warning~] elution peak incomplete at", os.path.basename(sample.input_file), mass_track['mz'])
 
                 for ii in range(len(mass_track['rt_scan_numbers'])):
                     if left_base <= mass_track['rt_scan_numbers'][ii] <= right_base:
