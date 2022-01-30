@@ -299,7 +299,7 @@ def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks,
     # Here we can have a few peaks that should have been merged during extraction of mass tracks
     #
     mapped_pairs = mapped + [ ( indices_remaining1[x[0]], indices_remaining2[x[1]] ) for x in mapped2 ]
-    print("mapped pairs = %d / %d " %(len(mapped_pairs), len(SM_mzlist)))
+    print("    mapped pairs = %d / %d " %(len(mapped_pairs), len(SM_mzlist)))
     for p in mapped_pairs: 
         _d2[p[0]] = p[1]
         # updating ref m/z here

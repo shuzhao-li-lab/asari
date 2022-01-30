@@ -130,7 +130,7 @@ class CompositeMap:
         self.reference_sample = self.experiment.reference_sample = reference_sample
         # note: other samples are aligned to this ref
 
-        print("Initiating MassGrid, ...\n    The reference sample is:\n    [[[ %s ]]]\n\n" %reference_sample.input_file)
+        print("\nInitiating MassGrid, ...\n    The reference sample is:\n    |* %s *|\n" %reference_sample.input_file)
 
         self.reference_anchor_pairs = reference_sample.anchor_mz_pairs
         self._mz_landmarks_ = flatten_tuplelist(reference_sample.anchor_mz_pairs)
@@ -208,17 +208,18 @@ class CompositeMap:
     def align_retention_time(self):
         '''
         Because RT will not match precisely btw samples, it's remapped to a common set of time coordinates.
-        Common algorithms incluce dynamic time warp (DTW). We use univariate spline here.
+        The default is a LOWESS algorith, while 
+        dynamic time warp (DTW) and univariate spline are also used in the field.
+
         Do alignment function using high-selectivity mass tracks.
         Step 1. get high-selectivity mass tracks among landmarks.
         2. for tracks of highest intensities, do quick peak detection to identify RT apexes.
         Only masstracks with single peaks will be used for RT alignment.
-        3. use RT from 2, do spline fit to reference RT values. 
-        The spline function will be recorded for each sample, 
+        3. use RT from 2, do LOWESS fit to reference RT values. 
+        The fitted function will be recorded for each sample, 
         and applied to all RT scan numbers in the samples when used for CMAP construction.
         
-        print([p['ref_id_num'] for p in self.good_reference_landmark_peaks])
-        print(self.good_reference_landmark_peaks)
+        Marked samples that fail in RT alignment, and deal with them at the end.
 
         '''
         self.good_reference_landmark_peaks = self.set_RT_reference()
@@ -267,10 +268,9 @@ class CompositeMap:
                                 good_landmark_peaks, selected_reference_landmark_peaks, 
                                 sample.rt_numbers, self.reference_sample.rt_numbers, )
             except ValueError:
-                raise(ValueError("Faluire in retention time alignment, %s" %sample.input_file))
+                print("    ~warning~ Faluire in retention time alignment, %s" %sample.input_file)
         else:
-            sample.rt_cal_dict = None
-            print("\n\n*** Warning on %s, RT regression not performed due to too few aligned features (%d) ***" 
+            print("    ~Warning~ Faluire in retention time alignment on %s, due to too few aligned features (%d)." 
                                 %(sample.input_file, _NN))
 
 
@@ -308,11 +308,12 @@ class CompositeMap:
 
     def global_peak_detection(self):
         '''
-        print(self.experiment.samples_nonreference[2].input_file)
+        
         print(str(self.experiment.samples_nonreference[2].rt_cal_dict)[:300])
         # print(self.composite_mass_tracks[55])
         
         '''
+        print("\nPeak detection on composite mass tracks, ...\n")
         self.composite_mass_tracks = self.make_composite_mass_tracks()
         for _, mass_track in self.composite_mass_tracks.items():
             self.FeatureList +=  self.detect_peaks_cmap_( mass_track 
@@ -370,9 +371,13 @@ class CompositeMap:
         # reformat result
         result = {}
         for k,vdict in _comp_dict.items():
-            rt_scan_numbers = sorted(list(vdict.keys()))
-            result[k] = { 'id_number': k, 'mz': mzDict[k], 'rt_scan_numbers': rt_scan_numbers, 
-                                                'intensity': [vdict[x] for x in rt_scan_numbers], }
+            if vdict:
+                rt_scan_numbers = sorted(list(vdict.keys()))
+                result[k] = { 'id_number': k, 'mz': mzDict[k], 'rt_scan_numbers': rt_scan_numbers, 
+                                                    'intensity': [vdict[x] for x in rt_scan_numbers], }
+            else:
+                # From samples that failed to align 
+                print("    ... mass track in unaligned sample dropped ... %4.4f ... " %mzDict[k])
         return result
 
 
@@ -493,7 +498,9 @@ class CompositeMap:
         '''
         FeatureTable = pd.DataFrame(self.FeatureList)
         for SM in [self.experiment.reference_sample] + self.experiment.samples_nonreference:
-            FeatureTable[SM.input_file] = self.extract_features_per_sample(SM)
+            if SM.rt_cal_dict:
+                FeatureTable[SM.input_file] = self.extract_features_per_sample(SM)
+
         self.FeatureTable = FeatureTable
 
 
@@ -514,7 +521,7 @@ class CompositeMap:
                     right_base = sample.reverse_rt_cal_dict[peak['right_base']]
                 except KeyError:
                     right_base = max_rt_number
-                    print("    [~warning~] elution peak incomplete at", os.path.basename(sample.input_file), mass_track['mz'])
+                    print("    ... in %s ... incomplete elution peak at ... %4.4f ..." %(os.path.basename(sample.input_file), mass_track['mz']))
 
                 for ii in range(len(mass_track['rt_scan_numbers'])):
                     if left_base <= mass_track['rt_scan_numbers'][ii] <= right_base:

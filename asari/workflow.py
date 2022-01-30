@@ -147,9 +147,14 @@ class ext_Experiment(Experiment):
 
 
 
-    def export_feature_table(self, outfile='feature_table.json'):
+    def export_feature_table(self, outfile='cmap_feature_table.csv'):
+        '''
+        Will need real RT time;
+        Selectivity in m/z, RT and overall
         
-        self.CMAP.FeatureTable.to_csv("cmap_feature_table.csv")
+        '''
+        print("\n\nFeature table was written to %s.\n\n" %outfile)
+        self.CMAP.FeatureTable.to_csv(outfile)
 
 
 

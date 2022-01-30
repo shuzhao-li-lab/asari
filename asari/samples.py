@@ -79,10 +79,9 @@ class SimpleSample:
 
         # These calibration functions are critical, though mz_calibration is not required if m/z accuracy is good.
         self.mz_calibration_ratio = None
-        self.rt_calibration_function = None
-        self.rt_cal_dict = {}                              # index mapping to the reference sample
-
-        self.reverse_rt_cal_dict = {}
+        # 
+        self.rt_cal_dict = None                             # index mapping to the reference sample
+        self.reverse_rt_cal_dict = None
         
         # lists to store data
         self.list_mass_tracks = []                          # index number = id_number, in ascending order of m/z
@@ -105,7 +104,7 @@ class SimpleSample:
         '''
         self.get_mass_tracks_()
         self.get_anchor_mz_pairs()
-        print("_number_anchor_mz_pairs_ = %d \n" %self._number_anchor_mz_pairs_)
+        print("    Number of anchor m/z pairs = %d" %self._number_anchor_mz_pairs_)
 
         self._mz_landmarks_ = flatten_tuplelist(self.anchor_mz_pairs)
         # to send to SQL DB here
