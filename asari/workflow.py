@@ -11,11 +11,12 @@ to move to constructors.py
 '''
 import os
 import random
+import json
 
 from metDataModel.core import Experiment
 
 from .samples import SimpleSample
-from .constructors import CompositeMap
+from .constructors import CompositeMap, epdsConstructor
 
 from .sql import *
 
@@ -85,16 +86,12 @@ class ext_Experiment(Experiment):
         self.CMAP.global_peak_detection()
 
         self.annotate()
-        
         self.export_feature_table()
-
-        # to-do: feature back track to samples --
-
-        # self.export_empcpd_map()
 
 
     def process_initiation_samples(self):
         return [self.process_single_sample(f) for f in self.initiation_samples]
+
 
     def process_single_sample(self, input_file):
         '''
@@ -115,21 +112,8 @@ class ext_Experiment(Experiment):
 
     def __choose_initiation_samples__(self, N=3):
         '''
-
-        To consider using meta data??
-            elif not self.files_meta_data:
-            else:
-                chosen = []
-                POOLED = [f for f in self.list_input_files if self.files_meta_data[f] == 'POOLED']
-                if POOLED:
-                    chosen.append(random.choice(POOLED))
-                QC = [f for f in self.list_input_files if self.files_meta_data[f] == 'QC']
-                if QC:
-                    chosen.append( random.choice(QC) )
-                OTHERS = [f for f in self.list_input_files if self.files_meta_data[f] not in ['POOLED', 'QC', 'BLANK']]
-                chosen += random.sample(OTHERS, 3)
-                return chosen[:3]
-        
+        N initial samples are chosen to be analyzed first.
+        One best sample among them is chosen as the reference, especially for retention time alignment.
         '''
         if self.parameters['initiation_samples']:
             return self.parameters['initiation_samples']
@@ -140,11 +124,16 @@ class ext_Experiment(Experiment):
                 return random.sample(self.list_input_files, N)
 
 
-    def annotate(self):
+    def annotate(self, outfile='_empCpd_json.json'):
+        '''Will add DB match too
+        
+        '''
+        ECCON = epdsConstructor(self.CMAP.FeatureList, mode=self.mode)
+        list_empCpds = ECCON.peaks_to_epds()
+        with open(outfile, 'w', encoding='utf-8') as f:
+            json.dump(list_empCpds, f, ensure_ascii=False, indent=2)
 
-
-        pass
-
+        print("\nEmpirical compound annotaion (%d) was written to %s." %(len(list_empCpds), outfile))
 
 
     def export_feature_table(self, full=True, outfile='cmap_feature_table.csv'):
@@ -155,7 +144,6 @@ class ext_Experiment(Experiment):
         '''
         if full:
             self.CMAP.FeatureTable.to_csv(outfile)
-
         else:
             # select columns to export
             pass

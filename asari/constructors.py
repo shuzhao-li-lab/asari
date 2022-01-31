@@ -326,7 +326,7 @@ class CompositeMap:
         ii = 0
         for peak in self.FeatureList:
             ii += 1
-            peak['feature_id'] = 'F'+str(ii)
+            peak['id_number'] = 'F'+str(ii)
 
         self.generate_feature_table()
 
@@ -479,6 +479,7 @@ class epdsConstructor:
         list_empCpds, [{'id': ii, 'list_peaks': [(peak_id, ion), (), ...],}, ...]
             The first peak is anchor ion.
         '''
+        print("\n\nAnnotating empirical compounds on %d features/peaks, ..." %len(self.peak_list))
         list_empCpds = []
         epds, found = [], []
         mztree = build_centurion_tree(self.peak_list)
@@ -500,14 +501,16 @@ class epdsConstructor:
             found2 += [x[0] for x in L]
         remaining_peaks = [P for P in remaining_peaks if P['id_number'] not in found2]
         mztree = build_centurion_tree(remaining_peaks)
+        _NN2 = len(found2)
 
-        print("Round 2 - numbers of epds and included peaks: ", (len(epds), len(found2)))
+        print("Round 2 - numbers of epds and included peaks: ", (len(epds), _NN2))
         # do de novo adduct initiations
         adduct_signatures = find_adduct_signatures(remaining_peaks, mztree, common_adducts[self.mode])
         for G in adduct_signatures:
             epds.append(G)
+            _NN2 += len(G)
 
-        print("Round 3 - numbers of epds: ", len(epds))
+        print("Round 3 - numbers of epds and included peaks: ", (len(epds), _NN2))
         # the now remaining are to be assigned or singletons
         for ii in range(len(epds)):
             list_empCpds.append(

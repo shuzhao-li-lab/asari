@@ -175,6 +175,9 @@ def detect_elution_peaks( mass_track,
     for ii in range(peaks.size):
         list_peaks.append(convert_peak_json__(ii, mass_track, peaks, properties))
 
+    for peak in list_peaks:
+        peak['goodness_fitting'] = evaluate_gaussian_peak(mass_track, peak)
+
     return list_peaks
 
 
