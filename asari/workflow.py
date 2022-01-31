@@ -1,12 +1,8 @@
 '''
-We use a similar concept of FeatureMap as in OpenMS here, 
-but the correspondence algorithms take adavantage of high m/z resolution first, 
-then utilizes MS1_pseudo spectra and cumulative elution profiles.
+ext_Experiment is the container for whole project data.
 
-Steps in corespondence 
-to move to constructors.py
-
-
+Heavy lifting is in constructors.CompositeMap, 
+which contains MassGrid for correspondence, and FeatureList from feature/peak detection.
 
 '''
 import os
@@ -14,10 +10,11 @@ import random
 import json
 
 from metDataModel.core import Experiment
+from mass2chem.search import *
+from mass2chem.epdsConstructor import epdsConstructor
 
 from .samples import SimpleSample
-from .constructors import CompositeMap, epdsConstructor
-
+from .constructors import CompositeMap
 from .sql import *
 
 # General data processing steps are in this class

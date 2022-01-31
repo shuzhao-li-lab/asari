@@ -33,6 +33,8 @@ Basic concepts follow https://github.com/shuzhao-li/metDataModel, as
 A sample here is an injection in LC-MS experiments. A MassTrace is an extracted chromatogram (EIC or XIC).
 Peak is specific to a sample, but a feature is defined per experiment.
 
+This uses `mass2chem` for mass search and annotation functions.
+
 Algorithms
 ==========
 
@@ -48,7 +50,7 @@ Each sample has a recorded function of mass calibration and a function of RT cal
 Use
 ===
 Currently 
-`python3 -m asari.main neg /Users/shuzhao/projectx/chromdir`
+`python3 -m asari.main neg mydir/projectx_dir`
 
 The two arguments are ionization_mode and data_directory.
 

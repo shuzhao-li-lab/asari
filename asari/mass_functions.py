@@ -10,7 +10,7 @@ numba JITC
 import numpy as np
 from scipy.signal import find_peaks 
 
-from .search import *
+from mass2chem.search import *
 
 
 def flatten_tuplelist(L):
