@@ -77,7 +77,7 @@ class ext_Experiment(Experiment):
         
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid( self.process_initiation_samples() )
-
+        # 
         self.CMAP.MassGrid.to_csv("__test_mass_grid.csv")
         
         self.CMAP.align_retention_time()
@@ -147,13 +147,19 @@ class ext_Experiment(Experiment):
 
 
 
-    def export_feature_table(self, outfile='cmap_feature_table.csv'):
+    def export_feature_table(self, full=True, outfile='cmap_feature_table.csv'):
         '''
         Will need real RT time;
         Selectivity in m/z, RT and overall
         
         '''
-        self.CMAP.FeatureTable.to_csv(outfile)
+        if full:
+            self.CMAP.FeatureTable.to_csv(outfile)
+
+        else:
+            # select columns to export
+            pass
+
         print("\n\nFeature table (%d) was written to %s.\n\n" %(self.CMAP.FeatureTable.shape[0], outfile))
 
 

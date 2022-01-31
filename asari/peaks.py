@@ -77,12 +77,18 @@ def deep_detect_elution_peaks( mass_track,
     peak area is integrated by summing up intensities of included scans.
     Peak area and height are cumulated from all samples. Not trying to average because some peaks are only few samples.
 
-    Will use gaussian fit to guide peak boundaries
-
     Peak format: {
         'id_number': 0, 'mz', 'apex', 'left_base', 'right_base', 'height', 'parent_masstrace_id', 
         'rtime', 'peak_area', 'goodness_fitting'
     }
+
+    
+    To-do:
+    step-wise peak detection; and selectivity calculation based on how many potential neighboring peaks
+
+    examine peak boundaries, maybe gaussian fit to guide 
+
+
     '''
     list_intensity = mass_track['intensity']
     __list_intensity = np.array(list_intensity)
@@ -155,6 +161,21 @@ def convert_peak_json__( ii, mass_track, peaks, properties):
             'left_index': left_index,                                                       # specific to the referred mass track
             'right_index': right_index,
     }
+
+
+def detect_elution_peaks( mass_track, 
+            min_intensity_threshold=10000, min_fwhm=3, min_prominence_threshold=5000, wlen=50 ):
+    '''Standard peak detection, to be used for exploration.
+    Default in asari is the deep_detect_elution_peaks function.
+    '''
+    list_intensity = mass_track['intensity']
+    peaks, properties = find_peaks(list_intensity, height=min_intensity_threshold, width=min_fwhm, 
+                                                    prominence=min_prominence_threshold, wlen=wlen) 
+    list_peaks = []
+    for ii in range(peaks.size):
+        list_peaks.append(convert_peak_json__(ii, mass_track, peaks, properties))
+
+    return list_peaks
 
 
 def quick_detect_unique_elution_peak(rt_numbers, list_intensity, 
