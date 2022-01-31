@@ -312,16 +312,15 @@ class CompositeMap:
 
     def global_peak_detection(self):
         '''
-        
-        print(str(self.experiment.samples_nonreference[2].rt_cal_dict)[:300])
         # print(self.composite_mass_tracks[55])
         
         '''
-        print("\nPeak detection on composite mass tracks, ...\n")
         self.composite_mass_tracks = self.make_composite_mass_tracks()
+        print("\nPeak detection on %d composite mass tracks, ...\n" %len(self.composite_mass_tracks))
+
         for _, mass_track in self.composite_mass_tracks.items():
-            self.FeatureList +=  detect_peaks_cmap_( mass_track 
-            
+            self.FeatureList +=  deep_detect_elution_peaks( mass_track 
+
                     )           # to specify parameters here according to Experiment parameters
 
         ii = 0

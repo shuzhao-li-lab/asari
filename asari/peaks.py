@@ -54,9 +54,9 @@ def evaluate_gaussian_peak(mass_track, peak):
 # -----------------------------------------------------------------------------
 
 
-def detect_peaks_cmap_( mass_track, 
+def deep_detect_elution_peaks( mass_track, 
                 min_intensity_threshold=10000, min_fwhm=3, min_prominence_threshold=5000, wlen=50, 
-                snr=3, min_prominence_ratio=0.1, iterations=2):
+                snr=2, min_prominence_ratio=0.1, iterations=2):
     '''
     Peak detection on composite mass tracks; because this is at Experiment level, these are deemed as features.
     Mass tracks are expected to be continuous per m/z value, with 0s for gaps.
@@ -77,68 +77,63 @@ def detect_peaks_cmap_( mass_track,
     peak area is integrated by summing up intensities of included scans.
     Peak area and height are cumulated from all samples. Not trying to average because some peaks are only few samples.
 
-
-    # take noise level as bottom 10%
-
+    Will use gaussian fit to guide peak boundaries
 
     Peak format: {
         'id_number': 0, 'mz', 'apex', 'left_base', 'right_base', 'height', 'parent_masstrace_id', 
         'rtime', 'peak_area', 'goodness_fitting'
     }
     '''
-    list_peaks = []
-    # peak_data_points = []
     list_intensity = mass_track['intensity']
-    new_list_intensity = list_intensity.copy()                              # to substract peaks on the go
+    __list_intensity = np.array(list_intensity)
+    __list_intensity = __list_intensity[__list_intensity > 0]
+    __max_intensity = __list_intensity.max()
+    __noise_level_to_control__ = snr * np.percentile(__list_intensity, 10)
+    # Noise level is defined as lower 10% of non-zero values
+
     prominence = max(min_prominence_threshold, 
-                    min_prominence_ratio * max(list_intensity))               # larger prominence gets cleaner data
+                    min_prominence_ratio * __max_intensity)               # larger prominence gets cleaner data
     peaks, properties = find_peaks(list_intensity, height=min_intensity_threshold, width=min_fwhm, 
                                                     prominence=prominence, wlen=wlen) 
-    
-    # if > 2 peaks, go to optimization directly?
-    # else: step wise
-    
-
-
-    
-    for ii in range(peaks.size):
-        list_peaks.append(convert_peak_json__(ii, mass_track, peaks, properties))
-        for jj in range(properties['left_bases'][ii], properties['right_bases'][ii]+1):
-            new_list_intensity[jj] = 0
-
-    # new iterations by lowering prominence
-    for iter in range(iterations-1): 
-        prominence = max(min_prominence_threshold, min_prominence_ratio * max(new_list_intensity))
-        peaks, properties = find_peaks(new_list_intensity, height=min_intensity_threshold, width=min_fwhm, 
-                                                        prominence=prominence, wlen=wlen) 
-        for ii in range(peaks.size):
-            list_peaks.append(convert_peak_json__(ii, mass_track, peaks, properties))
-            for jj in range(properties['left_bases'][ii], properties['right_bases'][ii]+1):
-                new_list_intensity[jj] = 0
-
-    _noise_level_ = [x for x in new_list_intensity if x]                        # count non-zero values
-    
+    list_peaks = []
     # smooth noisy data, i.e. when >2 initial peaks are detected
-    if len(list_peaks) > 2:
-        list_peaks = []
+    if peaks.size > 3:
+        # noisy mass track
         new_list_intensity = smooth_moving_average(list_intensity)
-
-        prominence = max(min_prominence_threshold, min_prominence_ratio * max(new_list_intensity))
+        # raise prominence potentially according to __max_intensity
+        prominence = max(min_prominence_threshold, 0.3 * __max_intensity) 
         peaks, properties = find_peaks(new_list_intensity, height=min_intensity_threshold, width=min_fwhm, 
-                                                        prominence=prominence, wlen=wlen) 
+                                                        prominence=prominence, wlen=wlen)
         for ii in range(peaks.size):
-            list_peaks.append(convert_peak_json__(ii, mass_track, peaks, properties))
+            if properties['peak_heights'][ii] > __noise_level_to_control__:
+                list_peaks.append(convert_peak_json__(ii, mass_track, peaks, properties))
 
-    # control snr
-    if _noise_level_:
-        _noise_level_ = np.mean(_noise_level_)   # mean more stringent than median
-        list_peaks = [P for P in list_peaks if P['height'] > snr * _noise_level_]
+    else:
+        new_list_intensity = list_intensity.copy()                              # to substract peaks on the go
+        for ii in range(peaks.size):
+            if properties['peak_heights'][ii] > __noise_level_to_control__:
+                list_peaks.append(convert_peak_json__(ii, mass_track, peaks, properties))
+
+                for jj in range(properties['left_bases'][ii], properties['right_bases'][ii]+1):
+                    new_list_intensity[jj] = 0
+
+        # new iterations after removing the earlier peaks; adjusting parameters for min_int, prominence
+        if peaks.size == 1:
+            for _ in range(iterations-1): 
+                #min_intensity_threshold = 0.1 * __max_intensity
+                prominence = max(min_prominence_threshold, 0.3 * max(new_list_intensity))
+                min_intensity_threshold = max(min_intensity_threshold, 2 * prominence)
+                peaks, properties = find_peaks(new_list_intensity, height=min_intensity_threshold, width=min_fwhm, 
+                                                                prominence=prominence, wlen=wlen) 
+                for ii in range(peaks.size):
+                    if properties['peak_heights'][ii] > __noise_level_to_control__:
+                        list_peaks.append(convert_peak_json__(ii, mass_track, peaks, properties))
 
     for peak in list_peaks:
         # evaluate peak quality by goodness_fitting of Gaussian model
         peak['goodness_fitting'] = evaluate_gaussian_peak(mass_track, peak)
 
-    return list_peaks
+    return [peak for peak in list_peaks if peak['goodness_fitting'] > 0.01]
 
 
 def convert_peak_json__( ii, mass_track, peaks, properties):

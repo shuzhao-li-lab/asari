@@ -153,9 +153,8 @@ class ext_Experiment(Experiment):
         Selectivity in m/z, RT and overall
         
         '''
-        print("\n\nFeature table was written to %s.\n\n" %outfile)
         self.CMAP.FeatureTable.to_csv(outfile)
-
+        print("\n\nFeature table (%d) was written to %s.\n\n" %(self.CMAP.FeatureTable.shape[0], outfile))
 
 
 
