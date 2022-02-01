@@ -127,10 +127,40 @@ class ext_Experiment(Experiment):
         '''
         ECCON = epdsConstructor(self.CMAP.FeatureList, mode=self.mode)
         list_empCpds = ECCON.peaks_to_epds()
+        list_empCpds = self._reformat_epds_(list_empCpds, self.CMAP.FeatureList)
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(list_empCpds, f, ensure_ascii=False, indent=2)
 
         print("\nEmpirical compound annotaion (%d) was written to %s." %(len(list_empCpds), outfile))
+
+
+    def _reformat_epds_(self, list_empCpds, FeatureList):
+        fDict = {}
+        for F in FeatureList:
+            fDict[F['id_number']] = F
+        new = []
+        for E in list_empCpds:
+            features = []
+            for peak in E['list_peaks']:
+                features.append(
+                    {'feature_id': peak[0], 
+                    'mz': fDict[peak[0]]['mz'], 
+                    'rtime': fDict[peak[0]]['apex'], 
+                    'charged_formula': '', 
+                    'ion_relation': peak[1]}
+                )
+            new.append(
+                {
+                'interim_id': E['id'], 
+                'neutral_formula_mass': None,
+                'neutral_formula': None,
+                'Database_referred': [],
+                'identity': [],
+                'MS1_pseudo_Spectra': features,
+                'MS2_Spectra': [],
+                }
+            )
+        return new
 
 
     def export_feature_table(self, full=True, outfile='cmap_feature_table.csv'):

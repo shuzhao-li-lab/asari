@@ -77,16 +77,27 @@ def deep_detect_elution_peaks( mass_track,
     peak area is integrated by summing up intensities of included scans.
     Peak area and height are cumulated from all samples. Not trying to average because some peaks are only few samples.
 
+    Chromatographic peak selectivity (cSelectivity) is defined by 
+    the ratio of the data points in all peaks above 1/2 this peak height and all data points above 1/2 this peak height.
+    This value will correlate with SNR in most cases. 
+    It's not a measure how good the chromatograph is, but how good the data are in defining clean peaks.
+    E.g. chromatography may fail to separate two isomers, 
+    but the one mixture peak can have perfect cSelectivity as far as computational processing is concerned.
+
+
+
     Peak format: {
         'id_number': 0, 'mz', 'apex', 'left_base', 'right_base', 'height', 'parent_masstrace_id', 
-        'rtime', 'peak_area', 'goodness_fitting'
+        'rtime', 'peak_area', 'goodness_fitting', 'snr',
     }
 
     
     To-do:
-    step-wise peak detection; and selectivity calculation based on how many potential neighboring peaks
+    step-wise peak detection; and cSelectivity calculation 
 
-    examine peak boundaries, maybe gaussian fit to guide 
+    change SNR back
+
+    examine peak boundaries, maybe gaussian fit to guide?
 
 
     '''
@@ -95,7 +106,7 @@ def deep_detect_elution_peaks( mass_track,
     __list_intensity = __list_intensity[__list_intensity > 0]
     __max_intensity = __list_intensity.max()
     __noise_level_to_control__ = snr * np.percentile(__list_intensity, 10)
-    # Noise level is defined as lower 10% of non-zero values
+    # Noise level is defined as lower 10% of non-zero values - will change back to mean of non-peak data points
 
     prominence = max(min_prominence_threshold, 
                     min_prominence_ratio * __max_intensity)               # larger prominence gets cleaner data
