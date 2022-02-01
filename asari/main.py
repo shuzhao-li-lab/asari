@@ -67,15 +67,22 @@ from .workflow import *
 PARAMETERS = {
     'project_name': 'test_asari',
     
-    'min_intensity_threshold': 5000,    # minimal peak height
+    'min_intensity_threshold': 100,     # minimal intensity for mass track extraction, filtering baseline
+    'min_peak_height': 5000,            # minimal peak height
+    'cal_min_peak_height': 100000,      # minimal peak height required for peaks used for RT calibration
     'min_timepoints': 5,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
     'signal_noise_ratio': 2,            # peak height at least x fold over noise, which is median of non-peak data points.
     #
-    'peak_number_rt_calibration': 5,    # minimal number of selected high-quality peaks required for RT calibration. 
+    'peak_number_rt_calibration': 15,   # minimal number of selected high-quality peaks required for RT calibration. 
                                         # Samples with fewer selected peaks are dropped out.
+
+    # tweaking this section now -
     'cache_mass_traces': False,         # to save memory if not using DB; turn on if need to plot and diagnose
-    'output_filename': 'feature_table.tsv',
+    'output_feature_table': '_cmap_feature_table.csv',
+    'mass_grid_mapping': "_mass_grid_mapping.csv",
     'annotation_filename': "annotation_table.tsv",
+    'json_empricalCompounds': "_empCpd_json.json",
+
     #
     'mode': 'pos',                      # ionization mode
     'mass_range': (50, 2000),

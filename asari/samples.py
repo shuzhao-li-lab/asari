@@ -64,11 +64,11 @@ class SimpleSample:
         self.dict_peaks = {}
 
 
-    def process(self):
+    def process(self, mz_tolerance_ppm, min_intensity, min_timepoints):
         '''
         From input file to list_MassTraces with detected peaks and selectivity on peaks.
         '''
-        self.get_mass_tracks_()
+        self.get_mass_tracks_( mz_tolerance_ppm, min_intensity, min_timepoints)
         self.get_anchor_mz_pairs()
         print("    Number of anchor m/z pairs = %d" %self._number_anchor_mz_pairs_)
 
@@ -81,7 +81,6 @@ class SimpleSample:
         A mass track is an EIC for full RT range, without separating the mass traces,
         using asari.chromatograms algorithm.
         tracks as [( mz, rtlist, intensities ), ...].
-
         '''
         exp = MSExperiment()                                                                                          
         MzMLFile().load(self.input_file, exp)
@@ -101,9 +100,6 @@ class SimpleSample:
             ii += 1
 
         print("Processing %s, found %d mass tracks." %(os.path.basename(self.input_file), ii))
-        # For diagnosis only - check m/z split
-        # warnings = check_close_mzs([x['mz'] for x in self.list_mass_tracks], mz_tolerance_ppm)
-        # print("Warning - some mass tracks are too close to each other: ", len(warnings), warnings[:5])
 
 
     def get_anchor_mz_pairs(self):

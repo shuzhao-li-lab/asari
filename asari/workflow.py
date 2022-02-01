@@ -76,7 +76,7 @@ class ext_Experiment(Experiment):
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid( self.process_initiation_samples() )
         # 
-        self.CMAP.MassGrid.to_csv("__test_mass_grid.csv")
+        self.CMAP.MassGrid.to_csv(self.parameters['mass_grid_mapping'])
         
         self.CMAP.align_retention_time()
         # some samples could fail alignment; can be processed and aligned at the end
@@ -96,9 +96,12 @@ class ext_Experiment(Experiment):
 
         To add DB function HERE ??
         '''
+        mz_tolerance_ppm = self.parameters['mz_tolerance']
+        min_intensity = self.parameters['min_intensity_threshold']
+        min_timepoints = self.parameters['min_timepoints']
         try:
             SM = SimpleSample(self, self.mode, input_file)
-            SM.process()
+            SM.process( mz_tolerance_ppm, min_intensity, min_timepoints)
             # sample id, assigned by index in self.list_input_files.
             # DB commit
             return SM
@@ -121,10 +124,11 @@ class ext_Experiment(Experiment):
                 return random.sample(self.list_input_files, N)
 
 
-    def annotate(self, outfile='_empCpd_json.json'):
+    def annotate(self):
         '''Will add DB match too
         
         '''
+        outfile = self.parameters['json_empricalCompounds']
         ECCON = epdsConstructor(self.CMAP.FeatureList, mode=self.mode)
         list_empCpds = ECCON.peaks_to_epds()
         list_empCpds = self._reformat_epds_(list_empCpds, self.CMAP.FeatureList)
@@ -169,6 +173,7 @@ class ext_Experiment(Experiment):
         Selectivity in m/z, RT and overall
         
         '''
+        outfile = self.parameters['output_feature_table']
         if full:
             self.CMAP.FeatureTable.to_csv(outfile)
         else:

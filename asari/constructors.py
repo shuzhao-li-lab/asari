@@ -208,15 +208,16 @@ class CompositeMap:
 
         '''
         print("\nCalibrating retention time to reference, ...\n")
+        cal_min_peak_height = self.experiment.parameters['cal_min_peak_height']
+        MIN_PEAK_NUM = self.experiment.parameters['peak_number_rt_calibration']
         self.good_reference_landmark_peaks = self.set_RT_reference()
         for SM in self.experiment.samples_nonreference:
-            self.calibrate_sample_RT(SM)
+            self.calibrate_sample_RT(SM, cal_min_peak_height=cal_min_peak_height, MIN_PEAK_NUM=MIN_PEAK_NUM)
         
-
     def calibrate_sample_RT(self, 
                                 sample, 
                                 calibration_fuction=rt_lowess_calibration, 
-                                cal_peak_intensity_threshold=100000,
+                                cal_min_peak_height=100000,
                                 MIN_PEAK_NUM=15):
         '''
         Calibrate retention time, via spline func, per sample
@@ -239,7 +240,7 @@ class CompositeMap:
                 rt_numbers, list_intensity = this_mass_track['rt_scan_numbers'], this_mass_track['intensity']
                 # continuity in rt_scan_numbers is implemented in chromatograms.extract_single_track_ 
                 Upeak = quick_detect_unique_elution_peak(rt_numbers, list_intensity, 
-                            min_intensity_threshold=cal_peak_intensity_threshold, 
+                            min_intensity_threshold=cal_min_peak_height, 
                             min_fwhm=3, min_prominence_threshold_ratio=0.2)
                 if Upeak:
                     Upeak.update({'ref_id_num': ii})
