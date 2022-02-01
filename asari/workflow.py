@@ -76,7 +76,8 @@ class ext_Experiment(Experiment):
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid( self.process_initiation_samples() )
         # 
-        self.CMAP.MassGrid.to_csv(self.parameters['mass_grid_mapping'])
+        self.CMAP.MassGrid.to_csv(
+            os.path.join(self.parameters['outdir'], self.parameters['mass_grid_mapping']) )
         
         self.CMAP.align_retention_time()
         # some samples could fail alignment; can be processed and aligned at the end
@@ -128,7 +129,7 @@ class ext_Experiment(Experiment):
         '''Will add DB match too
         
         '''
-        outfile = self.parameters['json_empricalCompounds']
+        outfile = os.path.join(self.parameters['outdir'], self.parameters['json_empricalCompounds'])
         ECCON = epdsConstructor(self.CMAP.FeatureList, mode=self.mode)
         list_empCpds = ECCON.peaks_to_epds()
         list_empCpds = self._reformat_epds_(list_empCpds, self.CMAP.FeatureList)
@@ -173,7 +174,7 @@ class ext_Experiment(Experiment):
         Selectivity in m/z, RT and overall
         
         '''
-        outfile = self.parameters['output_feature_table']
+        outfile = os.path.join(self.parameters['outdir'], self.parameters['output_feature_table'])
         if full:
             self.CMAP.FeatureTable.to_csv(outfile)
         else:

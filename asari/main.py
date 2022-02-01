@@ -61,11 +61,13 @@ d. epdTree can be improved in future based on real data statistics and more stru
 '''
 
 import sys
+import time
 from .workflow import *
 
 
 PARAMETERS = {
     'project_name': 'test_asari',
+    'outdir': 'asari_output_',
     
     'min_intensity_threshold': 100,     # minimal intensity for mass track extraction, filtering baseline
     'min_peak_height': 5000,            # minimal peak height
@@ -102,7 +104,7 @@ PARAMETERS = {
     'gaussian_shape': 0.3,              # min cutoff
     }
     
-PARAMETERS['min_prominence_threshold'] = PARAMETERS['min_intensity_threshold']/3.0
+PARAMETERS['min_prominence_threshold'] = PARAMETERS['min_peak_height']/3.0
 
 
 def read_project_dir(directory, file_pattern='.mzML'):
@@ -141,16 +143,17 @@ def process_project(list_input_files, dict_meta_data={}, parameters=PARAMETERS, 
     EE.process_all()
 
 
-
-
-
-
-
-
 def main(directory):
+    time_stamp = str(time.time())
+    PARAMETERS['outdir'] += time_stamp
+    os.mkdir(PARAMETERS['outdir'])
+
     print("\n\n~~~~~~~ Hello from Asari! ~~~~~~~~~\n")
     process_project(
-            read_project_dir(directory), {}, PARAMETERS, directory   #setting output_dir as input dir
+            read_project_dir(directory), 
+            {},         # not used now
+            PARAMETERS, 
+            PARAMETERS['outdir']   #setting output_dir as input dir
     )
 
 #

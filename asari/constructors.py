@@ -189,7 +189,6 @@ class CompositeMap:
         pass
 
 
-
     def align_retention_time(self):
         '''
         Because RT will not match precisely btw samples, it's remapped to a common set of time coordinates.
@@ -366,7 +365,6 @@ class CompositeMap:
                 # From samples that failed to align 
                 print("    ... mass track in unaligned sample dropped ... %4.4f ... " %mzDict[k])
         return result
-
 
 
     def generate_feature_table(self):
