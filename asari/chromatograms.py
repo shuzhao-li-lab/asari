@@ -405,3 +405,11 @@ def smooth_rt_intensity_remap(L_rt_scan_numbers, L_intensity):
         _d[ii] = (_d[ii-1]+_d[ii]+_d[ii+1])/3.0
     return _d
 
+def smooth_lowess(list_intensity, frac=0.02):
+    '''
+    Smooth data for very noisy mass tracks.
+    Using simple moving average here; LOWESS does not look good for this.
+    '''
+    lxy = lowess(list_intensity, range(len(list_intensity)), frac=frac, it=1)
+    _, newy = list(zip(*lxy))
+    return newy

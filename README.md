@@ -20,9 +20,9 @@ Basic concepts follow https://github.com/shuzhao-li/metDataModel, as
 
     ├── Experiment
        ├── Sample
-           ├── MassTrace
+           ├── MassTrack
                ├── Peak
-           ├── MassTrace 
+           ├── MassTrack 
                ├── Peak
                ├── Peak
         ...
@@ -50,7 +50,7 @@ Each sample has a recorded function of mass calibration and a function of RT cal
 Use
 ===
 Currently 
-`python3 -m asari.main neg mydir/projectx_dir`
+`python3 -m asari.main pos mydir/projectx_dir`
 
 The two arguments are ionization_mode and data_directory.
 

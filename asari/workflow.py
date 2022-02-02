@@ -42,15 +42,14 @@ class ext_Experiment(Experiment):
         self.files_meta_data = dict_meta_data
         
         self.parameters = parameters
-        self.max_rtime = parameters['max_rtime'] # to update from each sample
-        # to update when samples are processed
-        self.number_scans = 0
+        # self.max_rtime = parameters['max_rtime'] # to update from each sample
+        self.number_scans = 0                                   # max scan number, to update when samples are processed
         self.mode = parameters['mode']
 
         self.initiation_samples = self.__choose_initiation_samples__(N=6)
 
         # SAMPLE_REGISTRY
-        self.allSamples = []                # list of Sample instances
+        self.all_samples = []               # list of Sample instances
         self.samples_nonreference = []
         self.samples_by_id = {}             # sample ID: Sample instance
         self.samples_by_name = {}           # input file name: Sample instance
@@ -73,18 +72,21 @@ class ext_Experiment(Experiment):
         # else:
         #      start DB after init
         
-        self.CMAP = CompositeMap(self)
-        self.CMAP.construct_mass_grid( self.process_initiation_samples() )
+        self.process_all_without_export()
+
         # 
         self.CMAP.MassGrid.to_csv(
             os.path.join(self.parameters['outdir'], self.parameters['mass_grid_mapping']) )
-        
+        self.annotate()
+        self.export_feature_table()
+
+
+    def process_all_without_export(self):
+        self.CMAP = CompositeMap(self)
+        self.CMAP.construct_mass_grid( self.process_initiation_samples() )
         self.CMAP.align_retention_time()
         # some samples could fail alignment; can be processed and aligned at the end
         self.CMAP.global_peak_detection()
-
-        self.annotate()
-        self.export_feature_table()
 
 
     def process_initiation_samples(self):
@@ -132,6 +134,7 @@ class ext_Experiment(Experiment):
         outfile = os.path.join(self.parameters['outdir'], self.parameters['json_empricalCompounds'])
         ECCON = epdsConstructor(self.CMAP.FeatureList, mode=self.mode)
         list_empCpds = ECCON.peaks_to_epds()
+
         list_empCpds = self._reformat_epds_(list_empCpds, self.CMAP.FeatureList)
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(list_empCpds, f, ensure_ascii=False, indent=2)

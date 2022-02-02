@@ -130,11 +130,10 @@ class CompositeMap:
         self.MassGrid['mz'] = reference_mzlist
         self.MassGrid[ reference_sample.input_file ] = [ x['id_number'] for x in reference_sample.list_mass_tracks ]
         # self.reference_sample.export_mass_traces()
-        
         for SM in other_list_samples:
             self.add_sample(SM, database_cursor=None)
 
-        
+
     def add_sample(self, sample, database_cursor=None):
         '''
         Add Sample instance to and update MassGrid; 
@@ -239,7 +238,7 @@ class CompositeMap:
                 rt_numbers, list_intensity = this_mass_track['rt_scan_numbers'], this_mass_track['intensity']
                 # continuity in rt_scan_numbers is implemented in chromatograms.extract_single_track_ 
                 Upeak = quick_detect_unique_elution_peak(rt_numbers, list_intensity, 
-                            min_intensity_threshold=cal_min_peak_height, 
+                            min_peak_height=cal_min_peak_height, 
                             min_fwhm=3, min_prominence_threshold_ratio=0.2)
                 if Upeak:
                     Upeak.update({'ref_id_num': ii})
@@ -278,7 +277,7 @@ class CompositeMap:
                     rt_numbers, list_intensity = this_mass_track['rt_scan_numbers'], this_mass_track['intensity']
                     # continuity in rt_scan_numbers is implemented in chromatograms.extract_single_track_ 
                     Upeak = quick_detect_unique_elution_peak(rt_numbers, list_intensity, 
-                                min_intensity_threshold=cal_peak_intensity_threshold, 
+                                min_peak_height=cal_peak_intensity_threshold, 
                                 min_fwhm=3, min_prominence_threshold_ratio=0.2)
                     if Upeak:
                         Upeak.update({'ref_id_num': self._mz_landmarks_[ii]}) # as in MassGrid index
@@ -294,15 +293,19 @@ class CompositeMap:
 
     def global_peak_detection(self):
         '''
-        # print(self.composite_mass_tracks[55])
-        
+        Using peaks.deep_detect_elution_peaks on composite mass tracks.
+        Results are deemed as features, because it's at Experiment level.
+        Peak area and height are cumulated from all samples. Not trying to average because some peaks are only few samples.
         '''
         self.composite_mass_tracks = self.make_composite_mass_tracks()
         print("\nPeak detection on %d composite mass tracks, ...\n" %len(self.composite_mass_tracks))
 
         for _, mass_track in self.composite_mass_tracks.items():
-            self.FeatureList +=  deep_detect_elution_peaks( mass_track 
-
+            self.FeatureList +=  deep_detect_elution_peaks( mass_track, 
+                                                            max_rt_number = self.experiment.number_scans,
+                                                            min_peak_height=10000, min_fwhm=3, min_prominence_threshold=5000, wlen=50, 
+                snr=2, min_prominence_ratio=0.1,
+                iteration=True
                     )           # to specify parameters here according to Experiment parameters
 
         ii = 0
@@ -376,8 +379,9 @@ class CompositeMap:
                 np.zeros((len(self.FeatureList), len(header))), columns=header, )
 
         '''
+        self.experiment.all_samples = [self.experiment.reference_sample] + self.experiment.samples_nonreference
         FeatureTable = pd.DataFrame(self.FeatureList)
-        for SM in [self.experiment.reference_sample] + self.experiment.samples_nonreference:
+        for SM in self.experiment.all_samples:
             if SM.rt_cal_dict:
                 FeatureTable[SM.input_file] = self.extract_features_per_sample(SM)
 
@@ -401,7 +405,8 @@ class CompositeMap:
                     right_base = sample.reverse_rt_cal_dict[peak['right_base']]
                 except KeyError:
                     right_base = max_rt_number
-                    print("    ... in %s ... incomplete elution peak at ... %4.4f ..." %(os.path.basename(sample.input_file), mass_track['mz']))
+                    # will log somewhere, not critical
+                    #print("    ... in %s ... incomplete elution peak at ... %4.4f ..." %(os.path.basename(sample.input_file), mass_track['mz']))
 
                 for ii in range(len(mass_track['rt_scan_numbers'])):
                     if left_base <= mass_track['rt_scan_numbers'][ii] <= right_base:

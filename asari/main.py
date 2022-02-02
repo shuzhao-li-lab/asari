@@ -88,13 +88,12 @@ PARAMETERS = {
     #
     'mode': 'pos',                      # ionization mode
     'mass_range': (50, 2000),
-    'max_rtime': 300,                   # retention time range (chromatography) 0-300 seconds
+    #'max_rtime': 300,                   # retention time range (chromatography) 0-300 seconds
 
     'mz_tolerance': 5,                  # ppm, high selectivity meaning no overlap neighbors to confuse; 
                                         # Low selectivity regions will be still inspected to determine the true number of features
-
     'rtime_tolerance': 10,              # feature rtime shift threshold under 10 seconds; or 10% of rtime
-                                        # will change to automated parameter using stdev??
+                                        # not used now?
     #
     'initiation_samples': [],           # if user to specify 3 samples to initiate data processing, to init HOT_DB; 
                                         # otherwise they are chosen automatically
