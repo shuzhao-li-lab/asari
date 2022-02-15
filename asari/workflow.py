@@ -8,14 +8,25 @@ which contains MassGrid for correspondence, and FeatureList from feature/peak de
 import os
 import random
 import json
+import pickle
 
 from metDataModel.core import Experiment
 from mass2chem.search import *
 from mass2chem.epdsConstructor import epdsConstructor
+# jms-metabolite-services
+from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
 from .samples import SimpleSample
 from .constructors import CompositeMap
 from .sql import *
+
+try:
+    import importlib.resources as pkg_resources
+except ImportError:
+    import importlib_resources as pkg_resources
+
+from . import db
+
 
 # General data processing steps are in this class
 class ext_Experiment(Experiment):
@@ -128,18 +139,34 @@ class ext_Experiment(Experiment):
 
 
     def annotate(self):
-        '''Will add DB match too
-        
         '''
-        outfile = os.path.join(self.parameters['outdir'], self.parameters['json_empricalCompounds'])
-        ECCON = epdsConstructor(self.CMAP.FeatureList, mode=self.mode)
-        list_empCpds = ECCON.peaks_to_epds()
-
-        list_empCpds = self._reformat_epds_(list_empCpds, self.CMAP.FeatureList)
+        
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(list_empCpds, f, ensure_ascii=False, indent=2)
 
         print("\nEmpirical compound annotaion (%d) was written to %s." %(len(list_empCpds), outfile))
+
+        '''
+        outfile = os.path.join(self.parameters['outdir'], 
+                                                            'annotated_empricalCompounds_')
+        ECCON = epdsConstructor(self.CMAP.FeatureList, mode=self.mode)
+        list_empCpds = ECCON.peaks_to_epds()
+        #list_empCpds = self._reformat_epds_(list_empCpds, self.CMAP.FeatureList)
+
+        # use JMS
+        KCD = knownCompoundDatabase()
+        # will move pickle files to db/
+        KCD.mass_indexed_compounds = pickle.load( pkg_resources.open_binary(db, 'mass_indexed_compounds.pickle') )
+            # open('mass_indexed_compounds.pickle', 'rb') )
+        KCD.emp_cpds_trees = pickle.load( pkg_resources.open_binary(db, 'emp_cpds_trees.pickle') )
+            # open('emp_cpds_trees.pickle', 'rb') )
+
+        EED = ExperimentalEcpdDatabase(mode=self.mode)
+        EED.list_peaks = self.CMAP.FeatureList
+        EED.dict_empCpds = EED.index_reformat_epds(list_empCpds, self.CMAP.FeatureList)
+        EED.index_empCpds()
+        search_result = EED.annotate_against_KCD(KCD)
+        EED.export_annotations(search_result, KCD, outfile)
 
 
     def _reformat_epds_(self, list_empCpds, FeatureList):
@@ -188,6 +215,10 @@ class ext_Experiment(Experiment):
 
 
 
+
+
+
+
     def export_feature_table_old__(self, FeatureList, outfile='feature_table.tsv'):
         '''
         FeatureList: a list of namedTuples, i.e. Features; Output two files, one main, another low quality features.
@@ -219,9 +250,6 @@ class ext_Experiment(Experiment):
         print("Feature tables were written under %s." %self.output_dir)
         print("The main feature table (%s) has %d samples and %d features.\n\n\n" %(
             self.parameters['output_filename'], len(self.ordered_sample_names), len(high_quality_features)))
-
-
-
 
 
 

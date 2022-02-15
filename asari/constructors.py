@@ -176,14 +176,12 @@ class CompositeMap:
         merge close mass tracks unless MassGrid suggests multiple features; 
         for split tracks in same samples, replace them by merged tracks and new id_numbers.
 
-        to implement -
-        For low-selectivity mass tracks, could do 2-D deconvolution.
+        For low-selectivity mass tracks, could do 2-D deconvolution.?
 
         Not really needed now, after mass_tracks in each sample are cleaned up for m/z overlap.
 
         '''
         # also check for empty tracks after composite?
-
         # watch out for indices used by other variables, e.g. _mz_landmarks_
         pass
 
@@ -284,11 +282,6 @@ class CompositeMap:
                         good_reference_landmark_peaks.append(Upeak)
 
         return good_reference_landmark_peaks
-
-
-    def match_ref_db(self):
-
-        pass
 
 
     def global_peak_detection(self):

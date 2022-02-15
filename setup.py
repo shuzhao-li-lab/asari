@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
   name='asari-metabolomics',
-  version='0.8.19',
+  version='0.8.21',
 
   author='Shuzhao Li',
   author_email='shuzhao.li@gmail.com',
@@ -30,7 +30,7 @@ setup(
 
   packages=find_packages(),
   data_files=[  ],
-  include_package_data=False,
+  include_package_data=True,
   zip_safe=True,
   entry_points = {
         'console_scripts': ['asari=asari.command_line:main'],
@@ -40,11 +40,12 @@ setup(
   install_requires=[
     'metDataModel',
     'mass2chem>=0.2',
+    'jms-metabolite-services',
     'pyopenms',
-    'matplotlib',
+    # 'matplotlib',
     'numpy',
     'scipy',
-    'xlsxwriter',
+    # 'xlsxwriter',
   ],
 
 )

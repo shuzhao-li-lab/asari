@@ -53,7 +53,6 @@ def evaluate_gaussian_peak(mass_track, peak):
 # peak detection
 # -----------------------------------------------------------------------------
 
-
 def deep_detect_elution_peaks( mass_track, max_rt_number,
                 min_peak_height=10000, min_fwhm=3, min_prominence_threshold=5000, wlen=50, 
                 snr=2, min_prominence_ratio=0.1,

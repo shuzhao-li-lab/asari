@@ -1,15 +1,11 @@
 '''
 Functions related to mass operations.
 
-to try performance optimization w/
-numba JITC
-
-
+from numba import jit
+@jit(nopython=True)
 '''
 
 import numpy as np
-from scipy.signal import find_peaks 
-
 from mass2chem.search import *
 
 
@@ -96,7 +92,6 @@ def bin_by_median(List_of_tuples, func_tolerance):
     return PL
 
 
-# can be numba optimized
 def mass_paired_mapping(list1, list2, std_ppm=5):
     '''
     To find unambiguous matches of m/z values between two lists.
