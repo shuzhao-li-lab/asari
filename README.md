@@ -47,6 +47,12 @@ Algorithms
 Each sample is checked for mass accuracy. 
 Each sample has a recorded function of mass calibration and a function of RT calibration.
 
+Selectivity is tracked for
+- mSelectivity, how distinct are m/z measurements 
+- cSelectivity, how distinct are chromatograhic elution peaks
+- dSelectivity, how distinct are database records 
+
+
 Use
 ===
 Currently 

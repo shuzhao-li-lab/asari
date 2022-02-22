@@ -4,6 +4,8 @@ ext_Experiment is the container for whole project data.
 Heavy lifting is in constructors.CompositeMap, 
 which contains MassGrid for correspondence, and FeatureList from feature/peak detection.
 
+Annotation is facilitated by jms-metabolite-services, mass2chem
+
 '''
 import os
 import random
@@ -71,10 +73,6 @@ class ext_Experiment(Experiment):
         initiation_Samples are used to select one most representative sample to seed MassGrid and RT alignment.
         If refDB is used, it's better to be used after all samples are processed, 
         because the m/z values of samples are closer to other samples than refDB.
-        
-        if refDB:
-            self.CMAP.align_to_refdb(refDB)
-
         '''
         # start SQLite database
         # self.cursor = connect_sqlite_db(self.parameters['project_name'])
@@ -84,11 +82,12 @@ class ext_Experiment(Experiment):
         #      start DB after init
         
         self.process_all_without_export()
-
         # 
         self.CMAP.MassGrid.to_csv(
             os.path.join(self.parameters['outdir'], self.parameters['mass_grid_mapping']) )
+
         self.annotate()
+
         self.export_feature_table()
 
 
@@ -140,62 +139,89 @@ class ext_Experiment(Experiment):
 
     def annotate(self):
         '''
-        
+        To-do: Consider mass calibration before DB matching -
+            to add self.parameters
+
+        resultDict = {}
+        for epd in self.dict_empCpds.values():
+            resultDict[epd['interim_id']] = KCD.search_emp_cpd_single(epd, self.mode)
+
+        outfile = os.path.join(self.parameters['outdir'], 'annotated_empricalCompounds_')
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(list_empCpds, f, ensure_ascii=False, indent=2)
-
         print("\nEmpirical compound annotaion (%d) was written to %s." %(len(list_empCpds), outfile))
 
         '''
-        outfile = os.path.join(self.parameters['outdir'], 
-                                                            'annotated_empricalCompounds_')
+        self.load_annotation_db()
+        self.db_mass_calibrate()
+
         ECCON = epdsConstructor(self.CMAP.FeatureList, mode=self.mode)
         list_empCpds = ECCON.peaks_to_epds()
-        #list_empCpds = self._reformat_epds_(list_empCpds, self.CMAP.FeatureList)
-
-        # use JMS
-        KCD = knownCompoundDatabase()
-        # will move pickle files to db/
-        KCD.mass_indexed_compounds = pickle.load( pkg_resources.open_binary(db, 'mass_indexed_compounds.pickle') )
-            # open('mass_indexed_compounds.pickle', 'rb') )
-        KCD.emp_cpds_trees = pickle.load( pkg_resources.open_binary(db, 'emp_cpds_trees.pickle') )
-            # open('emp_cpds_trees.pickle', 'rb') )
-
+        
         EED = ExperimentalEcpdDatabase(mode=self.mode)
         EED.list_peaks = self.CMAP.FeatureList
         EED.dict_empCpds = EED.index_reformat_epds(list_empCpds, self.CMAP.FeatureList)
         EED.index_empCpds()
-        search_result = EED.annotate_against_KCD(KCD)
-        EED.export_annotations(search_result, KCD, outfile)
+
+        peak_result_dict, epd_search_result_dict = EED.annotate_all_against_KCD(self.KCD)
+        # interim_id is empCpd id
+        self.export_peak_annotation(self.KDC, peak_result_dict, 'peak_anno_')
 
 
-    def _reformat_epds_(self, list_empCpds, FeatureList):
-        fDict = {}
-        for F in FeatureList:
-            fDict[F['id_number']] = F
-        new = []
-        for E in list_empCpds:
-            features = []
-            for peak in E['list_peaks']:
-                features.append(
-                    {'feature_id': peak[0], 
-                    'mz': fDict[peak[0]]['mz'], 
-                    'rtime': fDict[peak[0]]['apex'], 
-                    'charged_formula': '', 
-                    'ion_relation': peak[1]}
-                )
-            new.append(
-                {
-                'interim_id': E['id'], 
-                'neutral_formula_mass': None,
-                'neutral_formula': None,
-                'Database_referred': [],
-                'identity': [],
-                'MS1_pseudo_Spectra': features,
-                'MS2_Spectra': [],
-                }
-            )
-        return new
+        # EED.export_annotations(KCD, outfile)     # containing both empCpd and singleton searches; to refactor
+
+        # to extend ion search based on found formula and empCpds
+
+        # for remaining, to search in extended DB
+
+
+
+    def load_annotation_db(self, src='hmdb4'):
+        '''Database of known compound using JMS
+        '''
+        self.KCD = knownCompoundDatabase()
+        self.KCD.mass_indexed_compounds = pickle.load( pkg_resources.open_binary(db, 'mass_indexed_compounds.pickle') )
+        self.KCD.emp_cpds_trees = pickle.load( pkg_resources.open_binary(db, 'emp_cpds_trees.pickle') )
+
+
+    def db_mass_calibrate(self, required_calibrate_threshold=0.000002):
+        '''
+        Use KCD.evaluate_mass_accuracy_ratio to check systematic mass shift.
+        If greater than required_calibrate_threshold (default 2 ppm), 
+        calibrate m/z values for the whole experiment by updating self.CMAP.FeatureList.
+
+        good_reference_landmark_peaks: [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...]
+        ref_id_num -> index number of mass track in MassGrid.
+        '''
+        mz_landmarks = [self.CMAP.MassGrid['mz'][p['ref_id_num']] for p in self.CMAP.good_reference_landmark_peaks]
+        mass_accuracy_ratio = self.KCD.evaluate_mass_accuracy_ratio(mz_landmarks, mode=self.mode, mz_tolerance_ppm=10)
+        if abs(mass_accuracy_ratio) > required_calibrate_threshold:
+            print("Mass shift is greater than %2.1f ppm. Correction applied." %(required_calibrate_threshold*1000000))
+            _correction = mass_accuracy_ratio + 1
+            for F in self.CMAP.FeatureList:
+                F['mz'] = F['mz'] / _correction
+                F['mz_corrected_by_division'] = _correction
+
+
+    def export_peak_annotation(self, KCD, peak_result_dict, export_file_name_prefix):
+
+        s = "[peak]id_number\tmz\tapex\t[EmpCpd]interim_id\t[EmpCpd]ion_relation\tmatched_DB_shorts\tmatched_DB_records\n"
+        for ii, V in peak_result_dict.items():
+            matched_DB_shorts, matched_DB_records = '', ''
+            list_matches = V['list_matches']
+            if list_matches:
+                    matched_DB_shorts = ", ".join([ "(" + KCD.short_report_emp_cpd(xx[0]) + ")"  for xx in list_matches])
+                    matched_DB_records = ", ".join([str(xx) for xx  in list_matches])
+
+            s += '\t'.join([str(x) for x in [
+                ii, V['peak']['mz'], V['peak']['apex'], V['interim_id'], V['epd_ion_relation'],
+                matched_DB_shorts, matched_DB_records]]) + "\n"
+
+        outfile = os.path.join(self.parameters['outdir'],export_file_name_prefix + '.tsv')
+        with open(outfile, 'w') as O:
+            O.write(s)
+
+        print("\nAnnotation of %d Empirical compounds was written to %s." %(len(self.dict_empCpds), outfile))
 
 
     def export_feature_table(self, full=True, outfile='cmap_feature_table.csv'):
@@ -212,9 +238,6 @@ class ext_Experiment(Experiment):
             pass
 
         print("\n\nFeature table (%d) was written to %s.\n\n" %(self.CMAP.FeatureTable.shape[0], outfile))
-
-
-
 
 
 
@@ -344,6 +367,36 @@ class ext_Experiment(Experiment):
             O.write(s.encode('utf-8', 'ignore').decode('utf-8'))
 
         
+    def _reformat_epds_(self, list_empCpds, FeatureList):
+        '''
+        usage: list_empCpds = self._reformat_epds_(list_empCpds, self.CMAP.FeatureList)
+        '''
+        fDict = {}
+        for F in FeatureList:
+            fDict[F['id_number']] = F
+        new = []
+        for E in list_empCpds:
+            features = []
+            for peak in E['list_peaks']:
+                features.append(
+                    {'feature_id': peak[0], 
+                    'mz': fDict[peak[0]]['mz'], 
+                    'rtime': fDict[peak[0]]['apex'], 
+                    'charged_formula': '', 
+                    'ion_relation': peak[1]}
+                )
+            new.append(
+                {
+                'interim_id': E['id'], 
+                'neutral_formula_mass': None,
+                'neutral_formula': None,
+                'Database_referred': [],
+                'identity': [],
+                'MS1_pseudo_Spectra': features,
+                'MS2_Spectra': [],
+                }
+            )
+        return new
 
 
 

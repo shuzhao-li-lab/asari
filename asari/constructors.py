@@ -66,8 +66,8 @@ class CompositeMap:
         self.FeatureTable = None
         self.FeatureList = []
 
-        self._mz_landmarks_ = []                    # keeping anchor pairs as landmarks
-        #
+        self._mz_landmarks_ = []                    # m/z landmarks as index numbers
+        self.good_reference_landmark_peaks = []     # used for RT alignment and m/z calibration to DB
         # self.ref_empCpds = []
         self.reference_mzdict = {}
         self.composite_mass_tracks = {}             # following MassGrid indices
@@ -150,7 +150,7 @@ class CompositeMap:
 
         mzlist = [x['mz'] for x in sample.list_mass_tracks]
         new_reference_mzlist, new_reference_map2, updated_REF_landmarks, _r = landmark_guided_mapping(
-                                    list(self.MassGrid['mz']),   self._mz_landmarks_, mzlist, sample._mz_landmarks_)
+                                    list(self.MassGrid['mz']), self._mz_landmarks_, mzlist, sample._mz_landmarks_)
         # print("_r = %f, new_reference_mzlist = %d" %(_r, len(new_reference_mzlist)))
 
         NewGrid = pd.DataFrame(
