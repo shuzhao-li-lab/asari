@@ -6,6 +6,8 @@ which contains MassGrid for correspondence, and FeatureList from feature/peak de
 
 Annotation is facilitated by jms-metabolite-services, mass2chem
 
+from mass2chem.epdsConstructor import epdsConstructor
+
 '''
 import os
 import random
@@ -14,12 +16,13 @@ import pickle
 
 from metDataModel.core import Experiment
 from mass2chem.search import *
-from mass2chem.epdsConstructor import epdsConstructor
+
 # jms-metabolite-services
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
 from .samples import SimpleSample
 from .constructors import CompositeMap
+from .json_encoder import NpEncoder
 from .sql import *
 
 try:
@@ -142,20 +145,6 @@ class ext_Experiment(Experiment):
         To-do: Consider mass calibration before DB matching -
             to add self.parameters
 
-        ECCON = epdsConstructor(self.CMAP.FeatureList, mode=self.mode)
-        list_empCpds = ECCON.peaks_to_epds()
-        EED.list_peaks = 
-        EED.dict_empCpds = EED.index_reformat_epds(list_empCpds, self.CMAP.FeatureList)
-        EED.index_empCpds()
-        resultDict = {}
-        for epd in self.dict_empCpds.values():
-            resultDict[epd['interim_id']] = KCD.search_emp_cpd_single(epd, self.mode)
-
-        outfile = os.path.join(self.parameters['outdir'], 'annotated_empricalCompounds_')
-        with open(outfile, 'w', encoding='utf-8') as f:
-            json.dump(list_empCpds, f, ensure_ascii=False, indent=2)
-        print("\nEmpirical compound annotaion (%d) was written to %s." %(len(list_empCpds), outfile))
-
         '''
         self.load_annotation_db()
         self.db_mass_calibrate()
@@ -165,7 +154,12 @@ class ext_Experiment(Experiment):
         EED.extend_empCpd_annotation(self.KCD)
         EED.annotate_singletons(self.KCD)
 
-        self.export_peak_annotation(EED.dict_empCpds, self.KCD, 'peak_anno_')
+        self.export_peak_annotation(EED.dict_empCpds, self.KCD, 'peak_annotation')
+        
+        # also exporting JSON
+        outfile = os.path.join(self.parameters['outdir'], 'annotated_empricalCompounds.json')
+        with open(outfile, 'w', encoding='utf-8') as f:
+            json.dump(EED.dict_empCpds, f, cls=NpEncoder, ensure_ascii=False, indent=2)
 
 
     def load_annotation_db(self, src='hmdb4'):

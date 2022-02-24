@@ -6,11 +6,8 @@ XICs without neighbors within x ppm are considered specific (i.e. high selectivi
 Low selectivity regions will be still inspected to determine the true number of XICs.
 Leave calibration to Correspondence step.
 
-import os
-from itertools import combinations
-# import matplotlib.pyplot as plt
-# from sklearn.neighbors import KernelDensity
-# from pyopenms import *
+To-do: automate parameters' estimation
+
 '''
 
 from operator import itemgetter
