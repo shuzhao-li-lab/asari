@@ -181,12 +181,15 @@ class ext_Experiment(Experiment):
         '''
         mz_landmarks = [self.CMAP.MassGrid['mz'][p['ref_id_num']] for p in self.CMAP.good_reference_landmark_peaks]
         mass_accuracy_ratio = self.KCD.evaluate_mass_accuracy_ratio(mz_landmarks, mode=self.mode, mz_tolerance_ppm=10)
-        if abs(mass_accuracy_ratio) > required_calibrate_threshold:
-            print("Mass shift is greater than %2.1f ppm. Correction applied." %(required_calibrate_threshold*1000000))
-            _correction = mass_accuracy_ratio + 1
-            for F in self.CMAP.FeatureList:
-                F['mz'] = F['mz'] / _correction
-                F['mz_corrected_by_division'] = _correction
+        if mass_accuracy_ratio:
+            if abs(mass_accuracy_ratio) > required_calibrate_threshold:
+                print("Mass shift is greater than %2.1f ppm. Correction applied." %(required_calibrate_threshold*1000000))
+                _correction = mass_accuracy_ratio + 1
+                for F in self.CMAP.FeatureList:
+                    F['mz'] = F['mz'] / _correction
+                    F['mz_corrected_by_division'] = _correction
+        else:
+            print("Mass accuracy check is skipped, too few mz_landmarks (%d) matched." %len(mz_landmarks))
 
 
     def export_peak_annotation(self, dict_empCpds, KCD, export_file_name_prefix):
