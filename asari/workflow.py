@@ -142,6 +142,11 @@ class ext_Experiment(Experiment):
         To-do: Consider mass calibration before DB matching -
             to add self.parameters
 
+        ECCON = epdsConstructor(self.CMAP.FeatureList, mode=self.mode)
+        list_empCpds = ECCON.peaks_to_epds()
+        EED.list_peaks = 
+        EED.dict_empCpds = EED.index_reformat_epds(list_empCpds, self.CMAP.FeatureList)
+        EED.index_empCpds()
         resultDict = {}
         for epd in self.dict_empCpds.values():
             resultDict[epd['interim_id']] = KCD.search_emp_cpd_single(epd, self.mode)
@@ -155,25 +160,12 @@ class ext_Experiment(Experiment):
         self.load_annotation_db()
         self.db_mass_calibrate()
 
-        ECCON = epdsConstructor(self.CMAP.FeatureList, mode=self.mode)
-        list_empCpds = ECCON.peaks_to_epds()
-        
         EED = ExperimentalEcpdDatabase(mode=self.mode)
-        EED.list_peaks = self.CMAP.FeatureList
-        EED.dict_empCpds = EED.index_reformat_epds(list_empCpds, self.CMAP.FeatureList)
-        EED.index_empCpds()
+        EED.build_from_list_peaks(self.CMAP.FeatureList)
+        EED.extend_empCpd_annotation(self.KCD)
+        EED.annotate_singletons(self.KCD)
 
-        peak_result_dict, epd_search_result_dict = EED.annotate_all_against_KCD(self.KCD)
-        # interim_id is empCpd id
-        self.export_peak_annotation(self.KDC, peak_result_dict, 'peak_anno_')
-
-
-        # EED.export_annotations(KCD, outfile)     # containing both empCpd and singleton searches; to refactor
-
-        # to extend ion search based on found formula and empCpds
-
-        # for remaining, to search in extended DB
-
+        self.export_peak_annotation(EED.dict_empCpds, self.KCD, 'peak_anno_')
 
 
     def load_annotation_db(self, src='hmdb4'):
@@ -203,25 +195,74 @@ class ext_Experiment(Experiment):
                 F['mz_corrected_by_division'] = _correction
 
 
-    def export_peak_annotation(self, KCD, peak_result_dict, export_file_name_prefix):
-
-        s = "[peak]id_number\tmz\tapex\t[EmpCpd]interim_id\t[EmpCpd]ion_relation\tmatched_DB_shorts\tmatched_DB_records\n"
-        for ii, V in peak_result_dict.items():
+    def export_peak_annotation(self, dict_empCpds, KCD, export_file_name_prefix):
+        '''
+        interim_id is empCpd id. dict_empCpds example:
+        {'interim_id': 15,
+            'neutral_formula_mass': 100.112624453,
+            'neutral_formula': 'C6H14N',
+            'Database_referred': [],
+            'identity': [],
+            'MS1_pseudo_Spectra': [{'id_number': 'F117',
+            'mz': 100.11207049661286,
+            'apex': 221.0,
+            'ion_relation': 'anchor',
+            'parent_epd_id': 15},
+            {'id_number': 'F132',
+            'mz': 101.11543204162328,
+            'apex': 221.0,
+            'ion_relation': '13C/12C',
+            'parent_epd_id': 15}],
+            'MS2_Spectra': [],
+            'list_matches': [('C6H14N_100.112624', 'M[1+]', 2),
+            ('C6H13N_99.104799', 'M+H[1+]', 2)]}
+        {'interim_id': 1744,
+            'neutral_formula_mass': None,
+            'neutral_formula': None,
+            'Database_referred': [],
+            'identity': [],
+            'MS1_pseudo_Spectra': [{'id_number': 'F9723',
+                'mz': 131.11659958783318,
+                'apex': 427.0,
+                'ion_relation': 'anchor',
+                'parent_epd_id': 1744},
+            {'id_number': 'F6237',
+                'mz': 153.09836047808778,
+                'apex': 434.0,
+                'ion_relation': 'Na/H',
+                'parent_epd_id': 1744}],
+            'MS2_Spectra': []},
+        {'interim_id': 1745,
+            'neutral_formula_mass': 80.037448138,
+            'neutral_formula': 'C4H4N2',
+            'MS1_pseudo_Spectra': [{'id_number': 'F1',
+                'mz': 81.04470247776916,
+                'apex': 84.0,
+                'height': 172960.79114030077,
+                'cSelectivity': 1.0,
+                'goodness_fitting': 0.9466921897715592,
+                'snr': 35.0}]},...
+        '''
+        s = "[peak]id_number\tmz\tapex\t[EmpCpd]interim_id\t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\tmatched_DB_shorts\tmatched_DB_records\n"
+        for ii, V in dict_empCpds.items():
             matched_DB_shorts, matched_DB_records = '', ''
-            list_matches = V['list_matches']
-            if list_matches:
-                    matched_DB_shorts = ", ".join([ "(" + KCD.short_report_emp_cpd(xx[0]) + ")"  for xx in list_matches])
-                    matched_DB_records = ", ".join([str(xx) for xx  in list_matches])
+            if 'list_matches' in V:
+                list_matches = V['list_matches']
+                #if list_matches:
+                matched_DB_shorts = ", ".join([ "(" + KCD.short_report_emp_cpd(xx[0]) + ")"  for xx in list_matches])
+                matched_DB_records = ", ".join([str(xx) for xx  in list_matches])
 
-            s += '\t'.join([str(x) for x in [
-                ii, V['peak']['mz'], V['peak']['apex'], V['interim_id'], V['epd_ion_relation'],
-                matched_DB_shorts, matched_DB_records]]) + "\n"
+            for peak in V['MS1_pseudo_Spectra']:
+                s += '\t'.join([str(x) for x in [
+                    peak['id_number'], peak['mz'], peak['apex'], V['interim_id'], peak.get('ion_relation', ''),
+                    V['neutral_formula'], V['neutral_formula_mass'],
+                    matched_DB_shorts, matched_DB_records]]) + "\n"
 
         outfile = os.path.join(self.parameters['outdir'],export_file_name_prefix + '.tsv')
         with open(outfile, 'w') as O:
             O.write(s)
 
-        print("\nAnnotation of %d Empirical compounds was written to %s." %(len(self.dict_empCpds), outfile))
+        print("\nAnnotation of %d Empirical compounds was written to %s." %(len(dict_empCpds), outfile))
 
 
     def export_feature_table(self, full=True, outfile='cmap_feature_table.csv'):
