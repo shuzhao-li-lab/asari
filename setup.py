@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
   name='asari-metabolomics',
-  version='0.9.2',
+  version='0.9.3',
 
   author='Shuzhao Li',
   author_email='shuzhao.li@gmail.com',
@@ -28,8 +28,10 @@ setup(
     'Topic :: Software Development :: Libraries :: Python Modules',
   ],
 
-  packages=find_packages(),
-  data_files=[  ],
+  packages=find_packages(
+    include=['*', '']
+  ),
+  data_files=[ ('asari/db', ['asari/db/mass_indexed_compounds.pickle', 'asari/db/emp_cpds_trees.pickle']) ],
   include_package_data=True,
   zip_safe=True,
   entry_points = {
