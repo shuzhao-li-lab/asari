@@ -357,6 +357,12 @@ def __hacked_lowess__(yy, xx, frac, it, xvals):
     return interf(xvals)
 
 
+def mock_rt_calibration(sample_rt_numbers, reference_rt_numbers):
+    _total = sorted(set(sample_rt_numbers + reference_rt_numbers))
+    rt_cal_dict = reverse_rt_cal_dict = dict(zip( _total, _total ))
+    return rt_cal_dict, reverse_rt_cal_dict
+    
+
 def savitzky_golay_spline(good_landmark_peaks, selected_reference_landmark_peaks, sample_rt_numbers, reference_rt_numbers):
     '''
     Modified Savitzky-Golay filter followed by spline fitting - pls follow format in rt_lowess.

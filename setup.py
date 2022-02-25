@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
   name='asari-metabolomics',
-  version='0.9.3',
+  version='0.9.4',
 
   author='Shuzhao Li',
   author_email='shuzhao.li@gmail.com',

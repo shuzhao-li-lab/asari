@@ -186,6 +186,11 @@ class CompositeMap:
         pass
 
 
+    def mock_rentention_alignment(self):
+        for sample in self.experiment.samples_nonreference:
+            sample.rt_cal_dict, sample.reverse_rt_cal_dict = mock_rt_calibration(sample.rt_numbers, self.reference_sample.rt_numbers)
+
+
     def align_retention_time(self):
         '''
         Because RT will not match precisely btw samples, it's remapped to a common set of time coordinates.
@@ -210,6 +215,7 @@ class CompositeMap:
         for SM in self.experiment.samples_nonreference:
             self.calibrate_sample_RT(SM, cal_min_peak_height=cal_min_peak_height, MIN_PEAK_NUM=MIN_PEAK_NUM)
         
+
     def calibrate_sample_RT(self, 
                                 sample, 
                                 calibration_fuction=rt_lowess_calibration, 

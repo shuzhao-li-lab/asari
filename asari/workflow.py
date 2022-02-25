@@ -89,16 +89,19 @@ class ext_Experiment(Experiment):
         self.CMAP.MassGrid.to_csv(
             os.path.join(self.parameters['outdir'], self.parameters['mass_grid_mapping']) )
 
-        self.annotate()
-
         self.export_feature_table()
+        
+        self.annotate()
 
 
     def process_all_without_export(self):
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid( self.process_initiation_samples() )
-        self.CMAP.align_retention_time()
-        # some samples could fail alignment; can be processed and aligned at the end
+        if self.parameters['rt_align']:
+            self.CMAP.align_retention_time()
+            # some samples could fail alignment; can be processed and aligned at the end
+        else:
+            self.CMAP.mock_rentention_alignment()
         self.CMAP.global_peak_detection()
 
 
@@ -276,8 +279,6 @@ class ext_Experiment(Experiment):
             pass
 
         print("\n\nFeature table (%d) was written to %s.\n\n" %(self.CMAP.FeatureTable.shape[0], outfile))
-
-
 
 
     def export_feature_table_old__(self, FeatureList, outfile='feature_table.tsv'):
