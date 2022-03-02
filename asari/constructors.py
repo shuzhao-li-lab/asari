@@ -61,6 +61,7 @@ class CompositeMap:
         self._number_of_samples_ = experiment.number_of_samples
         self.list_input_files = experiment.list_input_files
         self.reference_sample = None                # designated reference sample; all RT is aligned to this sample
+        self.dict_scan_rtime = {}                   # will populate scan number to Rtime mapping via reference_sample
 
         self.MassGrid = None                        # will be DF
         self.FeatureTable = None
@@ -114,6 +115,7 @@ class CompositeMap:
         reference_sample.rt_cal_dict = reference_sample.reverse_rt_cal_dict = _d
         self.reference_sample = self.experiment.reference_sample = reference_sample
         # note: other samples are aligned to this ref
+        self.dict_scan_rtime = dict(zip(reference_sample.rt_numbers, reference_sample.list_retention_time))
 
         print("\nInitiating MassGrid, ...\n    The reference sample is:\n    ||* %s *||\n" %reference_sample.input_file)
 
@@ -169,20 +171,13 @@ class CompositeMap:
 
     def optimize_mass_grid(self):
         '''
-        This inspects split or misaligned regions of m/z tracks.
-        Problematic definition will persist in each sample's mass tracks,
-        e.g. about 50 mass tracks are too close to each other in our plasma data; 200 in Zurich E. coli data.
-
-        merge close mass tracks unless MassGrid suggests multiple features; 
-        for split tracks in same samples, replace them by merged tracks and new id_numbers.
-
-        For low-selectivity mass tracks, could do 2-D deconvolution.?
-
+        Place holder - to inspect split or misaligned regions of m/z tracks.
         Not really needed now, after mass_tracks in each sample are cleaned up for m/z overlap.
 
-        '''
+        Potential optimizations to consider, e.g. 2-D deconvolution for low-selectivity mass tracks.
         # also check for empty tracks after composite?
         # watch out for indices used by other variables, e.g. _mz_landmarks_
+        '''
         pass
 
 
@@ -294,7 +289,7 @@ class CompositeMap:
         '''
         Using peaks.deep_detect_elution_peaks on composite mass tracks.
         Results are deemed as features, because it's at Experiment level.
-        Peak area and height are cumulated from all samples. Not trying to average because some peaks are only few samples.
+        Peak area and height are cumulated from all samples. Not trying to average because some peaks are in only few samples.
         '''
         self.composite_mass_tracks = self.make_composite_mass_tracks()
         print("\nPeak detection on %d composite mass tracks, ...\n" %len(self.composite_mass_tracks))
@@ -305,12 +300,18 @@ class CompositeMap:
                                                             min_peak_height=10000, min_fwhm=3, min_prominence_threshold=5000, wlen=50, 
                 snr=2, min_prominence_ratio=0.1,
                 iteration=True
-                    )           # to specify parameters here according to Experiment parameters
+                    )           
+                    
+                    # to specify parameters here according to Experiment parameters
 
         ii = 0
         for peak in self.FeatureList:
             ii += 1
             peak['id_number'] = 'F'+str(ii)
+            # convert scan numbers to rtime
+            peak['rtime'] = self.dict_scan_rtime[peak['apex']]
+            # next line: KeyError: 787
+            # peak['rtime_left_base'], peak['rtime_right_base'] = self.dict_scan_rtime[peak['left_base']], self.dict_scan_rtime[peak['right_base']]
 
         self.generate_feature_table()
 

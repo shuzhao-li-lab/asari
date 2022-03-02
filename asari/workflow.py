@@ -100,8 +100,12 @@ class ext_Experiment(Experiment):
         if self.parameters['rt_align']:
             self.CMAP.align_retention_time()
             # some samples could fail alignment; can be processed and aligned at the end
+
+            # add 3rd option of RT align
+
         else:
             self.CMAP.mock_rentention_alignment()
+
         self.CMAP.global_peak_detection()
 
 
@@ -157,10 +161,10 @@ class ext_Experiment(Experiment):
         EED.extend_empCpd_annotation(self.KCD)
         EED.annotate_singletons(self.KCD)
 
-        self.export_peak_annotation(EED.dict_empCpds, self.KCD, 'peak_annotation')
+        self.export_peak_annotation(EED.dict_empCpds, self.KCD, 'Feature_annotation')
         
         # also exporting JSON
-        outfile = os.path.join(self.parameters['outdir'], 'annotated_empricalCompounds.json')
+        outfile = os.path.join(self.parameters['outdir'], 'Annotated_empricalCompounds.json')
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(EED.dict_empCpds, f, cls=NpEncoder, ensure_ascii=False, indent=2)
 
@@ -243,20 +247,22 @@ class ext_Experiment(Experiment):
                 'goodness_fitting': 0.9466921897715592,
                 'snr': 35.0}]},...
         '''
-        s = "[peak]id_number\tmz\tapex\t[EmpCpd]interim_id\t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\tmatched_DB_shorts\tmatched_DB_records\n"
+        s = "[peak]id_number\tmz\trtime\tapex(scan number)\t[EmpCpd]interim_id\t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\
+        \tname_1st_guess\tmatched_DB_shorts\tmatched_DB_records\n"
         for ii, V in dict_empCpds.items():
-            matched_DB_shorts, matched_DB_records = '', ''
+            name_1st_guess, matched_DB_shorts, matched_DB_records = '', '', ''
             if 'list_matches' in V:
                 list_matches = V['list_matches']
-                #if list_matches:
-                matched_DB_shorts = ", ".join([ "(" + KCD.short_report_emp_cpd(xx[0]) + ")"  for xx in list_matches])
-                matched_DB_records = ", ".join([str(xx) for xx  in list_matches])
+                if list_matches:
+                    name_1st_guess = KCD.mass_indexed_compounds[list_matches[0][0]]['compounds'][0]['name']
+                    matched_DB_shorts = ", ".join([ "(" + KCD.short_report_emp_cpd(xx[0]) + ")"  for xx in list_matches])
+                    matched_DB_records = ", ".join([str(xx) for xx  in list_matches])
 
             for peak in V['MS1_pseudo_Spectra']:
                 s += '\t'.join([str(x) for x in [
-                    peak['id_number'], peak['mz'], peak['apex'], V['interim_id'], peak.get('ion_relation', ''),
+                    peak['id_number'], peak['mz'], peak['rtime'], peak['apex'], V['interim_id'], peak.get('ion_relation', ''),
                     V['neutral_formula'], V['neutral_formula_mass'],
-                    matched_DB_shorts, matched_DB_records]]) + "\n"
+                    name_1st_guess, matched_DB_shorts, matched_DB_records]]) + "\n"
 
         outfile = os.path.join(self.parameters['outdir'],export_file_name_prefix + '.tsv')
         with open(outfile, 'w') as O:
@@ -265,18 +271,20 @@ class ext_Experiment(Experiment):
         print("\nAnnotation of %d Empirical compounds was written to %s." %(len(dict_empCpds), outfile))
 
 
-    def export_feature_table(self, full=True, outfile='cmap_feature_table.csv'):
+    def export_feature_table(self, full=False, outfile='cmap_feature_table.tsv'):
         '''
-        Will need real RT time;
-        Selectivity in m/z, RT and overall
-        
+        Will better format cells
+
+        ['rtime_left_base'], ['rtime_right_base']
         '''
         outfile = os.path.join(self.parameters['outdir'], self.parameters['output_feature_table'])
         if full:
-            self.CMAP.FeatureTable.to_csv(outfile)
+            self.CMAP.FeatureTable.to_csv(outfile, index=False, sep="\t")
+
         else:
-            # select columns to export
-            pass
+            use_cols = [ 'id_number', 'mz', 'rtime', 'parent_masstrack_id', 'peak_area', 'cSelectivity', 'goodness_fitting', 'snr',
+                    ] + [sample.input_file for sample in self.all_samples]
+            self.CMAP.FeatureTable[use_cols].to_csv(outfile, index=False, sep="\t")
 
         print("\n\nFeature table (%d) was written to %s.\n\n" %(self.CMAP.FeatureTable.shape[0], outfile))
 

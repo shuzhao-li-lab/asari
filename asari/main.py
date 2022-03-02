@@ -68,7 +68,7 @@ from .workflow import *
 PARAMETERS = {
     'project_name': 'test_asari',
     'outdir': 'asari_output_',
-    'rt_align': False,
+    'rt_align': True,
     
     'min_intensity_threshold': 100,     # minimal intensity for mass track extraction, filtering baseline
     'min_peak_height': 5000,            # minimal peak height
@@ -81,9 +81,9 @@ PARAMETERS = {
 
     # tweaking this section now -
     'cache_mass_traces': False,         # to save memory if not using DB; turn on if need to plot and diagnose
-    'output_feature_table': '_cmap_feature_table.csv',
+    'output_feature_table': 'Feature_table.tsv',
     'mass_grid_mapping': "_mass_grid_mapping.csv",
-    'annotation_filename': "annotation_table.tsv",
+    'annotation_filename': "Annotation_table.tsv",
     'json_empricalCompounds': "_empCpd_json.json",
 
     #

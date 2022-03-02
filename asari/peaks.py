@@ -196,14 +196,14 @@ def convert_peak_json__( ii, mass_track, peaks, properties, cSelectivity=None):
     rt_numbers  = mass_track['rt_scan_numbers']
     left_index, right_index = properties['left_bases'][ii], properties['right_bases'][ii]   # index positions on mass track
     left_base, right_base = rt_numbers[left_index], rt_numbers[right_index]
-    peak_area = sum(mass_track['intensity'][left_index: right_index+1]) 
+    peak_area = int(sum(mass_track['intensity'][left_index: right_index+1])) 
     return {
             'parent_masstrack_id': mass_track['id_number'],
             'mz': mass_track['mz'],
             'apex': rt_numbers[peaks[ii]], 
             # 'rtime': rt_numbers[peaks[ii]], 
             'peak_area': peak_area,
-            'height': properties['peak_heights'][ii],
+            'height': int(properties['peak_heights'][ii]),
             'left_base': left_base,                                                         # rt_numbers
             'right_base': right_base,   
             'left_index': left_index,                                                       # specific to the referred mass track
