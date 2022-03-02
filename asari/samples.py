@@ -37,7 +37,8 @@ class SimpleSample:
             self.id = self.experiment.list_input_files.index(input_file)
         else:
             self.id = input_file
-        
+
+        self.name = os.path.basename(input_file).replace('.mzML', '')
         self.mode = mode
         self.parameters = {}
         self.rt_numbers = []                                # list of scans, starting from 0
@@ -64,11 +65,11 @@ class SimpleSample:
         self.dict_peaks = {}
 
 
-    def process(self, mz_tolerance_ppm, min_intensity, min_timepoints):
+    def process(self, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height):
         '''
         From input file to list_MassTraces with detected peaks and selectivity on peaks.
         '''
-        self.get_mass_tracks_( mz_tolerance_ppm, min_intensity, min_timepoints)
+        self.get_mass_tracks_( mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
         self.get_anchor_mz_pairs()
         print("    Number of anchor m/z pairs = %d" %self._number_anchor_mz_pairs_)
 
@@ -76,7 +77,7 @@ class SimpleSample:
         # to send to SQL DB here
 
 
-    def get_mass_tracks_(self, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5):
+    def get_mass_tracks_(self, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000):
         '''
         A mass track is an EIC for full RT range, without separating the mass traces,
         using asari.chromatograms algorithm.
@@ -85,7 +86,10 @@ class SimpleSample:
         exp = MSExperiment()                                                                                          
         MzMLFile().load(self.input_file, exp)
         xdict = extract_massTracks_(exp, 
-                    mz_tolerance_ppm=mz_tolerance_ppm, min_intensity=min_intensity, min_timepoints=min_timepoints)
+                    mz_tolerance_ppm=mz_tolerance_ppm, 
+                    min_intensity=min_intensity, 
+                    min_timepoints=min_timepoints, 
+                    min_peak_height=min_peak_height)
         self.rt_numbers = xdict['rt_numbers']            # list of scans, starting from 0
         self.list_retention_time = xdict['rt_times']     # full RT time points in sample
         ii = 0

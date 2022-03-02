@@ -65,16 +65,21 @@ import time
 from .workflow import *
 
 
+#
+# important parameters to estimate: ppm of chrom construction; min_peak_height
+#
+
 PARAMETERS = {
     'project_name': 'test_asari',
     'outdir': 'asari_output_',
-    'rt_align': True,
+    'rt_align': False,
     
-    'min_intensity_threshold': 100,     # minimal intensity for mass track extraction, filtering baseline
-    'min_peak_height': 5000,            # minimal peak height
+    'min_intensity_threshold': 1000,     # minimal intensity for mass track extraction, filtering baseline
+    'min_peak_height': 100000,            # minimal peak height
+
     'cal_min_peak_height': 100000,      # minimal peak height required for peaks used for RT calibration
     'min_timepoints': 5,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
-    'signal_noise_ratio': 2,            # peak height at least x fold over noise, which is median of non-peak data points.
+    'signal_noise_ratio': 10,            # peak height at least x fold over noise, which is median of non-peak data points.
     #
     'peak_number_rt_calibration': 15,   # minimal number of selected high-quality peaks required for RT calibration. 
                                         # Samples with fewer selected peaks are dropped out.

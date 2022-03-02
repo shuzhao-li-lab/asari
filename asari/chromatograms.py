@@ -35,15 +35,16 @@ def sum_dict(dict1, dict2):
 # indexing function
 # -----------------------------------------------------------------------------
 
-def get_thousandth_regions(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5):
+def get_thousandth_regions(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000):
     '''
     Process all LC-MS spectral data into flexible bins by units of 0.001 amu.
     mz_tolerance_ppm: m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
     ms_expt: pyopenms MSExperiment instance, loaded with LC-MS data.
     min_intensity: minimal intentsity value, needed because some instruments keep 0s 
     min_timepoints: minimal consecutive scans to be considered real signal.
+    min_peak_height: a bin is not considered if the max intensity < min_peak_height.
     
-    Return: a list of flexible bins
+    Return: a list of flexible bins, [ [(mz, scan_num, intensity_int), ...], ... ]
     '''
     def __rough_check_consecutive_scans__(datatuples, check_max_len=20, gap_allowed=2, min_timepoints=min_timepoints):
         # a list of data points in format of (mz_int, scan_num, intensity_int)
@@ -57,7 +58,13 @@ def get_thousandth_regions(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_t
                 return True
         else:
             return True
-            
+
+    def __check_min_peak_height__(datatuples, min_peak_height):
+        if max([x[2] for x in datatuples]) < min_peak_height:
+            return False
+        else:
+            return True
+
     tol_ = 0.000001 * mz_tolerance_ppm
     number_spectra = ms_expt.getNrSpectra()
 
@@ -98,7 +105,7 @@ def get_thousandth_regions(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_t
             datatuples += mzTree[b]
         # check the presence of min consecutive RT in small traces, to filter out more noises
         # e.g. in an example datafile, 5958 reduced to 4511 traces
-        if __rough_check_consecutive_scans__(datatuples):
+        if __check_min_peak_height__(datatuples, min_peak_height) and __rough_check_consecutive_scans__(datatuples):
             good_bins.append(datatuples)
     
     # del mzTree
@@ -109,7 +116,7 @@ def get_thousandth_regions(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_t
 # mass Traces
 # -----------------------------------------------------------------------------
 
-def extract_massTraces(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5):
+def extract_massTraces(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000):
     '''
     ms_expt: pyopenms MSExperiment instance, loaded with LC-MS data.
     return 
@@ -118,11 +125,10 @@ def extract_massTraces(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timep
     '''
     rt_numbers = range(ms_expt.getNrSpectra())
     rt_times = [spec.getRT() for spec in ms_expt]
-    good_bins = get_thousandth_regions(ms_expt, mz_tolerance_ppm, min_intensity, min_timepoints)
+    good_bins = get_thousandth_regions(ms_expt, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
     xics = []
     for bin in good_bins:
-        xics += bin_to_xics(
-                bin, mz_tolerance_ppm, gap_allowed=2, min_timepoints=5)
+        xics += bin_to_xics(bin, mz_tolerance_ppm, min_timepoints)
         
     return {
         'rt_numbers': rt_numbers,
@@ -130,7 +136,7 @@ def extract_massTraces(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timep
         'xics': xics,
     }
 
-def bin_to_xics(bin_data_tuples, mz_tolerance_ppm=5, gap_allowed=2, min_timepoints=5):
+def bin_to_xics(bin_data_tuples, mz_tolerance_ppm=5, min_timepoints=5, gap_allowed=2):
     '''
     input a flexible bin by units of 0.001 amu, in format of [(mz, scan_num, intensity_int), ...].
     return XICs as [( mz, rtlist, intensities ), ...]
@@ -193,7 +199,7 @@ def extract_single_trace(bin, gap_allowed=2, min_timepoints=5):
 # mass Tracks
 # -----------------------------------------------------------------------------
 
-def extract_massTracks_(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5):
+def extract_massTracks_(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000):
     '''
     A mass track is an EIC for full RT range, without separating the mass traces. 
     ms_expt: pyopenms MSExperiment instance, loaded with LC-MS data.
@@ -204,7 +210,7 @@ def extract_massTracks_(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_time
     # rt_numbers = range(ms_expt.getNrSpectra())
     rt_times = [spec.getRT() for spec in ms_expt]
     rt_numbers = list(range(len(rt_times)))
-    good_bins = get_thousandth_regions(ms_expt, mz_tolerance_ppm, min_intensity, min_timepoints)
+    good_bins = get_thousandth_regions(ms_expt, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
     tracks = []
     for bin in good_bins:
         tracks += bin_to_mass_tracks(bin, mz_tolerance_ppm)

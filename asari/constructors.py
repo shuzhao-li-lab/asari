@@ -86,11 +86,12 @@ class CompositeMap:
 
     def initiate_mass_grid(self, init_samples):
         '''
-        Create MassGrid for whole experiment
-        Use list_samples (list of Sample instances) to initiate MassGrid.
+        Initiate MassGrid for whole experiment.
+
+        Input
+        =====
+        list_samples: list of Sample instances, used to initiate MassGrid.
         Each Sample has list_mass_tracks and anchor_mz_pairs.
-        The m/z of reference is taken as mean of these initiation samples (id_mz_str not updated). Afterwards, 
-        the ref m/z isn't changed when single samples are added for performance/complexity reasons.
 
         All mass traces are included at this stage, regardless if peaks are detected, because
         peak detection will be an improved process on the composite traces.
@@ -118,6 +119,9 @@ class CompositeMap:
         self.dict_scan_rtime = dict(zip(reference_sample.rt_numbers, reference_sample.list_retention_time))
 
         print("\nInitiating MassGrid, ...\n    The reference sample is:\n    ||* %s *||\n" %reference_sample.input_file)
+        print("Max _retention_time is %4.2f at scan number %d.\n" %(max(reference_sample.list_retention_time),
+                                                                    max(reference_sample.rt_numbers)))
+        # print("Max intensity is %d and median intensity is %d." %(        ))
 
         self.reference_anchor_pairs = reference_sample.anchor_mz_pairs
         self._mz_landmarks_ = flatten_tuplelist(reference_sample.anchor_mz_pairs)
@@ -294,24 +298,34 @@ class CompositeMap:
         self.composite_mass_tracks = self.make_composite_mass_tracks()
         print("\nPeak detection on %d composite mass tracks, ...\n" %len(self.composite_mass_tracks))
 
+        min_peak_height = self.experiment.parameters['min_peak_height']
+        min_prominence_threshold = self.experiment.parameters['min_prominence_threshold']
+        min_fwhm = round( 0.5 * self.experiment.parameters['min_timepoints'] )
+        snr = self.experiment.parameters['signal_noise_ratio']
+
         for _, mass_track in self.composite_mass_tracks.items():
-            self.FeatureList +=  deep_detect_elution_peaks( mass_track, 
-                                                            max_rt_number = self.experiment.number_scans,
-                                                            min_peak_height=10000, min_fwhm=3, min_prominence_threshold=5000, wlen=50, 
-                snr=2, min_prominence_ratio=0.1,
-                iteration=True
-                    )           
-                    
-                    # to specify parameters here according to Experiment parameters
+            if max(mass_track['intensity']) > min_peak_height:
+                self.FeatureList +=  deep_detect_elution_peaks( mass_track, 
+                                        max_rt_number=self.experiment.number_scans,
+                                        min_peak_height=min_peak_height, min_fwhm=min_fwhm, 
+                                        min_prominence_threshold=min_prominence_threshold, 
+                                        snr=snr,
+                                        wlen=50, min_prominence_ratio=0.1,
+                                        iteration=True
+                                        )           
+                        
+                        # to specify parameters here according to Experiment parameters
 
         ii = 0
         for peak in self.FeatureList:
             ii += 1
             peak['id_number'] = 'F'+str(ii)
             # convert scan numbers to rtime
-            peak['rtime'] = self.dict_scan_rtime[peak['apex']]
-            # next line: KeyError: 787
-            # peak['rtime_left_base'], peak['rtime_right_base'] = self.dict_scan_rtime[peak['left_base']], self.dict_scan_rtime[peak['right_base']]
+            try:
+                peak['rtime'] = self.dict_scan_rtime[peak['apex']]
+                peak['rtime_left_base'], peak['rtime_right_base'] = self.dict_scan_rtime[peak['left_base']], self.dict_scan_rtime[peak['right_base']]
+            except KeyError:
+                print("Peak rtime out of bound on", ii)
 
         self.generate_feature_table()
 
@@ -383,7 +397,7 @@ class CompositeMap:
         FeatureTable = pd.DataFrame(self.FeatureList)
         for SM in self.experiment.all_samples:
             if SM.rt_cal_dict:
-                FeatureTable[SM.input_file] = self.extract_features_per_sample(SM)
+                FeatureTable[SM.name] = self.extract_features_per_sample(SM)          # SM.input_file
 
         self.FeatureTable = FeatureTable
 

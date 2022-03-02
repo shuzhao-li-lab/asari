@@ -85,18 +85,26 @@ class ext_Experiment(Experiment):
         #      start DB after init
         
         self.process_all_without_export()
-        # 
         self.CMAP.MassGrid.to_csv(
             os.path.join(self.parameters['outdir'], self.parameters['mass_grid_mapping']) )
-
         self.export_feature_table()
-        
         self.annotate()
 
 
     def process_all_without_export(self):
+
+        #
+        # Do one sample
+        #
+
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid( self.process_initiation_samples() )
+
+
+        # automatic update of parameters based on ref sample
+
+
+
         if self.parameters['rt_align']:
             self.CMAP.align_retention_time()
             # some samples could fail alignment; can be processed and aligned at the end
@@ -122,9 +130,10 @@ class ext_Experiment(Experiment):
         mz_tolerance_ppm = self.parameters['mz_tolerance']
         min_intensity = self.parameters['min_intensity_threshold']
         min_timepoints = self.parameters['min_timepoints']
+        min_peak_height = self.parameters['min_peak_height']
         try:
             SM = SimpleSample(self, self.mode, input_file)
-            SM.process( mz_tolerance_ppm, min_intensity, min_timepoints)
+            SM.process( mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
             # sample id, assigned by index in self.list_input_files.
             # DB commit
             return SM
@@ -283,7 +292,7 @@ class ext_Experiment(Experiment):
 
         else:
             use_cols = [ 'id_number', 'mz', 'rtime', 'parent_masstrack_id', 'peak_area', 'cSelectivity', 'goodness_fitting', 'snr',
-                    ] + [sample.input_file for sample in self.all_samples]
+                    ] + [sample.name for sample in self.all_samples]
             self.CMAP.FeatureTable[use_cols].to_csv(outfile, index=False, sep="\t")
 
         print("\n\nFeature table (%d) was written to %s.\n\n" %(self.CMAP.FeatureTable.shape[0], outfile))
