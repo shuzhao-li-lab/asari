@@ -1,14 +1,13 @@
 Asari
 =====
 
-Version 0.8
 
 Python program for high-resolution LC-MS metabolomics data preprocessing, 
 with a design focus to be trackable and scalable.
 
 - only for high resolution data. Prioritized leverage of high mass resolution.
 - Simple peak dection based on local maxima and prominence.
-- Tracking peak quality, selectiviy (on m/z, database, elution), and sequential selectivity.
+- Tracking peak quality, selectiviy (on m/z, database, elution).
 - reproducible, trackable from features to XICs
 - Peaks of high quality and selectivity are aligned via formula mass and epdTrees.
 - Fast assembly and annotation of serum/plasma metabolomes based on a reference database.
@@ -33,7 +32,7 @@ Basic concepts follow https://github.com/shuzhao-li/metDataModel, as
 A sample here is an injection in LC-MS experiments. A MassTrace is an extracted chromatogram (EIC or XIC).
 Peak is specific to a sample, but a feature is defined per experiment.
 
-This uses `mass2chem` for mass search and annotation functions.
+This uses `mass2chem` and `JMS` for mass search and annotation functions.
 
 Algorithms
 ==========

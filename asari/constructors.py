@@ -294,6 +294,9 @@ class CompositeMap:
         Using peaks.deep_detect_elution_peaks on composite mass tracks.
         Results are deemed as features, because it's at Experiment level.
         Peak area and height are cumulated from all samples. Not trying to average because some peaks are in only few samples.
+
+        Performance can be improved further - quick filter to ROI will help long LC runs.
+
         '''
         self.composite_mass_tracks = self.make_composite_mass_tracks()
         print("\nPeak detection on %d composite mass tracks, ...\n" %len(self.composite_mass_tracks))
@@ -407,20 +410,20 @@ class CompositeMap:
         '''
         fList = []
         mass_track_map = self.MassGrid[sample.input_file]
-        max_rt_number = max(sample.rt_numbers)
+        max_rt_number = max(sample.rt_numbers)+1                # to have none intensity if peak out of RT range
         for peak in self.FeatureList:
             track_number = mass_track_map[peak['parent_masstrack_id']]
             peak_area = 0
             if not pd.isna(track_number):           # watch out dtypes
                 mass_track = sample.list_mass_tracks[ int(track_number) ]
-                left_base = sample.reverse_rt_cal_dict[peak['left_base']]
+                left_base, right_base = max_rt_number, max_rt_number
                 try:
+                    left_base = sample.reverse_rt_cal_dict[peak['left_base']]
                     right_base = sample.reverse_rt_cal_dict[peak['right_base']]
                 except KeyError:
-                    right_base = max_rt_number
-                    # will log somewhere, not critical
-                    #print("    ... in %s ... incomplete elution peak at ... %4.4f ..." %(os.path.basename(sample.input_file), mass_track['mz']))
+                    print("    ... in %s ... incomplete elution peak at ... %4.4f ..." %(os.path.basename(sample.input_file), mass_track['mz']))
 
+                # can optimize below
                 for ii in range(len(mass_track['rt_scan_numbers'])):
                     if left_base <= mass_track['rt_scan_numbers'][ii] <= right_base:
                         peak_area += mass_track['intensity'][ii]
