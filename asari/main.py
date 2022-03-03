@@ -72,7 +72,7 @@ from .workflow import *
 PARAMETERS = {
     'project_name': 'test_asari',
     'outdir': 'asari_output_',
-    'rt_align': False,
+    'rt_align': True,
     
     'min_intensity_threshold': 1000,     # minimal intensity for mass track extraction, filtering baseline
     'min_peak_height': 100000,            # minimal peak height

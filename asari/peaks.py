@@ -174,16 +174,16 @@ def deep_detect_elution_peaks( mass_track, max_rt_number,
         # do SNR, defined as mean of all non-peak data points
         _peak_datapoints = []
         for _jpeak in list_json_peaks:
-            _peak_datapoints += list(range( _jpeak['left_index'], _jpeak['right_base'] ))
+            _peak_datapoints += list(range( _jpeak['left_index'], _jpeak['right_index'] ))
         _valid_datapoints = [x for x in range(len(list_intensity)) if x not in _peak_datapoints]
         __noise_level__ =  __list_intensity[_valid_datapoints]
         __noise_level__ = __noise_level__[__noise_level__>0]
         if __noise_level__.size > 0:
             __noise_level__ = __noise_level__.mean()
         else:
-            __noise_level__ = 1
+            __noise_level__ = __list_intensity[_peak_datapoints].min()
         for _jpeak in list_json_peaks:
-            _jpeak['snr'] = int(_jpeak['height'] / __noise_level__)
+            _jpeak['snr'] = int( min(_jpeak['height'], 99999999) / __noise_level__)         # cap upper limit and avoid INF
             if _jpeak['snr'] > snr:
                 list_peaks.append(_jpeak)
 
