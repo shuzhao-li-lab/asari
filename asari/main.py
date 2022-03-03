@@ -78,8 +78,8 @@ PARAMETERS = {
     'min_peak_height': 100000,            # minimal peak height
 
     'cal_min_peak_height': 100000,      # minimal peak height required for peaks used for RT calibration
-    'min_timepoints': 5,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
-    'signal_noise_ratio': 10,            # peak height at least x fold over noise, which is median of non-peak data points.
+    'min_timepoints': 6,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
+    'signal_noise_ratio': 5,            # peak height at least x fold over noise, which is median of non-peak data points.
     #
     'peak_number_rt_calibration': 15,   # minimal number of selected high-quality peaks required for RT calibration. 
                                         # Samples with fewer selected peaks are dropped out.

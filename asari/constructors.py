@@ -298,6 +298,7 @@ class CompositeMap:
         self.composite_mass_tracks = self.make_composite_mass_tracks()
         print("\nPeak detection on %d composite mass tracks, ...\n" %len(self.composite_mass_tracks))
 
+        # to specify parameters here according to Experiment parameters
         min_peak_height = self.experiment.parameters['min_peak_height']
         min_prominence_threshold = self.experiment.parameters['min_prominence_threshold']
         min_fwhm = round( 0.5 * self.experiment.parameters['min_timepoints'] )
@@ -311,10 +312,8 @@ class CompositeMap:
                                         min_prominence_threshold=min_prominence_threshold, 
                                         snr=snr,
                                         wlen=50, min_prominence_ratio=0.1,
-                                        iteration=True
-                                        )           
-                        
-                        # to specify parameters here according to Experiment parameters
+                                        iteration=False,                            #True
+                                        ) 
 
         ii = 0
         for peak in self.FeatureList:

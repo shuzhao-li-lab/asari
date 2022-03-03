@@ -96,14 +96,10 @@ class ext_Experiment(Experiment):
         #
         # Do one sample
         #
-
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid( self.process_initiation_samples() )
 
-
         # automatic update of parameters based on ref sample
-
-
 
         if self.parameters['rt_align']:
             self.CMAP.align_retention_time()
@@ -291,7 +287,8 @@ class ext_Experiment(Experiment):
             self.CMAP.FeatureTable.to_csv(outfile, index=False, sep="\t")
 
         else:
-            use_cols = [ 'id_number', 'mz', 'rtime', 'parent_masstrack_id', 'peak_area', 'cSelectivity', 'goodness_fitting', 'snr',
+            use_cols = [ 'id_number', 'mz', 'rtime', 'rtime_left_base', 'rtime_right_base', 'parent_masstrack_id', 
+                        'peak_area', 'cSelectivity', 'goodness_fitting', 'snr',
                     ] + [sample.name for sample in self.all_samples]
             self.CMAP.FeatureTable[use_cols].to_csv(outfile, index=False, sep="\t")
 
