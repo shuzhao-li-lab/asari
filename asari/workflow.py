@@ -270,7 +270,7 @@ class ext_Experiment(Experiment):
                     name_1st_guess, matched_DB_shorts, matched_DB_records]]) + "\n"
 
         outfile = os.path.join(self.parameters['outdir'],export_file_name_prefix + '.tsv')
-        with open(outfile, 'w') as O:
+        with open(outfile, encoding='utf-8', mode='w') as O:
             O.write(s)
 
         print("\nAnnotation of %d Empirical compounds was written to %s." %(len(dict_empCpds), outfile))
