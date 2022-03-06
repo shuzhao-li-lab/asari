@@ -79,7 +79,7 @@ class CompositeMap:
         # print("Done initiation_Samples.\n")
         for f in self.list_input_files:                                 # run remaining samples, 
             if f not in self.experiment.initiation_samples:
-                SM = self.experiment.process_single_sample(f)
+                SM = self.experiment.process_single_sample(f, database_mode='ondisk')
                 # not via DB
                 self.add_sample(SM)
 
@@ -115,6 +115,9 @@ class CompositeMap:
         _d = dict(zip(reference_sample.rt_numbers, reference_sample.rt_numbers))
         reference_sample.rt_cal_dict = reference_sample.reverse_rt_cal_dict = _d
         self.reference_sample = self.experiment.reference_sample = reference_sample
+
+        ref_list_mass_tracks = reference_sample.get_mass_tracks()
+
         # note: other samples are aligned to this ref
         self.dict_scan_rtime = dict(zip(reference_sample.rt_numbers, reference_sample.list_retention_time))
 
@@ -125,7 +128,7 @@ class CompositeMap:
 
         self.reference_anchor_pairs = reference_sample.anchor_mz_pairs
         self._mz_landmarks_ = flatten_tuplelist(reference_sample.anchor_mz_pairs)
-        reference_mzlist = [ x['mz'] for x in reference_sample.list_mass_tracks ]
+        reference_mzlist = [ x['mz'] for x in ref_list_mass_tracks ]
         # setting up DataFrame for MassGrid
         # not forcing dtype on DataFrame, to avoid unreported errors; convert to int when using MassGrid
         self.MassGrid = pd.DataFrame(
@@ -134,7 +137,7 @@ class CompositeMap:
         )
         # Add ref mz as a column to MassGrid; ref mzlist will be dynamic updated in MassGrid["mz"]
         self.MassGrid['mz'] = reference_mzlist
-        self.MassGrid[ reference_sample.input_file ] = [ x['id_number'] for x in reference_sample.list_mass_tracks ]
+        self.MassGrid[ reference_sample.input_file ] = [ x['id_number'] for x in ref_list_mass_tracks ]
         # self.reference_sample.export_mass_traces()
         for SM in other_list_samples:
             self.add_sample(SM, database_cursor=None)
@@ -153,8 +156,9 @@ class CompositeMap:
 
         '''
         print("Adding sample to MassGrid,", os.path.basename(sample.input_file))
+        list_mass_tracks = sample.get_mass_tracks()
+        mzlist = [x['mz'] for x in list_mass_tracks]
 
-        mzlist = [x['mz'] for x in sample.list_mass_tracks]
         new_reference_mzlist, new_reference_map2, updated_REF_landmarks, _r = landmark_guided_mapping(
                                     list(self.MassGrid['mz']), self._mz_landmarks_, mzlist, sample._mz_landmarks_)
         # print("_r = %f, new_reference_mzlist = %d" %(_r, len(new_reference_mzlist)))
@@ -233,11 +237,12 @@ class CompositeMap:
         candidate_landmarks = [self.MassGrid[sample.input_file].values[
                                 p['ref_id_num']] for p in self.good_reference_landmark_peaks] # contains NaN
         good_landmark_peaks, selected_reference_landmark_peaks = [], []
+        list_mass_tracks = sample.get_mass_tracks()
         for jj in range(len(self.good_reference_landmark_peaks)):
             ii = candidate_landmarks[jj]
             if not pd.isna(ii):
                 ii = int(ii)
-                this_mass_track = sample.list_mass_tracks[ii]
+                this_mass_track = list_mass_tracks[ii]
                 rt_numbers, list_intensity = this_mass_track['rt_scan_numbers'], this_mass_track['intensity']
                 # continuity in rt_scan_numbers is implemented in chromatograms.extract_single_track_ 
                 Upeak = quick_detect_unique_elution_peak(rt_numbers, list_intensity, 
@@ -272,11 +277,12 @@ class CompositeMap:
         '''
         selectivities = calculate_selectivity( self.MassGrid['mz'][self._mz_landmarks_] )
         good_reference_landmark_peaks = []
+        ref_list_mass_tracks = self.reference_sample.get_mass_tracks()
         for ii in range(len(self._mz_landmarks_)):
             if selectivities[ii] > 0.99:
                 ref_ii = self.MassGrid[self.reference_sample.input_file][self._mz_landmarks_[ii]]
                 if ref_ii:
-                    this_mass_track = self.reference_sample.list_mass_tracks[ int(ref_ii) ]
+                    this_mass_track = ref_list_mass_tracks[ int(ref_ii) ]
                     rt_numbers, list_intensity = this_mass_track['rt_scan_numbers'], this_mass_track['intensity']
                     # continuity in rt_scan_numbers is implemented in chromatograms.extract_single_track_ 
                     Upeak = quick_detect_unique_elution_peak(rt_numbers, list_intensity, 
@@ -354,21 +360,23 @@ class CompositeMap:
         mzDict = dict(self.MassGrid['mz'])
         mzlist = list(self.MassGrid.index)              # this gets indices as keys, per mass track
         _comp_dict = {}
+        ref_list_mass_tracks = self.reference_sample.get_mass_tracks()
         for k in mzlist: 
             _comp_dict[k] = {}       # will be {rt_index: intensity}
             # init using reference_sample
             ref_index = self.MassGrid[self.reference_sample.input_file][k]
             if not pd.isna(ref_index):
-                this_mass_track = self.reference_sample.list_mass_tracks[int(ref_index)]
+                this_mass_track = ref_list_mass_tracks[int(ref_index)]
                 # ref mass track should be continuous
                 _comp_dict[k] = dict(zip(this_mass_track['rt_scan_numbers'], this_mass_track['intensity']))
 
         for SM in self.experiment.samples_nonreference:
+            list_mass_tracks = SM.get_mass_tracks()
             if SM.rt_cal_dict:
                 for k in mzlist:
                     ref_index = self.MassGrid[SM.input_file][k]
                     if not pd.isna(ref_index): # ref_index and 
-                        this_mass_track = SM.list_mass_tracks[int(ref_index)]
+                        this_mass_track = list_mass_tracks[int(ref_index)]
                         # after remapping RT indices, no guaranty rt/intensity vector is continuous; thus smoothing is needed
                         remapped_rt = [ SM.rt_cal_dict[ii] for ii in this_mass_track['rt_scan_numbers'] ] # convert to ref RT
                         _comp_dict[k] = sum_dict( _comp_dict[k], smooth_rt_intensity_remap(remapped_rt, this_mass_track['intensity']))
@@ -410,12 +418,13 @@ class CompositeMap:
         '''
         fList = []
         mass_track_map = self.MassGrid[sample.input_file]
+        list_mass_tracks = sample.get_mass_tracks()
         max_rt_number = max(sample.rt_numbers)+1                # to have none intensity if peak out of RT range
         for peak in self.FeatureList:
             track_number = mass_track_map[peak['parent_masstrack_id']]
             peak_area = 0
             if not pd.isna(track_number):           # watch out dtypes
-                mass_track = sample.list_mass_tracks[ int(track_number) ]
+                mass_track = list_mass_tracks[ int(track_number) ]
                 left_base, right_base = max_rt_number, max_rt_number
                 try:
                     left_base = sample.reverse_rt_cal_dict[peak['left_base']]

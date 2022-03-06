@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
   name='asari-metabolomics',
-  version='0.9.10',
+  version='1.0.1',
 
   author='Shuzhao Li',
   author_email='shuzhao.li@gmail.com',
@@ -41,7 +41,7 @@ setup(
   python_requires='>=3.4',
   install_requires=[
     'metDataModel',
-    'mass2chem>=0.2',
+    'mass2chem',
     'jms-metabolite-services',
     'pyopenms',
     # 'matplotlib',

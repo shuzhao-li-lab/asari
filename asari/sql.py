@@ -1,17 +1,31 @@
 '''
-
 Use SQLite3 as backend database to store all sample-related data.
 This relieves the memory requirement and provides persistence to stop/resume operations.
-Multiple processes can visit the same database, thus potentially enabling parallel processing.
 
 
+Storage is priority and blobs are used for Python objects, no need to structure data in details.
 
-TABLE SAMPLES
+
+TABLE sample_info
     for each sample, construct:
-TABLE MASSTRACES
-TABLE PEAKS
+
+    TABLE sample_x_masstracks (pickle objects)
+
+TABLE cmap
 
 
+SQLite3 is not good at parallel processing....
+
+
+        # start SQLite database
+        # self.cursor = connect_sqlite_db(self.parameters['project_name'])
+        # if self.number_of_samples > NNN:
+        #      finish in memory first
+        # else:
+        #      start DB after init
+        
+        #self.database_name =  os.path.join(self.parameters['outdir'], parameters['project_name'] + '_db.sqlite')
+        #self.cursor = connect_sqlite_db(self.database_name)
 
 Moving pos_ref_DBs to mass2chem.
 
@@ -44,7 +58,7 @@ The former is more efficient for larger DBs??
 '''
 
 
-import sqlite3 as sql
+import sqlite3
 
 # import sqlalchemy as db
 

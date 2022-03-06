@@ -1,11 +1,11 @@
 '''
-LC-MS metabolomics data pre-processing
+asari, LC-MS metabolomics data preprocessing - trackable, scalable.
 
 Example use
 -----------
 python3 -m asari.main neg /Users/shuzhao/li.projects/asari/T03
 
-asari, LC-MS metabolomics data preprocessing - trackable, scalable.
+
 
 In the asari/mummichog packages, the data entities are presented in any of the four types: 
 class, namedtuple, JSON style dictionary or implicit list. 
@@ -64,7 +64,6 @@ import sys
 import time
 from .workflow import *
 
-
 #
 # important parameters to estimate: ppm of chrom construction; min_peak_height
 #
@@ -72,10 +71,18 @@ from .workflow import *
 PARAMETERS = {
     'project_name': 'test_asari',
     'outdir': 'asari_output_',
-    'rt_align': True,
+    'database_mode': 'ondisk',          # 'ondisk', 'memory' (run in memory, only small studies), 
+                                        # 'mongo' (MongoDB, requiring installation of DB server)
+
+    'multicores': 4,                    # number of threads allowed in parallel processing
+    'init_samples_number': 3,           # initiation samples, kept in memory
+    'initiation_samples': [],           # if user to specify N samples to initiate data processing, 
+                                        # otherwise they are chosen automatically
+
+    'rt_align': True,                   # False to bypass retention time alignment
     
-    'min_intensity_threshold': 1000,     # minimal intensity for mass track extraction, filtering baseline
-    'min_peak_height': 100000,            # minimal peak height
+    'min_intensity_threshold': 100,     # minimal intensity for mass track extraction, filtering baseline
+    'min_peak_height': 10000,           # minimal peak height
 
     'cal_min_peak_height': 100000,      # minimal peak height required for peaks used for RT calibration
     'min_timepoints': 6,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
@@ -94,16 +101,14 @@ PARAMETERS = {
     #
     'mode': 'pos',                      # ionization mode
     'mass_range': (50, 2000),
-    #'max_rtime': 300,                   # retention time range (chromatography) 0-300 seconds
+    #'max_rtime': 300,                   # retention time range (chromatography) in seconds, to auto populate
 
     'mz_tolerance': 5,                  # ppm, high selectivity meaning no overlap neighbors to confuse; 
                                         # Low selectivity regions will be still inspected to determine the true number of features
     'rtime_tolerance': 10,              # feature rtime shift threshold under 10 seconds; or 10% of rtime
                                         # not used now?
     #
-    'initiation_samples': [],           # if user to specify 3 samples to initiate data processing, to init HOT_DB; 
-                                        # otherwise they are chosen automatically
-
+    
     # no need to modify below unless you know what you are doing
     'prominence_window': 30,
     'gaussian_shape': 0.3,              # min cutoff
@@ -131,7 +136,7 @@ def metafile_to_dict(infile):
         meta[a[0]] = a[1]
     return {}
 
-def process_project(list_input_files, dict_meta_data={}, parameters=PARAMETERS, output_dir=''):
+def process_project(list_input_files, dict_meta_data={}, parameters=PARAMETERS):
     '''
     list_input_files: Extracted ion chromatogram files.
     parameters: dictionary of most parameters.
@@ -143,22 +148,27 @@ def process_project(list_input_files, dict_meta_data={}, parameters=PARAMETERS, 
         print("No input file found. Please verify your pathway to files.")
 
     EE = ext_Experiment()
-    EE.__init2__(list_input_files, dict_meta_data, parameters, output_dir)
+    EE.__init2__(list_input_files, dict_meta_data, parameters)
 
     EE.process_all()
 
 
-def main(directory):
-    time_stamp = str(time.time())
-    PARAMETERS['outdir'] += time_stamp
-    os.mkdir(PARAMETERS['outdir'])
+def main(directory, parameters=PARAMETERS):
+    # time_stamp is `month daay hour minute second``
+    time_stamp = ''.join([str(x) for x in time.localtime()[1:6]])
+    if parameters['database_mode'] == 'ondisk':
+        parameters['outdir'] += time_stamp
+        os.mkdir(parameters['outdir'])
+        os.mkdir(os.path.join(parameters['outdir'], 'pickle'))
+        os.mkdir(os.path.join(parameters['outdir'], 'export'))
+
 
     print("\n\n~~~~~~~ Hello from Asari! ~~~~~~~~~\n")
     process_project(
             read_project_dir(directory), 
             {},         # not used now
-            PARAMETERS, 
-            PARAMETERS['outdir']   #setting output_dir as input dir
+            parameters, 
+               #setting output_dir as input dir
     )
 
 #

@@ -59,6 +59,14 @@ def deep_detect_elution_peaks( mass_track, max_rt_number,
                 iteration=True):
     '''
     Optimized peak detection on a mass track. 
+
+
+
+    Can add further stats based ROI selection to optimize -
+                - not requiring continuous track, but ROIs will be continuous and used for peak detection 
+
+
+
     Local maxima is used in find_peak, but prominence and cSelectivity are used to control detection,
     in step-wise optimization. 
     Peak shape (Gaussian fitting goodness > 0.8) is required for noisy data or iterated detection.

@@ -39,7 +39,7 @@ class ext_Experiment(Experiment):
     Extend metDataModel.core.Experiment with preprocessing methods.
     This encapsulates a set of LC-MS files using the same method to be processed together.
     '''
-    def __init2__(self, list_input_files, dict_meta_data, parameters, output_dir):
+    def __init2__(self, list_input_files, dict_meta_data, parameters):
         '''
         This is the overall container for all data in an experiment/project.
         Samples are sorted by name and assigned unique IDs.
@@ -52,17 +52,16 @@ class ext_Experiment(Experiment):
 
         '''
         self.list_input_files = sorted(list_input_files)        # ordered by name
-        self.output_dir = output_dir
         self.number_of_samples = len(list_input_files)
-
         self.files_meta_data = dict_meta_data
         
         self.parameters = parameters
+        self.output_dir = parameters['outdir']
         # self.max_rtime = parameters['max_rtime'] # to update from each sample
         self.number_scans = 0                                   # max scan number, to update when samples are processed
         self.mode = parameters['mode']
-
-        self.initiation_samples = self.__choose_initiation_samples__(N=6)
+        self.database_mode = parameters['database_mode']
+        self.initiation_samples = self.__choose_initiation_samples__(N=parameters['init_samples_number'])
 
         # SAMPLE_REGISTRY
         self.all_samples = []               # list of Sample instances
@@ -74,30 +73,23 @@ class ext_Experiment(Experiment):
     def process_all(self):
         '''
         initiation_Samples are used to select one most representative sample to seed MassGrid and RT alignment.
+
         If refDB is used, it's better to be used after all samples are processed, 
         because the m/z values of samples are closer to other samples than refDB.
         '''
-        # start SQLite database
-        # self.cursor = connect_sqlite_db(self.parameters['project_name'])
-        # if self.number_of_samples > NNN:
-        #      finish in memory first
-        # else:
-        #      start DB after init
-        
+
         self.process_all_without_export()
+        
         self.CMAP.MassGrid.to_csv(
-            os.path.join(self.parameters['outdir'], self.parameters['mass_grid_mapping']) )
+            os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
         self.export_feature_table()
         self.annotate()
 
 
     def process_all_without_export(self):
-
-        #
-        # Do one sample
-        #
         self.CMAP = CompositeMap(self)
-        self.CMAP.construct_mass_grid( self.process_initiation_samples() )
+        init_Samples = self.process_initiation_samples()
+        self.CMAP.construct_mass_grid( init_Samples )
 
         # automatic update of parameters based on ref sample
 
@@ -111,13 +103,26 @@ class ext_Experiment(Experiment):
             self.CMAP.mock_rentention_alignment()
 
         self.CMAP.global_peak_detection()
+        self.store_initiation_samples(init_Samples)
 
 
     def process_initiation_samples(self):
-        return [self.process_single_sample(f) for f in self.initiation_samples]
+        return [self.process_single_sample(f, database_mode='memory') for f in self.initiation_samples]
+
+    def store_initiation_samples(self, init_Samples):
+        '''Since initiation samples were proecssed in memory,
+        this step store them according to experiment.database_mode
+        '''
+        for sample in init_Samples:
+            if self.database_mode == 'ondisk': 
+                sample.push_to_disk(sample.list_mass_tracks)
+            elif self.database_mode == 'mongo': 
+                sample.push_to_db(sample.list_mass_tracks
+                    # to implement
+                )
 
 
-    def process_single_sample(self, input_file):
+    def process_single_sample(self, input_file, database_mode):
         '''
         Some parameters can be automatically determined here.
 
@@ -128,11 +133,14 @@ class ext_Experiment(Experiment):
         min_timepoints = self.parameters['min_timepoints']
         min_peak_height = self.parameters['min_peak_height']
         try:
-            SM = SimpleSample(self, self.mode, input_file)
+            SM = SimpleSample(experiment=self, database_mode=database_mode, 
+                                mode=self.mode, input_file=input_file)
             SM.process( mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
             # sample id, assigned by index in self.list_input_files.
-            # DB commit
+
+
             return SM
+
         except IndexError:
             print("Input error in sample %s, dropped from processing." %input_file)
             return None
@@ -269,7 +277,7 @@ class ext_Experiment(Experiment):
                     V['neutral_formula'], V['neutral_formula_mass'],
                     name_1st_guess, matched_DB_shorts, matched_DB_records]]) + "\n"
 
-        outfile = os.path.join(self.parameters['outdir'],export_file_name_prefix + '.tsv')
+        outfile = os.path.join(self.parameters['outdir'], export_file_name_prefix + '.tsv')
         with open(outfile, encoding='utf-8', mode='w') as O:
             O.write(s)
 

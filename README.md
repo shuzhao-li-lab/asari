@@ -59,12 +59,18 @@ Currently
 
 The two arguments are ionization_mode and data_directory.
 
+Parameters are started in main.PARAMETERS, but can be modified on the fly too.
+
+A number of initiaiton samples are used to select one reference sample and start alignments of both mass tracks and retention time.
+Default 'init_samples_number': 3.
+They are kept in memory, regardless of the database_mode. Thus one may arbitrarily increase this number to avoid I/O load.
+
+
+
 Next to-do
 ==========
 
 The reference DB is not finalized. 
-Add SQLite DB for storage.
-
 
 Repository
 ==========

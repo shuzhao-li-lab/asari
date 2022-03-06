@@ -238,6 +238,8 @@ def extract_single_track_(bin):
     A mass track is an EIC for full RT range, without separating the mass traces. 
     input bins in format of [(mz_int, scan_num, intensity_int), ...].
 
+    # To consider without zeros to optimize performance -
+
     For peak detection, we need RT as one continuous trace (RT gaps filled by zeros).
     Peak detection is performed at sample level when landmarks are sought, 
     but CMAP.MassGrid has its own more careful peak deteciton.
