@@ -8,10 +8,10 @@ then utilizes MS1_pseudo spectra and cumulative elution profiles.
 '''
 
 import os
+from multiprocessing import Pool
+
 import pandas as pd
-
 from mass2chem.search import *
-
 from .mass_functions import *
 from .chromatograms import *
 from .peaks import *
@@ -75,13 +75,22 @@ class CompositeMap:
 
 
     def construct_mass_grid(self, init_Samples):
-        self.initiate_mass_grid(init_Samples)
+        '''
         # print("Done initiation_Samples.\n")
         for f in self.list_input_files:                                 # run remaining samples, 
             if f not in self.experiment.initiation_samples:
-                SM = self.experiment.process_single_sample(f, database_mode='ondisk')
-                # not via DB
+                SM = self.experiment.process_single_sample(f, database_mode=self.experiment.database_mode)
                 self.add_sample(SM)
+        '''
+        self.initiate_mass_grid(init_Samples)
+        with Pool(processes=self.experiment.parameters['multicores']) as pool:
+            pool.map(self.process_and_add_sample, [
+                f for f in self.list_input_files if f not in self.experiment.initiation_samples
+            ])
+
+    def process_and_add_sample(self, f):
+        SM = self.experiment.process_single_sample(f, database_mode=self.experiment.database_mode)
+        self.add_sample(SM)
 
 
     def initiate_mass_grid(self, init_samples):
@@ -139,6 +148,7 @@ class CompositeMap:
         self.MassGrid['mz'] = reference_mzlist
         self.MassGrid[ reference_sample.input_file ] = [ x['id_number'] for x in ref_list_mass_tracks ]
         # self.reference_sample.export_mass_traces()
+
         for SM in other_list_samples:
             self.add_sample(SM, database_cursor=None)
 

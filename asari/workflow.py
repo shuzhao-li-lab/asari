@@ -23,7 +23,7 @@ from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 from .samples import SimpleSample
 from .constructors import CompositeMap
 from .json_encoder import NpEncoder
-from .sql import *
+# from .sql import *
 
 try:
     import importlib.resources as pkg_resources
