@@ -8,7 +8,7 @@ then utilizes MS1_pseudo spectra and cumulative elution profiles.
 '''
 
 import os
-from multiprocessing import Pool
+import multiprocessing as mp
 
 import pandas as pd
 from mass2chem.search import *
@@ -76,17 +76,22 @@ class CompositeMap:
 
     def construct_mass_grid(self, init_Samples):
         '''
-        # print("Done initiation_Samples.\n")
+        # process the rest in parallel, but this impementation is problematic - not use now
+        pool = mp.Pool( min(mp.cpu_count(), self.experiment.parameters['multicores']) )
+        pool.starmap(
+            self.process_and_add_sample, 
+            [f for f in self.list_input_files if f not in self.experiment.initiation_samples]
+        )
+        pool.close()
+        
+        # non-parallel version is in use here
+        '''
+        self.initiate_mass_grid(init_Samples)
         for f in self.list_input_files:                                 # run remaining samples, 
             if f not in self.experiment.initiation_samples:
                 SM = self.experiment.process_single_sample(f, database_mode=self.experiment.database_mode)
                 self.add_sample(SM)
-        '''
-        self.initiate_mass_grid(init_Samples)
-        with Pool(processes=self.experiment.parameters['multicores']) as pool:
-            pool.map(self.process_and_add_sample, [
-                f for f in self.list_input_files if f not in self.experiment.initiation_samples
-            ])
+        
 
     def process_and_add_sample(self, f):
         SM = self.experiment.process_single_sample(f, database_mode=self.experiment.database_mode)

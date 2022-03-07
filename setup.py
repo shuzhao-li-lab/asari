@@ -44,6 +44,7 @@ setup(
     'mass2chem',
     'jms-metabolite-services',
     'pyopenms',
+    'statsmodels',
     # 'matplotlib',
     'numpy',
     'scipy',
