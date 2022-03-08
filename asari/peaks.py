@@ -240,11 +240,11 @@ def __peaks_cSelectivity__(__list_intensity, peaks, properties):
         _threshold = 0.5 * properties['peak_heights'][ii]
         _peak_datapoints_level = _peak_datapoints[_peak_datapoints > _threshold].size
         _background_level = __list_intensity[__list_intensity > _threshold].size
-        if _background_level < _peak_datapoints_level:                  # to rule out artifact from smooth_lowess
-            list_cSelectivity.append( 0 )
-        else:
+        if _background_level >= _peak_datapoints_level > 0:                  # to rule out artifact from smooth_lowess
             list_cSelectivity.append(_peak_datapoints_level / _background_level)
-        
+        else:
+            list_cSelectivity.append( 0 )
+            
     return list_cSelectivity
 
 
