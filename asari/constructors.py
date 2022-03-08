@@ -170,26 +170,27 @@ class CompositeMap:
         But the recalculation should be based on calibrated m/z values so that they are consistent across samples.
 
         '''
-        print("Adding sample to MassGrid,", os.path.basename(sample.input_file))
-        list_mass_tracks = sample.get_mass_tracks()
-        mzlist = [x['mz'] for x in list_mass_tracks]
+        if sample:
+            print("Adding sample to MassGrid,", os.path.basename(sample.input_file))
+            list_mass_tracks = sample.get_mass_tracks()
+            mzlist = [x['mz'] for x in list_mass_tracks]
 
-        new_reference_mzlist, new_reference_map2, updated_REF_landmarks, _r = landmark_guided_mapping(
-                                    list(self.MassGrid['mz']), self._mz_landmarks_, mzlist, sample._mz_landmarks_)
-        # print("_r = %f, new_reference_mzlist = %d" %(_r, len(new_reference_mzlist)))
+            new_reference_mzlist, new_reference_map2, updated_REF_landmarks, _r = landmark_guided_mapping(
+                                        list(self.MassGrid['mz']), self._mz_landmarks_, mzlist, sample._mz_landmarks_)
+            # print("_r = %f, new_reference_mzlist = %d" %(_r, len(new_reference_mzlist)))
 
-        NewGrid = pd.DataFrame(
-            np.full((len(new_reference_mzlist), 1+self._number_of_samples_), None),
-            columns=['mz'] + self.list_input_files,
-        )
-        NewGrid[ :self.MassGrid.shape[0]] = self.MassGrid
-        NewGrid['mz'] = new_reference_mzlist
-        NewGrid[ sample.input_file ] = new_reference_map2
-        self.MassGrid = NewGrid
-        self._mz_landmarks_ = updated_REF_landmarks
-        sample.mz_calibration_ratio = _r
-        self.experiment.samples_nonreference.append(sample)
-        self.experiment.number_scans = max(self.experiment.number_scans, max(sample.rt_numbers))
+            NewGrid = pd.DataFrame(
+                np.full((len(new_reference_mzlist), 1+self._number_of_samples_), None),
+                columns=['mz'] + self.list_input_files,
+            )
+            NewGrid[ :self.MassGrid.shape[0]] = self.MassGrid
+            NewGrid['mz'] = new_reference_mzlist
+            NewGrid[ sample.input_file ] = new_reference_map2
+            self.MassGrid = NewGrid
+            self._mz_landmarks_ = updated_REF_landmarks
+            sample.mz_calibration_ratio = _r
+            self.experiment.samples_nonreference.append(sample)
+            self.experiment.number_scans = max(self.experiment.number_scans, max(sample.rt_numbers))
 
 
     def optimize_mass_grid(self):
@@ -320,7 +321,7 @@ class CompositeMap:
 
         '''
         self.composite_mass_tracks = self.make_composite_mass_tracks()
-        print("\ %d composite mass tracks, ...\n" %len(self.composite_mass_tracks))
+        print("Peak detection on %d composite mass tracks, ...\n" %len(self.composite_mass_tracks))
 
         # to specify parameters here according to Experiment parameters
         min_peak_height = self.experiment.parameters['min_peak_height']
