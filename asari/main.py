@@ -70,7 +70,7 @@ from .workflow import *
 
 PARAMETERS = {
     'project_name': 'test_asari',
-    'outdir': 'asari_output_',
+    'outdir': 'output',
     'database_mode': 'ondisk',          # 'ondisk', 'memory' (run in memory, only small studies), 
                                         # 'mongo' (MongoDB, requiring installation of DB server)
 
@@ -157,7 +157,7 @@ def main(directory, parameters=PARAMETERS):
     # time_stamp is `month daay hour minute second``
     time_stamp = ''.join([str(x) for x in time.localtime()[1:6]])
     if parameters['database_mode'] == 'ondisk':
-        parameters['outdir'] += time_stamp
+        parameters['outdir'] = '_'.join([parameters['project_name'], parameters['outdir'], time_stamp]) 
         os.mkdir(parameters['outdir'])
         os.mkdir(os.path.join(parameters['outdir'], 'pickle'))
         os.mkdir(os.path.join(parameters['outdir'], 'export'))

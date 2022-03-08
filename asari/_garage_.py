@@ -783,3 +783,160 @@ class ext_Experiment_old(Experiment):
         print("Additional features are assembled based on 2x stdev (%5.2f ppm) seen in this experiment, " % self.__mass_stdev__)
         self.FeatureTable = FeatureList
         # to update selectivity_combined
+
+
+
+    #---------------------------------------------------------------------------------------------------------------
+
+    def __obsolete__process_all(self):
+        '''
+        This will shift to a DB design in next version.
+        '''
+        self.init_hot_db( self._get_ref_db_() )                         # initial processing of 3 samples to set up HOT_DB
+        for f in self.list_input_files:                                 # run remaining samples
+            if f not in self.initiation_samples:
+                SM = Sample(self, self.mode, f)
+                SM.process_step_1()
+                SM.process_step_2(self.HOT_DB)
+                if not self.parameters['cache_mass_traces']:
+                    del(SM.dict_masstraces)
+                self.samples.append(SM)
+        
+        self.calibrate_retention_time()                                 # samples may be marked to drop
+        self.correspondence()
+        self.annotate_final()
+        self.export_feature_table(self.FeatureTable, self.parameters['output_filename'])
+        
+    def _get_ref_db_(self):
+        '''
+        Dispatch for ref DB.
+        Earlier version used INIT_DFDB = DB_to_DF( extend_DB1(DB_1) ), which was moved to mass2chem.
+        '''
+        if self.mode == 'pos':
+            dbfile = os.path.join(os.path.dirname(__file__), 'ref_db_v0.2.tsv')
+        elif self.mode == 'neg':
+            dbfile = os.path.join(os.path.dirname(__file__), 'neg_ref_db_v0.2.tsv')
+        else:
+            print("Ionization mode is either `pos` or `neg`.")
+        return tsv2refDB(dbfile)
+
+
+    def init_hot_db(self, DFDB):
+        '''
+        Use three samples to initiate a hot DB to house feature annotation specific to this Experiment, and speed up subsequent search.
+        The HOT_DB will be used during sample processing, and have another update after correspondence and additional annotation.
+        The HOT_DB will then be exported as Expt annotation.
+        '''
+        chosen_Samples, found_formula_masses = [], []
+        for f in self.initiation_samples:
+            SM = Sample(self, self.mode, f)
+            SM.process_step_1()
+            SM.process_step_2(DFDB)
+            chosen_Samples.append(SM)
+            found_formula_masses += list(SM.mzstr_2_formula_mass.values())
+
+        self.samples += chosen_Samples
+        # Experiment wide parameters
+        self.__mass_stdev__ = np.median([SM.__mass_stdev__ for SM in chosen_Samples])       # ppm stdev, used for later searches
+        # ver 1 HOT_DB will be a subset of INIT_DFDB
+
+        found_formula_masses = set(found_formula_masses)
+        if None in found_formula_masses:
+            found_formula_masses.remove(None)
+        self.HOT_DB = DFDB.loc[found_formula_masses]   
+
+        print("\n[@.@] Anchoring with %d initial formula matches." %len(found_formula_masses))
+        print("[@.@] Initial estimation done on\n" + '\n'.join(self.initiation_samples))
+        #export_hot_db, without last col
+        self.HOT_DB.iloc[:, :-1].to_csv(os.path.join(self.output_dir, '__intermediary__' + self.parameters['annotation_filename']), sep="\t")
+        
+
+    def annotate_final(self):
+        '''
+        More formula annotation of _M_ features using HMDB+PubChemLite;
+        Group into empCpds via mass2chem.
+
+
+        Still to do remaining features
+        '''
+        s = u'\t'.join(['feature_id', 'formula_mass', 'mz_dbrecord',	'intensity_mean', 'charged_formula', 'selectivity',	'neutral_formula_mass',
+                                    'ion_relation', 'id_HMDB', 'name']) + '\n'
+        for F in self.FeatureTable:
+            if "_M_" == F.mass_id[:3]:
+                s += u'\t'.join([F.feature_id, F.mass_id, str(round(F.mz,4)), str(F.intensity_mean)]) + '\n'
+            else:
+                [mz, charged_formula, selectivity, neutral_formula_mass, ion_relation] = [str(x) for x in list(self.HOT_DB.loc[F.mass_id])[:5]]
+                name = massDict_hmdb.get(neutral_formula_mass, '')
+                if name:
+                    name = u'\t'.join( [';'.join(x) for x in name] ).encode('utf-8', 'ignore').decode('utf-8')
+                s += u'\t'.join([F.feature_id, F.mass_id, mz, str(F.intensity_mean),
+                                charged_formula, selectivity, neutral_formula_mass, ion_relation, name]) + '\n'
+                
+        with open(os.path.join(self.output_dir, self.parameters['annotation_filename']), 'w', encoding='utf-8') as O:
+            O.write(s.encode('utf-8', 'ignore').decode('utf-8'))
+
+        
+    def _reformat_epds_(self, list_empCpds, FeatureList):
+        '''
+        usage: list_empCpds = self._reformat_epds_(list_empCpds, self.CMAP.FeatureList)
+        '''
+        fDict = {}
+        for F in FeatureList:
+            fDict[F['id_number']] = F
+        new = []
+        for E in list_empCpds:
+            features = []
+            for peak in E['list_peaks']:
+                features.append(
+                    {'feature_id': peak[0], 
+                    'mz': fDict[peak[0]]['mz'], 
+                    'rtime': fDict[peak[0]]['apex'], 
+                    'charged_formula': '', 
+                    'ion_relation': peak[1]}
+                )
+            new.append(
+                {
+                'interim_id': E['id'], 
+                'neutral_formula_mass': None,
+                'neutral_formula': None,
+                'Database_referred': [],
+                'identity': [],
+                'MS1_pseudo_Spectra': features,
+                'MS2_Spectra': [],
+                }
+            )
+        return new
+
+    def export_feature_table_old__(self, FeatureList, outfile='feature_table.tsv'):
+        '''
+        FeatureList: a list of namedTuples, i.e. Features; Output two files, one main, another low quality features.
+        '''
+        def __write__(FeatureList, outfile):
+            s = '\t'.join(['feature_id', 'formula_mass', 'mz', 'rtime', 'rt_min', 'rt_max', 'number_peaks',
+                                    'peak_quality_max', 'peak_quality_median', 'intensity_mean', 'selectivity_mz',
+                                    ] + self.ordered_sample_names) + '\n'
+            for F in FeatureList:
+                s += '\t'.join(
+                    [F.feature_id, F.mass_id, str(round(F.mz,4)), str(round(F.rtime,2)), str(round(F.rt_min,2)), str(round(F.rt_max,2)), str(F.number_peaks),
+                    str(round(F.peak_quality_max,2)), str(round(F.peak_quality_median,2)), str(F.intensity_mean), str(round(F.selectivity_mz,2)),
+                    ] + [str(int(x)) for x in F.intensities]
+                    ) + '\n'
+            with open( outfile, 'w') as O:
+                O.write(s)
+
+        high_quality_features, low_quality_features = [], []
+        for F in FeatureList: 
+            if F.peak_quality_max > 0.8 and F.perc_peaks > 15:
+                high_quality_features.append(F)
+            else:
+                low_quality_features.append(F)
+
+        high_quality_features.sort(key=lambda F: F.peak_quality_max, reverse=True)
+        #print(FeatureList[99])
+        __write__(high_quality_features, os.path.join(self.output_dir, outfile))
+        __write__(low_quality_features, os.path.join(self.output_dir, 'low_quality_features_' + outfile))
+        print("Feature tables were written under %s." %self.output_dir)
+        print("The main feature table (%s) has %d samples and %d features.\n\n\n" %(
+            self.parameters['output_filename'], len(self.ordered_sample_names), len(high_quality_features)))
+
+

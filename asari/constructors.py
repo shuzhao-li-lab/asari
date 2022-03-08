@@ -320,7 +320,7 @@ class CompositeMap:
 
         '''
         self.composite_mass_tracks = self.make_composite_mass_tracks()
-        print("\nPeak detection on %d composite mass tracks, ...\n" %len(self.composite_mass_tracks))
+        print("\ %d composite mass tracks, ...\n" %len(self.composite_mass_tracks))
 
         # to specify parameters here according to Experiment parameters
         min_peak_height = self.experiment.parameters['min_peak_height']

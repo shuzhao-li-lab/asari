@@ -13,6 +13,7 @@ import os
 import random
 import json
 import pickle
+import sys
 
 from metDataModel.core import Experiment
 from mass2chem.search import *
@@ -31,6 +32,10 @@ except ImportError:
     import importlib_resources as pkg_resources
 
 from . import db
+
+if not sys.warnoptions:
+    import warnings
+    warnings.simplefilter("ignore")
 
 
 # General data processing steps are in this class
@@ -77,13 +82,12 @@ class ext_Experiment(Experiment):
         If refDB is used, it's better to be used after all samples are processed, 
         because the m/z values of samples are closer to other samples than refDB.
         '''
-
         self.process_all_without_export()
-        
         self.CMAP.MassGrid.to_csv(
             os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
-        self.export_feature_table()
+        self.export_feature_tables()
         self.annotate()
+        self.export_log()
 
 
     def process_all_without_export(self):
@@ -105,7 +109,6 @@ class ext_Experiment(Experiment):
         self.CMAP.global_peak_detection()
         self.store_initiation_samples(init_Samples)
 
-
     def process_initiation_samples(self):
         return [self.process_single_sample(f, database_mode='memory') for f in self.initiation_samples]
 
@@ -121,12 +124,10 @@ class ext_Experiment(Experiment):
                     # to implement
                 )
 
-
     def process_single_sample(self, input_file, database_mode):
         '''
         Some parameters can be automatically determined here.
 
-        To add DB function HERE ??
         '''
         mz_tolerance_ppm = self.parameters['mz_tolerance']
         min_intensity = self.parameters['min_intensity_threshold']
@@ -136,16 +137,11 @@ class ext_Experiment(Experiment):
             SM = SimpleSample(experiment=self, database_mode=database_mode, 
                                 mode=self.mode, input_file=input_file)
             SM.process( mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
-            # sample id, assigned by index in self.list_input_files.
-
-
             return SM
-
         except IndexError:
             print("Input error in sample %s, dropped from processing." %input_file)
             return None
         
-
     def __choose_initiation_samples__(self, N=3):
         '''
         N initial samples are chosen to be analyzed first.
@@ -159,11 +155,9 @@ class ext_Experiment(Experiment):
             else:
                 return random.sample(self.list_input_files, N)
 
-
     def annotate(self):
         '''
-        To-do: Consider mass calibration before DB matching -
-            to add self.parameters
+        Reference databases can be pre-loaded.
 
         '''
         self.load_annotation_db()
@@ -281,183 +275,34 @@ class ext_Experiment(Experiment):
         with open(outfile, encoding='utf-8', mode='w') as O:
             O.write(s)
 
-        print("\nAnnotation of %d Empirical compounds was written to %s." %(len(dict_empCpds), outfile))
+        print("\nAnnotation of %d Empirical compounds was written to %s.\n\n" %(len(dict_empCpds), outfile))
 
-
-    def export_feature_table(self, full=False, outfile='cmap_feature_table.tsv'):
+    def export_feature_tables(self, outfile='cmap_feature_table.tsv'):
         '''
-        Will better format cells
-
+        To export two tables, one 
+        if full: #full=False, 
+            self.CMAP.FeatureTable.to_csv(outfile, index=False, sep="\t")
         ['rtime_left_base'], ['rtime_right_base']
         '''
-        outfile = os.path.join(self.parameters['outdir'], self.parameters['output_feature_table'])
-        if full:
-            self.CMAP.FeatureTable.to_csv(outfile, index=False, sep="\t")
+        use_cols = [ 'id_number', 'mz', 'rtime', 'rtime_left_base', 'rtime_right_base', 'parent_masstrack_id', 
+                    'peak_area', 'cSelectivity', 'goodness_fitting', 'snr',
+                ] + [sample.name for sample in self.all_samples]
+        filtered_FeatureTable = self.CMAP.FeatureTable[use_cols]
 
-        else:
-            use_cols = [ 'id_number', 'mz', 'rtime', 'rtime_left_base', 'rtime_right_base', 'parent_masstrack_id', 
-                        'peak_area', 'cSelectivity', 'goodness_fitting', 'snr',
-                    ] + [sample.name for sample in self.all_samples]
-            self.CMAP.FeatureTable[use_cols].to_csv(outfile, index=False, sep="\t")
+        outfile = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
+        filtered_FeatureTable.to_csv(outfile, index=False, sep="\t")
+        print("Feature table (%d x %d) was written to %s." %(
+                                filtered_FeatureTable.shape[0], self.number_of_samples, outfile))
 
-        print("\n\nFeature table (%d) was written to %s.\n\n" %(self.CMAP.FeatureTable.shape[0], outfile))
-
-
-    def export_feature_table_old__(self, FeatureList, outfile='feature_table.tsv'):
-        '''
-        FeatureList: a list of namedTuples, i.e. Features; Output two files, one main, another low quality features.
-        '''
-        def __write__(FeatureList, outfile):
-            s = '\t'.join(['feature_id', 'formula_mass', 'mz', 'rtime', 'rt_min', 'rt_max', 'number_peaks',
-                                    'peak_quality_max', 'peak_quality_median', 'intensity_mean', 'selectivity_mz',
-                                    ] + self.ordered_sample_names) + '\n'
-            for F in FeatureList:
-                s += '\t'.join(
-                    [F.feature_id, F.mass_id, str(round(F.mz,4)), str(round(F.rtime,2)), str(round(F.rt_min,2)), str(round(F.rt_max,2)), str(F.number_peaks),
-                    str(round(F.peak_quality_max,2)), str(round(F.peak_quality_median,2)), str(F.intensity_mean), str(round(F.selectivity_mz,2)),
-                    ] + [str(int(x)) for x in F.intensities]
-                    ) + '\n'
-            with open( outfile, 'w') as O:
-                O.write(s)
-
-        high_quality_features, low_quality_features = [], []
-        for F in FeatureList: 
-            if F.peak_quality_max > 0.8 and F.perc_peaks > 15:
-                high_quality_features.append(F)
-            else:
-                low_quality_features.append(F)
-
-        high_quality_features.sort(key=lambda F: F.peak_quality_max, reverse=True)
-        #print(FeatureList[99])
-        __write__(high_quality_features, os.path.join(self.output_dir, outfile))
-        __write__(low_quality_features, os.path.join(self.output_dir, 'low_quality_features_' + outfile))
-        print("Feature tables were written under %s." %self.output_dir)
-        print("The main feature table (%s) has %d samples and %d features.\n\n\n" %(
-            self.parameters['output_filename'], len(self.ordered_sample_names), len(high_quality_features)))
-
-
-
-
-    #---------------------------------------------------------------------------------------------------------------
-
-    def __obsolete__process_all(self):
-        '''
-        This will shift to a DB design in next version.
-        '''
-        self.init_hot_db( self._get_ref_db_() )                         # initial processing of 3 samples to set up HOT_DB
-        for f in self.list_input_files:                                 # run remaining samples
-            if f not in self.initiation_samples:
-                SM = Sample(self, self.mode, f)
-                SM.process_step_1()
-                SM.process_step_2(self.HOT_DB)
-                if not self.parameters['cache_mass_traces']:
-                    del(SM.dict_masstraces)
-                self.samples.append(SM)
+        outfile = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
+        # hard coded cutoff here for now
+        filtered_FeatureTable = filtered_FeatureTable[ filtered_FeatureTable['snr']>10][
+                        filtered_FeatureTable['goodness_fitting']>0.7][filtered_FeatureTable['cSelectivity']>0.7 ]
+        filtered_FeatureTable.to_csv(outfile, index=False, sep="\t")
+        print("Filtered Feature table (%d x %d) was written to %s.\n" %(
+                                filtered_FeatureTable.shape[0], self.number_of_samples, outfile))
         
-        self.calibrate_retention_time()                                 # samples may be marked to drop
-        self.correspondence()
-        self.annotate_final()
-        self.export_feature_table(self.FeatureTable, self.parameters['output_filename'])
-        
-    def _get_ref_db_(self):
-        '''
-        Dispatch for ref DB.
-        Earlier version used INIT_DFDB = DB_to_DF( extend_DB1(DB_1) ), which was moved to mass2chem.
-        '''
-        if self.mode == 'pos':
-            dbfile = os.path.join(os.path.dirname(__file__), 'ref_db_v0.2.tsv')
-        elif self.mode == 'neg':
-            dbfile = os.path.join(os.path.dirname(__file__), 'neg_ref_db_v0.2.tsv')
-        else:
-            print("Ionization mode is either `pos` or `neg`.")
-        return tsv2refDB(dbfile)
-
-
-    def init_hot_db(self, DFDB):
-        '''
-        Use three samples to initiate a hot DB to house feature annotation specific to this Experiment, and speed up subsequent search.
-        The HOT_DB will be used during sample processing, and have another update after correspondence and additional annotation.
-        The HOT_DB will then be exported as Expt annotation.
-        '''
-        chosen_Samples, found_formula_masses = [], []
-        for f in self.initiation_samples:
-            SM = Sample(self, self.mode, f)
-            SM.process_step_1()
-            SM.process_step_2(DFDB)
-            chosen_Samples.append(SM)
-            found_formula_masses += list(SM.mzstr_2_formula_mass.values())
-
-        self.samples += chosen_Samples
-        # Experiment wide parameters
-        self.__mass_stdev__ = np.median([SM.__mass_stdev__ for SM in chosen_Samples])       # ppm stdev, used for later searches
-        # ver 1 HOT_DB will be a subset of INIT_DFDB
-
-        found_formula_masses = set(found_formula_masses)
-        if None in found_formula_masses:
-            found_formula_masses.remove(None)
-        self.HOT_DB = DFDB.loc[found_formula_masses]   
-
-        print("\n[@.@] Anchoring with %d initial formula matches." %len(found_formula_masses))
-        print("[@.@] Initial estimation done on\n" + '\n'.join(self.initiation_samples))
-        #export_hot_db, without last col
-        self.HOT_DB.iloc[:, :-1].to_csv(os.path.join(self.output_dir, '__intermediary__' + self.parameters['annotation_filename']), sep="\t")
-        
-
-    def annotate_final(self):
-        '''
-        More formula annotation of _M_ features using HMDB+PubChemLite;
-        Group into empCpds via mass2chem.
-
-
-        Still to do remaining features
-        '''
-        s = u'\t'.join(['feature_id', 'formula_mass', 'mz_dbrecord',	'intensity_mean', 'charged_formula', 'selectivity',	'neutral_formula_mass',
-                                    'ion_relation', 'id_HMDB', 'name']) + '\n'
-        for F in self.FeatureTable:
-            if "_M_" == F.mass_id[:3]:
-                s += u'\t'.join([F.feature_id, F.mass_id, str(round(F.mz,4)), str(F.intensity_mean)]) + '\n'
-            else:
-                [mz, charged_formula, selectivity, neutral_formula_mass, ion_relation] = [str(x) for x in list(self.HOT_DB.loc[F.mass_id])[:5]]
-                name = massDict_hmdb.get(neutral_formula_mass, '')
-                if name:
-                    name = u'\t'.join( [';'.join(x) for x in name] ).encode('utf-8', 'ignore').decode('utf-8')
-                s += u'\t'.join([F.feature_id, F.mass_id, mz, str(F.intensity_mean),
-                                charged_formula, selectivity, neutral_formula_mass, ion_relation, name]) + '\n'
-                
-        with open(os.path.join(self.output_dir, self.parameters['annotation_filename']), 'w', encoding='utf-8') as O:
-            O.write(s.encode('utf-8', 'ignore').decode('utf-8'))
-
-        
-    def _reformat_epds_(self, list_empCpds, FeatureList):
-        '''
-        usage: list_empCpds = self._reformat_epds_(list_empCpds, self.CMAP.FeatureList)
-        '''
-        fDict = {}
-        for F in FeatureList:
-            fDict[F['id_number']] = F
-        new = []
-        for E in list_empCpds:
-            features = []
-            for peak in E['list_peaks']:
-                features.append(
-                    {'feature_id': peak[0], 
-                    'mz': fDict[peak[0]]['mz'], 
-                    'rtime': fDict[peak[0]]['apex'], 
-                    'charged_formula': '', 
-                    'ion_relation': peak[1]}
-                )
-            new.append(
-                {
-                'interim_id': E['id'], 
-                'neutral_formula_mass': None,
-                'neutral_formula': None,
-                'Database_referred': [],
-                'identity': [],
-                'MS1_pseudo_Spectra': features,
-                'MS2_Spectra': [],
-                }
-            )
-        return new
-
-
-
+    def export_log(self):
+        outfile = os.path.join(self.parameters['outdir'], 'log.txt')
+        with open(outfile, 'w', encoding='utf-8') as f:
+            json.dump(self.parameters, f, cls=NpEncoder, ensure_ascii=False, indent=2)
