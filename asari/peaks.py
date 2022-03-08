@@ -172,7 +172,7 @@ def deep_detect_elution_peaks( mass_track, max_rt_number,
                     list_json_peaks = []
                     peaks, properties = find_peaks(new_list_intensity, height=min_peak_height, width=min_fwhm, 
                                                             prominence=prominence) #, wlen=2*__exam_window_size)  # larger wlen
-                    list_cSelectivity = __peaks_cSelectivity__(new_list_intensity, peaks, properties)
+                    list_cSelectivity = __peaks_cSelectivity__(__list_intensity, peaks, properties)
                     for ii in range(peaks.size):
                         _jpeak = convert_peak_json__(ii, mass_track, peaks, properties, cSelectivity=list_cSelectivity[ii])
                         _jpeak['goodness_fitting'] = evaluate_gaussian_peak(mass_track, _jpeak)
@@ -221,7 +221,8 @@ def convert_peak_json__( ii, mass_track, peaks, properties, cSelectivity=None):
 
 def __peaks_cSelectivity__(__list_intensity, peaks, properties):
     '''
-    peaks, properties as from find_peaks; __list_intensity is np.array of the mass_track.
+    peaks, properties as from find_peaks; 
+    __list_intensity is np.array of the mass_track.
 
     Chromatographic peak selectivity (cSelectivity) is defined by 
     the ratio of the data points in all peaks above 1/2 this peak height and all data points above 1/2 this peak height.
@@ -237,11 +238,14 @@ def __peaks_cSelectivity__(__list_intensity, peaks, properties):
     list_cSelectivity = []
     for ii in range(peaks.size):
         _threshold = 0.5 * properties['peak_heights'][ii]
-        list_cSelectivity.append(
-            _peak_datapoints[_peak_datapoints > _threshold].size / __list_intensity[__list_intensity > _threshold].size
-        )
+        _peak_datapoints_level = _peak_datapoints[_peak_datapoints > _threshold].size
+        _background_level = __list_intensity[__list_intensity > _threshold].size
+        if _background_level < _peak_datapoints_level:                  # to rule out artifact from smooth_lowess
+            list_cSelectivity.append( 0 )
+        else:
+            list_cSelectivity.append(_peak_datapoints_level / _background_level)
+        
     return list_cSelectivity
-
 
 
 def detect_elution_peaks( mass_track, 

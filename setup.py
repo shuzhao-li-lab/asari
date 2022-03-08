@@ -38,7 +38,7 @@ setup(
         'console_scripts': ['asari=asari.command_line:main'],
     },
 
-  python_requires='>=3.4',
+  python_requires='>=3.7',
   install_requires=[
     'metDataModel',
     'mass2chem',
