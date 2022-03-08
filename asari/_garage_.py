@@ -374,6 +374,19 @@ class Sample(SimpleSample):
         with open(outfile, 'w') as O:
             O.write( '\t'.join(header) + '\n' + '\n'.join([ '\t'.join(L) for L in peaklist ]) + '\n' )
 
+    def export_mass_traces(self):
+        '''
+         for diagnosis etc.
+        '''
+        outfile = os.path.join(self.experiment.output_dir, 
+                            os.path.basename(self.input_file).replace('.mzML', '.peaklist') )
+        header = ['m/z', 'retention time', 'area', 'shape_quality', 'gaussian_amplitude', 'gaussian_variance', 'mz_selectivity']
+        peaklist = []
+        for P in self.list_mass_tracks:
+            peaklist.append(str(P))
+
+        with open(outfile, 'w') as O:
+            O.write( '\t'.join(header) + '\n' + '\n'.join( peaklist ) + '\n' )
 
 
 

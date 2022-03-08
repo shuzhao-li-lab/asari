@@ -163,8 +163,6 @@ class CompositeMap:
         Add Sample instance to and update MassGrid; 
         add Sample to self.experiment.samples.
 
-        To add: push each sample to SQLDB, - database_cursor;
-
         recalculate_ref is not done here, because it's easier to include unmatched features from Sample.
         If needed, the reference m/z values should be updated by revisiting DB samples.
         But the recalculation should be based on calibrated m/z values so that they are consistent across samples.

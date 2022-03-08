@@ -172,7 +172,7 @@ def deep_detect_elution_peaks( mass_track, max_rt_number,
                     list_json_peaks = []
                     peaks, properties = find_peaks(new_list_intensity, height=min_peak_height, width=min_fwhm, 
                                                             prominence=prominence) #, wlen=2*__exam_window_size)  # larger wlen
-                    list_cSelectivity = __peaks_cSelectivity__(__list_intensity, peaks, properties)
+                    list_cSelectivity = __peaks_cSelectivity__(new_list_intensity, peaks, properties)
                     for ii in range(peaks.size):
                         _jpeak = convert_peak_json__(ii, mass_track, peaks, properties, cSelectivity=list_cSelectivity[ii])
                         _jpeak['goodness_fitting'] = evaluate_gaussian_peak(mass_track, _jpeak)
