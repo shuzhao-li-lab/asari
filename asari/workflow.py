@@ -283,10 +283,11 @@ class ext_Experiment(Experiment):
         if full: #full=False, 
             self.CMAP.FeatureTable.to_csv(outfile, index=False, sep="\t")
         ['rtime_left_base'], ['rtime_right_base']
+
         '''
         use_cols = [ 'id_number', 'mz', 'rtime', 'rtime_left_base', 'rtime_right_base', 'parent_masstrack_id', 
                     'peak_area', 'cSelectivity', 'goodness_fitting', 'snr',
-                ] + [sample.name for sample in self.all_samples]
+                ] + [sample.name for sample in self.all_samples if sample.rt_cal_dict]  # verify sample not dropped in rt_cal
         filtered_FeatureTable = self.CMAP.FeatureTable[use_cols]
 
         outfile = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
