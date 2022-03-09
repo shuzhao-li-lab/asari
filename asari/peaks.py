@@ -189,7 +189,7 @@ def deep_detect_elution_peaks( mass_track, max_rt_number,
         if __noise_level__.size > 0:
             __noise_level__ = __noise_level__.mean()
         else:
-            __noise_level__ = __list_intensity[_peak_datapoints].min()
+            __noise_level__ = max(__list_intensity[_peak_datapoints].min(), 1)
         for _jpeak in list_json_peaks:
             _jpeak['snr'] = int( min(_jpeak['height'], 99999999) / __noise_level__)         # cap upper limit and avoid INF
             if _jpeak['snr'] > snr:
