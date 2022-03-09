@@ -62,6 +62,7 @@ class CompositeMap:
         self.list_input_files = experiment.list_input_files
         self.reference_sample = None                # designated reference sample; all RT is aligned to this sample
         self.dict_scan_rtime = {}                   # will populate scan number to Rtime mapping via reference_sample
+        self.max_ref_rtime = None
 
         self.MassGrid = None                        # will be DF
         self.FeatureTable = None
@@ -134,9 +135,10 @@ class CompositeMap:
 
         # note: other samples are aligned to this ref
         self.dict_scan_rtime = dict(zip(reference_sample.rt_numbers, reference_sample.list_retention_time))
+        self.max_ref_rtime = max(reference_sample.list_retention_time)
 
         print("\nInitiating MassGrid, ...\n    The reference sample is:\n    ||* %s *||\n" %reference_sample.input_file)
-        print("Max _retention_time is %4.2f at scan number %d.\n" %(max(reference_sample.list_retention_time),
+        print("Max _retention_time is %4.2f at scan number %d.\n" %(self.max_ref_rtime,
                                                                     max(reference_sample.rt_numbers)))
         # print("Max intensity is %d and median intensity is %d." %(        ))
 
@@ -347,6 +349,7 @@ class CompositeMap:
                 peak['rtime'] = self.dict_scan_rtime[peak['apex']]
                 peak['rtime_left_base'], peak['rtime_right_base'] = self.dict_scan_rtime[peak['left_base']], self.dict_scan_rtime[peak['right_base']]
             except KeyError:
+                peak['rtime'] = self.max_ref_rtime                                  # imputed value set at max rtime
                 print("Peak rtime out of bound on", ii)
 
         self.generate_feature_table()
