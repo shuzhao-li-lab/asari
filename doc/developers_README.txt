@@ -25,3 +25,15 @@ to reduce workload in scipy.signal.find_peak.
 
 
 
+Notebooks 
+=========
+
+- Single sample processing, inspection, and determine ppm precision.
+
+- Process data without upfront LC alignment
+
+- Annotate and search
+
+- OpenMS based workflow
+
+

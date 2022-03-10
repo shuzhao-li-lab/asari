@@ -8,7 +8,6 @@ then utilizes MS1_pseudo spectra and cumulative elution profiles.
 '''
 
 import os
-import multiprocessing as mp
 
 import pandas as pd
 from mass2chem.search import *

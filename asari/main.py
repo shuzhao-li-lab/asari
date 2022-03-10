@@ -1,6 +1,17 @@
 '''
 asari, LC-MS metabolomics data preprocessing - trackable, scalable.
 
+subcommands:
+    process: LC-MS data preprocessing
+    xic: construct mass trakcs (chromatogram) from mzML files
+    annotate: annotate a list of features
+    viz: start interactive data visualization and exploration.
+
+
+--params: allow passing paramters via a JSON file
+
+
+
 Example use
 -----------
 python3 -m asari.main neg /Users/shuzhao/li.projects/asari/T03
@@ -140,6 +151,7 @@ def process_project(list_input_files, dict_meta_data={}, parameters=PARAMETERS):
     '''
     list_input_files: Extracted ion chromatogram files.
     parameters: dictionary of most parameters.
+
     '''
     if dict_meta_data:
         for k in dict_meta_data:
@@ -147,10 +159,16 @@ def process_project(list_input_files, dict_meta_data={}, parameters=PARAMETERS):
     if not list_input_files:
         print("No input file found. Please verify your pathway to files.")
 
+    # samples = register_samples(list_input_files, dict_meta_data, parameters)
+    # batch_EIC_from_samples_ondisk(samples, parameters)
+
     EE = ext_Experiment()
     EE.__init2__(list_input_files, dict_meta_data, parameters)
 
     EE.process_all()
+    
+
+
 
 
 def main(directory, parameters=PARAMETERS):
