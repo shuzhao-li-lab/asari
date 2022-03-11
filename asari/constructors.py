@@ -5,15 +5,25 @@ We use a similar concept of FeatureMap as in OpenMS here,
 but the correspondence algorithms take adavantage of high m/z resolution first, 
 then utilizes MS1_pseudo spectra and cumulative elution profiles.
 
+
+        Potential optimizations to consider, e.g. 2-D deconvolution for low-selectivity mass tracks.
+        # also check for empty tracks after composite?
+
+    def process_and_add_sample(self, f):
+        SM = self.experiment.process_single_sample(f, database_mode=self.experiment.database_mode)
+        self.add_sample(SM)
+
 '''
 
 import os
 
 import pandas as pd
 from mass2chem.search import *
+
 from .mass_functions import *
 from .chromatograms import *
 from .peaks import *
+from .samples import SimpleSample
 
 
 class CompositeMap:
@@ -54,14 +64,12 @@ class CompositeMap:
         '''
         Composite map of mass tracks and features, with pointers to individual samples.
 
-        Workflow is in `workflow.ext_Experiment.process_all`.
         '''
         self.experiment = experiment
         self._number_of_samples_ = experiment.number_of_samples
-        self.list_input_files = experiment.list_input_files
-        self.reference_sample = None                # designated reference sample; all RT is aligned to this sample
-        self.dict_scan_rtime = {}                   # will populate scan number to Rtime mapping via reference_sample
-        self.max_ref_rtime = None
+        self.list_sample_names = [experiment.sample_registry[ii]['name'] for ii in experiment.valid_sample_ids]
+        # designated reference sample; all RT is aligned to this sample
+        self.reference_sample_instance = self.reference_sample = self.get_reference_sample_instance(experiment.reference_sample_id)
 
         self.MassGrid = None                        # will be DF
         self.FeatureTable = None
@@ -74,33 +82,20 @@ class CompositeMap:
         self.composite_mass_tracks = {}             # following MassGrid indices
 
 
-    def construct_mass_grid(self, init_Samples):
-        '''
-        # process the rest in parallel, but this impementation is problematic - not use now
-        pool = mp.Pool( min(mp.cpu_count(), self.experiment.parameters['multicores']) )
-        pool.starmap(
-            self.process_and_add_sample, 
-            [f for f in self.list_input_files if f not in self.experiment.initiation_samples]
-        )
-        pool.close()
-        
-        # non-parallel version is in use here
-        '''
-        self.initiate_mass_grid(init_Samples)
-        for f in self.list_input_files:                                 # run remaining samples, 
-            if f not in self.experiment.initiation_samples:
-                SM = self.experiment.process_single_sample(f, database_mode=self.experiment.database_mode)
-                self.add_sample(SM)
-        
+    def get_reference_sample_instance(self, reference_sample_id):
+        SM = SimpleSample(self.experiment.sample_registry[reference_sample_id],
+                experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode)
+        SM.list_mass_tracks = SM.get_masstracks_and_anchors()
+        self.dict_scan_rtime = dict(zip(SM.rt_numbers, SM.list_retention_time))
+        self.max_ref_rtime = max(SM.list_retention_time)
+        #
+        # to add describe SM intensity distri
+        #
+        return SM
 
-    def process_and_add_sample(self, f):
-        SM = self.experiment.process_single_sample(f, database_mode=self.experiment.database_mode)
-        self.add_sample(SM)
-
-
-    def initiate_mass_grid(self, init_samples):
+    def construct_mass_grid(self):
         '''
-        Initiate MassGrid for whole experiment.
+        MassGrid for whole experiment. Use sample name as column identifiers.
 
         Input
         =====
@@ -115,48 +110,41 @@ class CompositeMap:
         2. align each sample to the reference_anchor_pairs
 
         '''
-        # initiation using the Sample of most _number_anchor_mz_pairs_
-        tmp, other_list_samples = [init_samples[0]], []
-        for SM in init_samples[1:]:
-            if SM._number_anchor_mz_pairs_ > tmp[0]._number_anchor_mz_pairs_:
-                other_list_samples.append(tmp[0])
-                tmp = [SM]
-            else:
-                other_list_samples.append(SM)
+        self._initiate_mass_grid()
+        sample_ids = self.experiment.valid_sample_ids
+        sample_ids.pop(self.experiment.reference_sample_id)
+        for sid in sample_ids:
+            SM = SimpleSample(self.experiment.sample_registry[sid],
+                experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode)
+            self.add_sample(SM)
 
-        reference_sample = tmp[0]
-
+    def _initiate_mass_grid(self):
+        '''
+        Initiate MassGrid using reference sample
+        '''
+        reference_sample = self.reference_sample_instance
         _d = dict(zip(reference_sample.rt_numbers, reference_sample.rt_numbers))
         reference_sample.rt_cal_dict = reference_sample.reverse_rt_cal_dict = _d
-        self.reference_sample = self.experiment.reference_sample = reference_sample
+        ref_list_mass_tracks = reference_sample.list_mass_tracks
+        self.experiment.number_scans = max(reference_sample.rt_numbers)
 
-        ref_list_mass_tracks = reference_sample.get_mass_tracks()
-
-        # note: other samples are aligned to this ref
-        self.dict_scan_rtime = dict(zip(reference_sample.rt_numbers, reference_sample.list_retention_time))
-        self.max_ref_rtime = max(reference_sample.list_retention_time)
-
-        print("\nInitiating MassGrid, ...\n    The reference sample is:\n    ||* %s *||\n" %reference_sample.input_file)
+        print("\nInitiating MassGrid, ...\n    The reference sample is:\n    ||* %s *||\n" %reference_sample.name)
         print("Max _retention_time is %4.2f at scan number %d.\n" %(self.max_ref_rtime,
                                                                     max(reference_sample.rt_numbers)))
         # print("Max intensity is %d and median intensity is %d." %(        ))
 
-        self.reference_anchor_pairs = reference_sample.anchor_mz_pairs
-        self._mz_landmarks_ = flatten_tuplelist(reference_sample.anchor_mz_pairs)
+        self._mz_landmarks_ = reference_sample._mz_landmarks_
         reference_mzlist = [ x['mz'] for x in ref_list_mass_tracks ]
         # setting up DataFrame for MassGrid
         # not forcing dtype on DataFrame, to avoid unreported errors; convert to int when using MassGrid
         self.MassGrid = pd.DataFrame(
             np.full((len(reference_mzlist), 1+self._number_of_samples_), None),
-            columns=['mz'] + self.list_input_files,
+            columns=['mz'] + self.list_sample_names,
         )
         # Add ref mz as a column to MassGrid; ref mzlist will be dynamic updated in MassGrid["mz"]
         self.MassGrid['mz'] = reference_mzlist
-        self.MassGrid[ reference_sample.input_file ] = [ x['id_number'] for x in ref_list_mass_tracks ]
-        # self.reference_sample.export_mass_traces()
-
-        for SM in other_list_samples:
-            self.add_sample(SM, database_cursor=None)
+        self.MassGrid[ reference_sample.name ] = [ x['id_number'] for x in ref_list_mass_tracks ]
+        self.experiment.all_samples.append(reference_sample)
 
 
     def add_sample(self, sample, database_cursor=None):
@@ -169,45 +157,31 @@ class CompositeMap:
         But the recalculation should be based on calibrated m/z values so that they are consistent across samples.
 
         '''
-        if sample:
-            print("Adding sample to MassGrid,", os.path.basename(sample.input_file))
-            list_mass_tracks = sample.get_mass_tracks()
-            mzlist = [x['mz'] for x in list_mass_tracks]
+        print("Adding sample to MassGrid,", sample.name)
+        list_mass_tracks = sample.get_masstracks_and_anchors()
+        mzlist = [x['mz'] for x in list_mass_tracks]
+        new_reference_mzlist, new_reference_map2, updated_REF_landmarks, _r = landmark_guided_mapping(
+                                    list(self.MassGrid['mz']), self._mz_landmarks_, mzlist, sample._mz_landmarks_)
+        # print("_r = %f, new_reference_mzlist = %d" %(_r, len(new_reference_mzlist)))
 
-            new_reference_mzlist, new_reference_map2, updated_REF_landmarks, _r = landmark_guided_mapping(
-                                        list(self.MassGrid['mz']), self._mz_landmarks_, mzlist, sample._mz_landmarks_)
-            # print("_r = %f, new_reference_mzlist = %d" %(_r, len(new_reference_mzlist)))
-
-            NewGrid = pd.DataFrame(
-                np.full((len(new_reference_mzlist), 1+self._number_of_samples_), None),
-                columns=['mz'] + self.list_input_files,
-            )
-            NewGrid[ :self.MassGrid.shape[0]] = self.MassGrid
-            NewGrid['mz'] = new_reference_mzlist
-            NewGrid[ sample.input_file ] = new_reference_map2
-            self.MassGrid = NewGrid
-            self._mz_landmarks_ = updated_REF_landmarks
-            sample.mz_calibration_ratio = _r
-            self.experiment.samples_nonreference.append(sample)
-            self.experiment.number_scans = max(self.experiment.number_scans, max(sample.rt_numbers))
-
-
-    def optimize_mass_grid(self):
-        '''
-        Place holder - to inspect split or misaligned regions of m/z tracks.
-        Not really needed now, after mass_tracks in each sample are cleaned up for m/z overlap.
-
-        Potential optimizations to consider, e.g. 2-D deconvolution for low-selectivity mass tracks.
-        # also check for empty tracks after composite?
-        # watch out for indices used by other variables, e.g. _mz_landmarks_
-        '''
-        pass
+        NewGrid = pd.DataFrame(
+            np.full((len(new_reference_mzlist), 1+self._number_of_samples_), None),
+            columns=['mz'] + self.list_sample_names,
+        )
+        NewGrid[ :self.MassGrid.shape[0]] = self.MassGrid
+        NewGrid['mz'] = new_reference_mzlist
+        NewGrid[ sample.name ] = new_reference_map2
+        self.MassGrid = NewGrid
+        self._mz_landmarks_ = updated_REF_landmarks
+        sample.mz_calibration_ratio = _r
+        
+        self.experiment.number_scans = max(self.experiment.number_scans, max(sample.rt_numbers))
+        self.experiment.all_samples.append(sample)
 
 
     def mock_rentention_alignment(self):
-        for sample in self.experiment.samples_nonreference:
+        for sample in self.experiment.all_samples[1:]:      # first sample is reference
             sample.rt_cal_dict, sample.reverse_rt_cal_dict = mock_rt_calibration(sample.rt_numbers, self.reference_sample.rt_numbers)
-
 
     def align_retention_time(self):
         '''
@@ -230,7 +204,7 @@ class CompositeMap:
         cal_min_peak_height = self.experiment.parameters['cal_min_peak_height']
         MIN_PEAK_NUM = self.experiment.parameters['peak_number_rt_calibration']
         self.good_reference_landmark_peaks = self.set_RT_reference()
-        for SM in self.experiment.samples_nonreference:
+        for SM in self.experiment.all_samples[1:]:      # first sample is reference
             self.calibrate_sample_RT(SM, cal_min_peak_height=cal_min_peak_height, MIN_PEAK_NUM=MIN_PEAK_NUM)
         
 
@@ -249,10 +223,10 @@ class CompositeMap:
         (63, 63), (67, 67), (69, 69), (69, 70), (70, 70), (71, 71), (72, 72), (73, 72), (73, 74), (74, 75), (76, 75), (76, 78), (77, 75), (77, 77), ...,
         (190, 190), (190, 191), (190, 192), (191, 189), (191, 191), (191, 192), (192, 192), (192, 193),...
         '''
-        candidate_landmarks = [self.MassGrid[sample.input_file].values[
+        candidate_landmarks = [self.MassGrid[sample.name].values[
                                 p['ref_id_num']] for p in self.good_reference_landmark_peaks] # contains NaN
         good_landmark_peaks, selected_reference_landmark_peaks = [], []
-        list_mass_tracks = sample.get_mass_tracks()
+        list_mass_tracks = sample.get_masstracks_and_anchors()
         for jj in range(len(self.good_reference_landmark_peaks)):
             ii = candidate_landmarks[jj]
             if not pd.isna(ii):
@@ -276,10 +250,10 @@ class CompositeMap:
                                 good_landmark_peaks, selected_reference_landmark_peaks, 
                                 sample.rt_numbers, self.reference_sample.rt_numbers, )
             except ValueError:
-                print("    ~warning~ Faluire in retention time alignment, %s" %sample.input_file)
+                print("    ~warning~ Faluire in retention time alignment, %s" %sample.name)
         else:
             print("    ~Warning~ Faluire in retention time alignment on %s, due to too few aligned features (%d)." 
-                                %(sample.input_file, _NN))
+                                %(sample.name, _NN))
 
 
     def set_RT_reference(self, cal_peak_intensity_threshold=100000):
@@ -292,10 +266,10 @@ class CompositeMap:
         '''
         selectivities = calculate_selectivity( self.MassGrid['mz'][self._mz_landmarks_] )
         good_reference_landmark_peaks = []
-        ref_list_mass_tracks = self.reference_sample.get_mass_tracks()
+        ref_list_mass_tracks = self.reference_sample.list_mass_tracks
         for ii in range(len(self._mz_landmarks_)):
             if selectivities[ii] > 0.99:
-                ref_ii = self.MassGrid[self.reference_sample.input_file][self._mz_landmarks_[ii]]
+                ref_ii = self.MassGrid[self.reference_sample.name][self._mz_landmarks_[ii]]
                 if ref_ii:
                     this_mass_track = ref_list_mass_tracks[ int(ref_ii) ]
                     rt_numbers, list_intensity = this_mass_track['rt_scan_numbers'], this_mass_track['intensity']
@@ -376,21 +350,21 @@ class CompositeMap:
         mzDict = dict(self.MassGrid['mz'])
         mzlist = list(self.MassGrid.index)              # this gets indices as keys, per mass track
         _comp_dict = {}
-        ref_list_mass_tracks = self.reference_sample.get_mass_tracks()
+        ref_list_mass_tracks = self.reference_sample.list_mass_tracks
         for k in mzlist: 
             _comp_dict[k] = {}       # will be {rt_index: intensity}
             # init using reference_sample
-            ref_index = self.MassGrid[self.reference_sample.input_file][k]
+            ref_index = self.MassGrid[self.reference_sample.name][k]
             if not pd.isna(ref_index):
                 this_mass_track = ref_list_mass_tracks[int(ref_index)]
                 # ref mass track should be continuous
                 _comp_dict[k] = dict(zip(this_mass_track['rt_scan_numbers'], this_mass_track['intensity']))
 
-        for SM in self.experiment.samples_nonreference:
-            list_mass_tracks = SM.get_mass_tracks()
+        for SM in self.experiment.all_samples[1:]:      # first sample is reference
+            list_mass_tracks = SM.get_masstracks_and_anchors()
             if SM.rt_cal_dict:
                 for k in mzlist:
-                    ref_index = self.MassGrid[SM.input_file][k]
+                    ref_index = self.MassGrid[SM.name][k]
                     if not pd.isna(ref_index): # ref_index and 
                         this_mass_track = list_mass_tracks[int(ref_index)]
                         # after remapping RT indices, no guaranty rt/intensity vector is continuous; thus smoothing is needed
@@ -414,16 +388,14 @@ class CompositeMap:
         '''
         cmap_header = ['feature_id', 'cmap_masstrack_id', 'mz', 'rtime', 'rt_min', 'rt_max', 
                 'peak_quality', 'selectivity_mz', 'height_mean', 'peak_area_mean', ]
-        header = cmap_header + self.list_input_files
+        header = cmap_header + self.list_sample_names
         FeatureTable = pd.DataFrame( 
                 np.zeros((len(self.FeatureList), len(header))), columns=header, )
-
         '''
-        self.experiment.all_samples = [self.experiment.reference_sample] + self.experiment.samples_nonreference
         FeatureTable = pd.DataFrame(self.FeatureList)
         for SM in self.experiment.all_samples:
             if SM.rt_cal_dict:
-                FeatureTable[SM.name] = self.extract_features_per_sample(SM)          # SM.input_file
+                FeatureTable[SM.name] = self.extract_features_per_sample(SM)
 
         self.FeatureTable = FeatureTable
 
@@ -433,8 +405,8 @@ class CompositeMap:
         rt_scan_numbers can be out of range due to calibration/conversion. Fill with max.
         '''
         fList = []
-        mass_track_map = self.MassGrid[sample.input_file]
-        list_mass_tracks = sample.get_mass_tracks()
+        mass_track_map = self.MassGrid[sample.name]
+        list_mass_tracks = sample.get_masstracks_and_anchors()
         max_rt_number = max(sample.rt_numbers)+1                # to have none intensity if peak out of RT range
         for peak in self.FeatureList:
             track_number = mass_track_map[peak['parent_masstrack_id']]
@@ -446,7 +418,7 @@ class CompositeMap:
                     left_base = sample.reverse_rt_cal_dict[peak['left_base']]
                     right_base = sample.reverse_rt_cal_dict[peak['right_base']]
                 except KeyError:
-                    print("    ... in %s ... incomplete elution peak at ... %4.4f ..." %(os.path.basename(sample.input_file), mass_track['mz']))
+                    print("    ... in %s ... incomplete elution peak at ... %4.4f ..." %(sample.name, mass_track['mz']))
 
                 # can optimize below
                 for ii in range(len(mass_track['rt_scan_numbers'])):

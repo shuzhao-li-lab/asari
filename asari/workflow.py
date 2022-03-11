@@ -4,18 +4,13 @@ Heavy lifting is in constructors.CompositeMap,
     which contains MassGrid for correspondence, and FeatureList from feature/peak detection.
 Annotation is facilitated by jms-metabolite-services, mass2chem
 
-        pool = mp.Pool( min(mp.cpu_count(), self.experiment.parameters['multicores']) )
-        pool.starmap(
-            self.process_and_add_sample, 
-            [f for f in self.list_input_files if f not in self.experiment.initiation_samples]
-        )
-        pool.close()
         
 
 '''
 
 import multiprocessing as mp
-# from pyopenms import MSExperiment, MzMLFile
+
+import pymzml
 
 from .experiment import *
 from .chromatograms import extract_massTracks_        # extract_massTracks, 
@@ -26,12 +21,9 @@ from .mass_functions import *
 # -----------------------------------------------------------------------------
 #
 
-def register_samples(list_input_files, dict_meta_data, parameters):
+def register_samples(list_input_files):
     '''
-    dict_meta_data for future use.
-    '''
-    samples = []
-    for file in list_input_files:
+    Establish sample_id here, return sample_registry as a dictionary.
         samples.append( {
             'input_file': file,
             'ion_mode': parameters['mode'],
@@ -43,83 +35,103 @@ def register_samples(list_input_files, dict_meta_data, parameters):
             'anchor_mz_pairs': [],                    # mostly isotopic pairs to establish m/z anchors (landmarks)
             'number_anchor_mz_pairs': -1,
         } )
-    return samples
+    , dict_meta_data, parameters
+    dict_meta_data for future use.
+    '''
+    sample_registry = {}
+    ii = 0
+    for file in sorted(list_input_files):
+        sample_registry[ii] = {'sample_id': ii, 'input_file': file}
+        ii += 1
+    return sample_registry
 
-def make_iter_parameters(samples, parameters):
+def make_iter_parameters(sample_registry, parameters, shared_dict):
     '''
     Generate iterables for multiprocess.starmap for getting sample mass tracks.
     return:
-    [(input_file, mode, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, output_file), ...]
+    [('sample_id', input_file, mode, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, output_file, shared_dict), ...]
     '''
     iters = []
     mz_tolerance_ppm = parameters['mz_tolerance']
     min_intensity = parameters['min_intensity_threshold']
     min_timepoints = parameters['min_timepoints']
     min_peak_height = parameters['min_peak_height']
-    for sample in samples:
+    for sample in sample_registry.values():
         iters.append(
-            (sample['input_file'], sample['ion_mode'],
+            (sample['sample_id'], sample['input_file'], parameters['mode'],
             mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height,
-            os.path.join(parameters['outdir'], 'pickle', os.path.basename(sample['input_file']).replace('.mzML', '')+'.pickle')
+            os.path.join(parameters['outdir'], 'pickle', os.path.basename(sample['input_file']).replace('.mzML', '')+'.pickle'),
+            shared_dict
             )
         )
     return iters
 
 
-def batch_EIC_from_samples_in_memory(samples, parameters):
+def batch_EIC_from_samples_in_memory(sample_registry, parameters):
     pass
 
-def batch_EIC_from_samples_to_mongo(samples, parameters, cursor):
+def batch_EIC_from_samples_to_mongo(sample_registry, parameters, cursor):
     pass
 
 
 
-def batch_EIC_from_samples_ondisk(samples, parameters):
+def batch_EIC_from_samples_ondisk(sample_registry, parameters):
     '''
-    multiprocessing of mass track extraction
+    multiprocessing of mass track extraction of samples, and return shared_dict.
+    More anchors mean better coverage of features, helpful to select reference sample.
     '''
     number_processes = min(mp.cpu_count(), parameters['multicores'])
-    iters = make_iter_parameters(samples, parameters)
-    print("Number of processes ", number_processes)
-    pool = mp.Pool( number_processes )
-    pool.starmap( single_sample_EICs_ondisk, iters )
-    pool.close()
+    with mp.Manager() as manager:
+        shared_dict = manager.dict()
+        iters = make_iter_parameters(sample_registry, parameters, shared_dict)
+        # print("Number of processes ", number_processes)
+        with mp.Pool( number_processes ) as pool:
+            pool.starmap( single_sample_EICs_ondisk, iters )
 
+        _d = dict(shared_dict)
+    return _d
 
-def single_sample_EICs_ondisk(infile, ion_mode, 
-                    mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, outfile):
-    name = os.path.basename(infile).replace('.mzML', '')
-    new = { 'input_file': infile, 'ion_mode': ion_mode, 'name': name,}
+def single_sample_EICs_ondisk(sample_id, infile, ion_mode, 
+                    mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, outfile, shared_dict):
+
+    '''
+    Process infile.
+    shared_dict is used to pass back information, 
+    sample_id: ('mzml_parsing', 'eic', number_anchor_mz_pairs, outfile)
+    '''
+    new = {'sample_id': sample_id, 'input_file': infile, 'ion_mode': ion_mode,}
     list_mass_tracks = []
+    try:
+        exp = pymzml.run.Reader(infile)
+        xdict = extract_massTracks_(exp, 
+                    mz_tolerance_ppm=mz_tolerance_ppm, 
+                    min_intensity=min_intensity, 
+                    min_timepoints=min_timepoints, 
+                    min_peak_height=min_peak_height)
+        new['list_scan_numbers'] = xdict['rt_numbers']            # list of scans, starting from 0
+        new['list_retention_time'] = xdict['rt_times']        # full RT time points in sample
+        ii = 0
+        # already in ascending order of m/z from extract_massTracks_, get_thousandth_regions
+        for track in xdict['tracks']:                         
+            list_mass_tracks.append( {
+                'id_number': ii, 
+                'mz': track[0],
+                'rt_scan_numbers': track[1], 
+                'intensity': track[2], 
+                } )
+            ii += 1
 
-    print(new)
+        new['list_mass_tracks'] = list_mass_tracks
+        anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(list_mass_tracks, mz_tolerance_ppm=mz_tolerance_ppm)
+        new['anchor_mz_pairs'] = anchor_mz_pairs
+        new['number_anchor_mz_pairs'] = len(anchor_mz_pairs)
+        shared_dict[new['sample_id']] = ('passed', 'passed', new['number_anchor_mz_pairs'], outfile)
 
-    exp = MSExperiment()
-    MzMLFile().load(infile, exp)
-    xdict = extract_massTracks_(exp, 
-                mz_tolerance_ppm=mz_tolerance_ppm, 
-                min_intensity=min_intensity, 
-                min_timepoints=min_timepoints, 
-                min_peak_height=min_peak_height)
-    new['list_scan_numbers'] = xdict['rt_numbers']            # list of scans, starting from 0
-    new['list_retention_time'] = xdict['rt_times']        # full RT time points in sample
-    ii = 0
-    # already in ascending order of m/z from extract_massTracks_, get_thousandth_regions
-    for track in xdict['tracks']:                         
-        list_mass_tracks.append( {
-            'id_number': ii, 
-            'mz': track[0],
-            'rt_scan_numbers': track[1], 
-            'intensity': track[2], 
-            } )
-        ii += 1
+        with open(outfile, 'wb') as f:
+            pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
 
-    new['list_mass_tracks'] = list_mass_tracks
-    anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(list_mass_tracks, mz_tolerance_ppm=mz_tolerance_ppm)
-    new['anchor_mz_pairs'] = anchor_mz_pairs
-    new['number_anchor_mz_pairs'] = len(anchor_mz_pairs)
+        print("Processed %s with %d mass tracks." %(os.path.basename(infile), ii))
 
-    with open(outfile, 'wb') as f:
-        pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
-
-    print("Processed %s with %d mass tracks." %(name, ii))
+    except:
+        shared_dict[new['sample_id']] = ('failed', '', 0, '')
+        print("mzML processing error in sample %s, skipped." %infile)

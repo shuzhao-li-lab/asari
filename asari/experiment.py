@@ -4,7 +4,6 @@ import random
 import json
 import pickle
 
-from metDataModel.core import Experiment
 from mass2chem.search import *
 # jms-metabolite-services
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
@@ -25,12 +24,12 @@ if not sys.warnoptions:
     warnings.simplefilter("ignore")
 
 
-class ext_Experiment(Experiment):
+class ext_Experiment():
     '''
     Extend metDataModel.core.Experiment with preprocessing methods.
     This encapsulates a set of LC-MS files using the same method to be processed together.
     '''
-    def __init2__(self, list_input_files, dict_meta_data, parameters):
+    def __init__(self, sample_registry, parameters):
         '''
         This is the overall container for all data in an experiment/project.
         Samples are sorted by name and assigned unique IDs.
@@ -40,10 +39,6 @@ class ext_Experiment(Experiment):
         list_input_files: list of inputfiles, including directory path, to read
         dict_meta_data: description of sample types for each file, e.g. 'QC', 'pooled', 'sample'. Not used now.
         parameters: including 'ionization_mode', 'min_intensity_threshold', 'min_timepoints'. See main.py.
-
-        '''
-        # SAMPLE_REGISTRY
-        # self.samples = self.register_samples(sorted(list_input_files), dict_meta_data, parameters)
 
         self.list_input_files =  sorted(list_input_files)       # ordered by name
         self.number_of_samples = len(list_input_files)
@@ -58,37 +53,37 @@ class ext_Experiment(Experiment):
 
         self.files_meta_data = dict_meta_data
         
-        self.parameters = parameters
-        self.output_dir = parameters['outdir']
+        self.initiation_samples = self.__choose_initiation_samples__(N=parameters['init_samples_number'])
+           
+
         # self.max_rtime = parameters['max_rtime'] # to update from each sample
                                         # max scan number, to update when samples are processed
+        '''
+        self.sample_registry = sample_registry
+        self.valid_sample_ids = self.get_valid_sample_ids()
+        self.number_of_samples = len(self.valid_sample_ids)
+        self.number_scans = 0
+        self.all_samples = self.all_sample_instances = []
+
+        self.parameters = parameters
+        self.output_dir = parameters['outdir']
         self.mode = parameters['mode']
         self.database_mode = parameters['database_mode']
-
-
-        self.initiation_samples = self.__choose_initiation_samples__(N=parameters['init_samples_number'])
-        self.number_scans = 0   
-
+        self.reference_sample_id = self.get_reference_sample_id()
         
+    def get_reference_sample_id(self):
+        '''
+        get_reference_sample_id as sample of most number_anchor_mz_pairs
+        '''
+        L = [(v['number_anchor_mz_pairs'], k) for k,v in self.sample_registry.items()]
+        return sorted(L, reverse=True)[0][1]
+        
+    def get_valid_sample_ids(self):
+        return [k for k,v in self.sample_registry.items() if v['status:eic'] == 'passed']
+
     def process_all(self):
-        '''
-        initiation_Samples are used to select one most representative sample to seed MassGrid and RT alignment.
-
-        If refDB is used, it's better to be used after all samples are processed, 
-        because the m/z values of samples are closer to other samples than refDB.
-        '''
-        self.process_all_without_export()
-        self.CMAP.MassGrid.to_csv(
-            os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
-        self.export_feature_tables()
-        self.annotate()
-        self.export_log()
-
-
-    def process_all_without_export(self):
         self.CMAP = CompositeMap(self)
-        init_Samples = self.process_initiation_samples()
-        self.CMAP.construct_mass_grid( init_Samples )
+        self.CMAP.construct_mass_grid()
 
         # automatic update of parameters based on ref sample
 
@@ -102,57 +97,21 @@ class ext_Experiment(Experiment):
             self.CMAP.mock_rentention_alignment()
 
         self.CMAP.global_peak_detection()
-        self.store_initiation_samples(init_Samples)
+  
 
-
-    def process_initiation_samples(self):
-        return [self.process_single_sample(f, database_mode='memory') for f in self.initiation_samples]
-
-
-    def store_initiation_samples(self, init_Samples):
-        '''Since initiation samples were proecssed in memory,
-        this step store them according to experiment.database_mode
+    def export_all(self):
         '''
-        for sample in init_Samples:
-            if self.database_mode == 'ondisk': 
-                sample.push_to_disk(sample.list_mass_tracks)
-            elif self.database_mode == 'mongo': 
-                sample.push_to_db(sample.list_mass_tracks
-                    # to implement
-                )
+        initiation_Samples are used to select one most representative sample to seed MassGrid and RT alignment.
 
-
-    def process_single_sample(self, input_file, database_mode):
+        If refDB is used, it's better to be used after all samples are processed, 
+        because the m/z values of samples are closer to other samples than refDB.
         '''
-        Some parameters can be automatically determined here.
-
-        '''
-        mz_tolerance_ppm = self.parameters['mz_tolerance']
-        min_intensity = self.parameters['min_intensity_threshold']
-        min_timepoints = self.parameters['min_timepoints']
-        min_peak_height = self.parameters['min_peak_height']
-        try:
-            SM = SimpleSample(experiment=self, database_mode=database_mode, 
-                                mode=self.mode, input_file=input_file)
-            SM.process( mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
-            return SM
-        except IndexError:
-            print("Input error in sample %s, dropped from processing." %input_file)
-            return None
         
-
-    def __choose_initiation_samples__(self, N=3):
-        '''
-        N initial samples are chosen to be analyzed first.
-        One best sample among them is chosen as the reference, especially for retention time alignment.
-        '''
-        if self.parameters['initiation_samples']:
-            return self.parameters['initiation_samples']
-        else:
-            if self.number_of_samples < N+1:
-                return self.list_input_files
-            else:
-                return random.sample(self.list_input_files, N)
+        self.CMAP.MassGrid.to_csv(
+            os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
+        self.export_feature_tables()
+        self.annotate()
+        self.export_log()
 
 
     def annotate(self):
@@ -313,4 +272,53 @@ class ext_Experiment(Experiment):
         outfile = os.path.join(self.parameters['outdir'], 'project.json')
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(self.parameters, f, cls=NpEncoder, ensure_ascii=False, indent=2)
+
+
+#---------------------------------------------------------------------------------------------------------------
+
+
+    def store_initiation_samples(self, init_Samples):
+        '''Since initiation samples were proecssed in memory,
+        this step store them according to experiment.database_mode
+        '''
+        for sample in init_Samples:
+            if self.database_mode == 'ondisk': 
+                sample.push_to_disk(sample.list_mass_tracks)
+            elif self.database_mode == 'mongo': 
+                sample.push_to_db(sample.list_mass_tracks
+                    # to implement
+                )
+
+
+    def process_single_sample(self, input_file, database_mode):
+        '''
+        Some parameters can be automatically determined here.
+
+        '''
+        mz_tolerance_ppm = self.parameters['mz_tolerance']
+        min_intensity = self.parameters['min_intensity_threshold']
+        min_timepoints = self.parameters['min_timepoints']
+        min_peak_height = self.parameters['min_peak_height']
+        try:
+            SM = SimpleSample(experiment=self, database_mode=database_mode, 
+                                mode=self.mode, input_file=input_file)
+            SM.process( mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
+            return SM
+        except IndexError:
+            print("Input error in sample %s, dropped from processing." %input_file)
+            return None
+        
+
+    def __choose_initiation_samples__(self, N=3):
+        '''
+        N initial samples are chosen to be analyzed first.
+        One best sample among them is chosen as the reference, especially for retention time alignment.
+        '''
+        if self.parameters['initiation_samples']:
+            return self.parameters['initiation_samples']
+        else:
+            if self.number_of_samples < N+1:
+                return self.list_input_files
+            else:
+                return random.sample(self.list_input_files, N)
 

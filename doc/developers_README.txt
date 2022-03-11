@@ -37,3 +37,8 @@ Notebooks
 - OpenMS based workflow
 
 
+- batched processing; separate CMAP per processing batch and assemble afterwards. 
+    Or, how to combine multiple asari projects (based on empCpds and massTracks).
+
+
+

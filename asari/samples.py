@@ -1,35 +1,9 @@
 '''
-SimpleSample is used by default asari workflow. 
-
+SimpleSample as a wrapper for a sample, lightweight to facilitate workflow.
 Depending on database_mode, sample list_mass_tracks are stored in memory, or on disk, or in MongoDB.
-
-
-
-Sample = {
-    input_file: '',
-    name: '',                               # usually short form of input_file
-    ion_mode: '',
-    list_scan_numbers = [],
-    list_retention_time: [],
-    list_mass_tracks: [
-        {'id_number': ii, 
-                'mz': float,
-                'rt_scan_numbers': [],
-                'intensity': [],
-                }, ...
-    ], 
-    anchor_mz_pairs: [],                    # mostly isotopic pairs to establish m/z anchors (landmarks)
-    number_anchor_mz_pairs: int,
-}
-
-
-
-
-
 '''
 import pickle
 import os
-
 
 import pymzml
 
@@ -44,26 +18,50 @@ class SimpleSample:
     LC-MS Sample to get mass tracks from a mzML file, and as a container for peaks and empCpds.
     Use scan numbers whereas possible. 
     Use dictionary formats for mass_track, etc for clarity.
+    {
+    input_file: '',
+    name: '',                               # usually short form of input_file
+    ion_mode: '',
+    # status
+    'status:mzml_parsing': '',
+    'status:eic': '',
+    'mass_aligned': '',
+    'rtime_aligned': '',
+    'peaks_extracted': '',
+    #
+    list_scan_numbers = [],
+    list_retention_time: [],
+    list_mass_tracks: [
+        {'id_number': ii, 
+                'mz': float,
+                'rt_scan_numbers': [],
+                'intensity': [],
+                }, ...
+    ], 
+    anchor_mz_pairs: [],                    # mostly isotopic pairs to establish m/z anchors (landmarks)
+    number_anchor_mz_pairs: int,
+}
 
     Registry for mass traces, peaks & empCpds.
     RT and m/z values will have calibration functions after CompositeMap.
 
     '''
-    def __init__(self, experiment=None, database_mode='memory', mode='pos', input_file=''):
+    def __init__(self, registry={}, experiment=None, database_mode='ondisk', mode='pos'):
         '''
         experiment: mostly required pointer to ext_Experiment instance, in order to get parameters.
         database_mode: 'ondisk', 'mongo', or 'memory' (run in memory, only small studies).
                 This is not necessary to be same as experiment wide setting, to have flexibility in handling individual samples.
                 E.g. two samples can be one in memory and the other on disk.
         mode: ionization mode, 'pos' or 'neg'
-        '''
-        self.input_file = input_file
-        self.name = os.path.basename(input_file).replace('.mzML', '')
-        if experiment:
-            self.experiment = experiment
-            self.id = self.experiment.list_input_files.index(input_file)
-            self.pickle_file = os.path.join(self.experiment.parameters['outdir'], 'pickle', self.name+'.pickle')
 
+
+        '''
+        self.registry = registry
+        self.input_file = registry['input_file']
+        self.name = registry['name']
+        self.sample_id = registry['sample_id']
+        self.data_location = registry['data_location']
+        self.experiment = experiment
         self.mode = mode
         self.database_mode = database_mode 
 
@@ -81,13 +79,61 @@ class SimpleSample:
         self._mz_landmarks_ = []
         self._number_anchor_mz_pairs_ = 0
 
+    def get_masstracks_and_anchors(self):
+        '''
+        Retrieve stored data, including list_mass_tracks, anchors and supporting stats. 
+        '''
+        sample_data = self._get_sample_data()
+        list_mass_tracks = sample_data['list_mass_tracks']
+        if not self.anchor_mz_pairs:
+            self.anchor_mz_pairs = sample_data['anchor_mz_pairs']
+            self._number_anchor_mz_pairs_ = sample_data['number_anchor_mz_pairs']
+            self.rt_numbers = sample_data['list_scan_numbers']
+            self.list_retention_time = sample_data['list_retention_time']
+            self._mz_landmarks_ = flatten_tuplelist(self.anchor_mz_pairs)
+        return list_mass_tracks
+
+    def _get_sample_data(self):
+        '''
+        Retrieve mass tracks, which are the bulk of data per sample, depending on where they are stored.
+        '''
+        if self.database_mode == 'memory':
+            return self.list_mass_tracks
+        elif self.database_mode == 'ondisk': 
+            return self._retrieve_from_disk()
+        else:                         # requiring self.experiment and db connection
+            return self.retrieve_from_db(
+                # to implement
+            )
+
+    def _retrieve_from_disk(self):
+        with open(self.data_location, 'rb') as f:
+            sample_data = pickle.load(f)
+        return sample_data
+
+
+    def push_to_db(self, cursor):
+        '''
+        Each sample -> TABLE mass tracks (pickle objects)
+        '''
+
+        pass
+
+
+    def retrieve_from_db(self, cursor):
+        pass
+
+
+
+#---------------------------------------------------------------------------------------------------------------
+
+
+class fullSample(SimpleSample):
+
     def process(self, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height):
         '''From input file to list_MassTraces with detected peaks and selectivity on peaks.
         '''
         self.generate_mass_tracks( mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
-
-
-
 
     def generate_mass_tracks(self, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000):
         '''
@@ -133,8 +179,6 @@ class SimpleSample:
                 # to implement
             )
 
-
-
     def generate_mass_tracks_openms(self, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000):
         '''
         A mass track is an EIC for full RT range, without separating the mass traces,
@@ -175,52 +219,8 @@ class SimpleSample:
                 # to implement
             )
 
-    def generate_anchor_mz_pairs(self, list_mass_tracks):
-        '''
-        This will be dependent on ion mode.
-        update self.anchor_mz_pairs
-        e.g. [(5, 8), (6, 13), (17, 25), (20, 27), ...]
-        '''
-        self.anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(list_mass_tracks, 
-                                    mz_tolerance_ppm=self.experiment.parameters['mz_tolerance'],
-                                    )
-        self._number_anchor_mz_pairs_ = len(self.anchor_mz_pairs)
-        self._mz_landmarks_ = flatten_tuplelist(self.anchor_mz_pairs)
-
-    def get_mass_tracks(self):
-        '''
-        Retrieve mass tracks, which are the bulk of data per sample, depending on where they are stored.
-        '''
-        if self.database_mode == 'memory':
-            return self.list_mass_tracks
-        elif self.database_mode == 'ondisk': 
-            return self.retrieve_from_disk()
-        else:                         # requiring self.experiment and db connection
-            return self.retrieve_from_db(
-                # to implement
-            )
-
     def push_to_disk(self, list_mass_tracks):
         '''Write pickle file for list_mass_tracks under project directory, pickle/samplename.pickle.
         '''
         with open(self.pickle_file, 'wb') as f:
             pickle.dump(list_mass_tracks, f, pickle.HIGHEST_PROTOCOL)
-
-
-    def retrieve_from_disk(self):
-        with open(self.pickle_file, 'rb') as f:
-            list_mass_tracks = pickle.load(f)
-        return list_mass_tracks
-
-
-    def push_to_db(self, cursor):
-        '''
-        Each sample -> TABLE mass tracks (pickle objects)
-        '''
-
-        pass
-
-
-    def retrieve_from_db(self, cursor):
-        pass
-

@@ -5,6 +5,7 @@ subcommands:
     process: LC-MS data preprocessing
     xic: construct mass trakcs (chromatogram) from mzML files
     annotate: annotate a list of features
+    join: merge multiple processed projects (possibly split a large dataset)
     viz: start interactive data visualization and exploration.
 
 
@@ -159,15 +160,17 @@ def process_project(list_input_files, dict_meta_data={}, parameters=PARAMETERS):
     if not list_input_files:
         print("No input file found. Please verify your pathway to files.")
 
-    # samples = register_samples(list_input_files, dict_meta_data, parameters)
-    # batch_EIC_from_samples_ondisk(samples, parameters)
-
-    EE = ext_Experiment()
-    EE.__init2__(list_input_files, dict_meta_data, parameters)
-
-    EE.process_all()
+    sample_registry = register_samples(list_input_files) #, dict_meta_data, parameters)
+    shared_dict = batch_EIC_from_samples_ondisk(sample_registry, parameters)
+    for sid, sam in sample_registry.items():
+        sam['status:mzml_parsing'], sam['status:eic'], sam['number_anchor_mz_pairs'
+                ], sam['data_location'] = shared_dict[sid]
+        sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
     
-
+    # print(sample_registry)
+    EE = ext_Experiment(sample_registry, parameters)
+    EE.process_all()
+    EE.export_all()
 
 
 
