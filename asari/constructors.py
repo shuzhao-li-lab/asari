@@ -295,23 +295,9 @@ class CompositeMap:
         '''
         self.composite_mass_tracks = self.make_composite_mass_tracks()
         print("Peak detection on %d composite mass tracks, ...\n" %len(self.composite_mass_tracks))
-
-        # to specify parameters here according to Experiment parameters
-        min_peak_height = self.experiment.parameters['min_peak_height']
-        min_prominence_threshold = self.experiment.parameters['min_prominence_threshold']
-        min_fwhm = round( 0.5 * self.experiment.parameters['min_timepoints'] )
-        snr = self.experiment.parameters['signal_noise_ratio']
-
-        for _, mass_track in self.composite_mass_tracks.items():
-            if max(mass_track['intensity']) > min_peak_height:
-                self.FeatureList +=  deep_detect_elution_peaks( mass_track, 
-                                        max_rt_number=self.experiment.number_scans,
-                                        min_peak_height=min_peak_height, min_fwhm=min_fwhm, 
-                                        min_prominence_threshold=min_prominence_threshold, 
-                                        snr=snr,
-                                        wlen=50, min_prominence_ratio=0.1,
-                                        iteration=False,                            #True
-                                        ) 
+        self.FeatureList = batch_deep_detect_elution_peaks(
+            self.composite_mass_tracks.values(), self.experiment.number_scans, self.experiment.parameters
+        )
 
         ii = 0
         for peak in self.FeatureList:
@@ -326,6 +312,7 @@ class CompositeMap:
                 print("Peak rtime out of bound on", ii)
 
         self.generate_feature_table()
+
 
     def make_composite_mass_tracks(self):
         '''

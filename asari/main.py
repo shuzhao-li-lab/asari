@@ -71,7 +71,6 @@ c. We curated isotopic/adduct patterns in this package.
 d. epdTree can be improved in future based on real data statistics and more structured cheminformatics.
 
 '''
-
 import sys
 import time
 from .workflow import *
@@ -127,6 +126,7 @@ PARAMETERS = {
     }
     
 PARAMETERS['min_prominence_threshold'] = PARAMETERS['min_peak_height']/3.0
+PARAMETERS['multicores'] = min(mp.cpu_count(), PARAMETERS['multicores'])
 
 
 def read_project_dir(directory, file_pattern='.mzML'):
@@ -171,7 +171,6 @@ def process_project(list_input_files, dict_meta_data={}, parameters=PARAMETERS):
     EE = ext_Experiment(sample_registry, parameters)
     EE.process_all()
     EE.export_all()
-
 
 
 def main(directory, parameters=PARAMETERS):

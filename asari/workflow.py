@@ -5,17 +5,13 @@ Heavy lifting is in constructors.CompositeMap,
 Annotation is facilitated by jms-metabolite-services, mass2chem
 
         
-
 '''
-
 import multiprocessing as mp
-
 import pymzml
 
 from .experiment import *
 from .chromatograms import extract_massTracks_        # extract_massTracks, 
 from .mass_functions import *
-
 
 #
 # -----------------------------------------------------------------------------
@@ -80,12 +76,11 @@ def batch_EIC_from_samples_ondisk(sample_registry, parameters):
     multiprocessing of mass track extraction of samples, and return shared_dict.
     More anchors mean better coverage of features, helpful to select reference sample.
     '''
-    number_processes = min(mp.cpu_count(), parameters['multicores'])
     with mp.Manager() as manager:
         shared_dict = manager.dict()
         iters = make_iter_parameters(sample_registry, parameters, shared_dict)
         # print("Number of processes ", number_processes)
-        with mp.Pool( number_processes ) as pool:
+        with mp.Pool( parameters['multicores'] ) as pool:
             pool.starmap( single_sample_EICs_ondisk, iters )
 
         _d = dict(shared_dict)

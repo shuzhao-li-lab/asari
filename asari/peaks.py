@@ -9,7 +9,7 @@ Peak format:
     'rtime', 'peak_area', 'goodness_fitting', 'snr', 'cSelectivity',
 }
 '''
-
+import multiprocessing as mp
 import numpy as np
 from scipy.signal import find_peaks 
 from scipy.optimize import curve_fit 
@@ -53,14 +53,45 @@ def evaluate_gaussian_peak(mass_track, peak):
 # peak detection
 # -----------------------------------------------------------------------------
 
-def deep_detect_elution_peaks( mass_track, max_rt_number,
-                min_peak_height=10000, min_fwhm=3, min_prominence_threshold=5000, wlen=50, 
-                snr=2, min_prominence_ratio=0.1,
-                iteration=True):
+
+def batch_deep_detect_elution_peaks(list_mass_tracks, max_rt_number, parameters):
+    with mp.Manager() as manager:
+        shared_list = manager.list()
+        iters = iter_peak_detection_parameters(list_mass_tracks, max_rt_number, parameters, shared_list)
+        with mp.Pool( parameters['multicores'] ) as pool:
+            pool.starmap( deep_detect_elution_peaks, iters )
+
+        FeatureList = list(shared_list)
+    return FeatureList
+
+def iter_peak_detection_parameters(list_mass_tracks, max_rt_number, parameters, shared_list):
+    iters = []
+    min_peak_height = parameters['min_peak_height']
+    min_prominence_threshold = parameters['min_prominence_threshold']
+    min_fwhm = round( 0.5 * parameters['min_timepoints'] )
+    snr = parameters['signal_noise_ratio']
+    wlen = 50
+    min_prominence_ratio = 0.1
+    iteration = False
+    for mass_track in list_mass_tracks:
+        if max(mass_track['intensity']) > min_peak_height:
+            iters.append(
+                (mass_track, max_rt_number, min_peak_height, min_fwhm, min_prominence_threshold,
+                wlen, snr, min_prominence_ratio, iteration, shared_list)
+            )
+    return iters
+
+
+def deep_detect_elution_peaks( mass_track, max_rt_number, 
+                min_peak_height, min_fwhm, min_prominence_threshold,
+                wlen, snr, min_prominence_ratio, iteration,
+                shared_list):
     '''
     Optimized peak detection on a mass track. 
 
-
+    min_peak_height=10000, min_fwhm=3, min_prominence_threshold=5000, wlen=50, 
+                snr=2, min_prominence_ratio=0.1,
+                iteration=True, 
 
     Can add further stats based ROI selection to optimize -
                 - not requiring continuous track, but ROIs will be continuous and used for peak detection 
@@ -195,7 +226,8 @@ def deep_detect_elution_peaks( mass_track, max_rt_number,
             if _jpeak['snr'] > snr:
                 list_peaks.append(_jpeak)
 
-    return list_peaks
+    shared_list += list_peaks
+
 
 
 def convert_peak_json__( ii, mass_track, peaks, properties, cSelectivity=None):
