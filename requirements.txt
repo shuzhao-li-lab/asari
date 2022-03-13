@@ -1,6 +1,7 @@
 metDatamodel
 mass2chem
-pyopenms
+jms-metabolite-services
+pymzml
 numpy
 scipy
-
+statsmodels

@@ -29,13 +29,18 @@ Notebooks
 =========
 
 - Single sample processing, inspection, and determine ppm precision.
+    Quick peak detection; plot m/z peaks and LC peaks; Figure 1 in paper.
+
 
 - Process data without upfront LC alignment
+
+- regression match of datasets of different LC time
 
 - Annotate and search
 
 - OpenMS based workflow
 
+- chain with annotation, and MS2 search
 
 - batched processing; separate CMAP per processing batch and assemble afterwards. 
     Or, how to combine multiple asari projects (based on empCpds and massTracks).
