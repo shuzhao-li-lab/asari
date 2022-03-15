@@ -20,7 +20,75 @@ color='green', marker='o', linestyle='dashed',
 
 '''
 
+import numpy as np
 from matplotlib import pyplot as plt
+import pymzml
+
+def get_plot_region_from_file(infile, min_scan_number, max_scan_number, min_mz, max_mz, ms_level=1):
+    '''
+    input
+    -----
+    infile: mzML file as input
+
+    return 
+    ------
+    list, [(scan_number, mz, intensity value), ...]
+    '''
+    alldata = []
+    exp = pymzml.run.Reader(infile)
+    ii = 0   # scan_number starts with 0
+    for spec in exp:
+        if min_scan_number < ii < max_scan_number:
+            if spec.ms_level == ms_level:
+                _NN = spec.mz.size
+                for jj in range(_NN):
+                    if min_mz < spec.mz[jj] < max_mz:
+                        alldata.append((ii, spec.mz[jj], int(spec.i[jj])))
+                
+        ii += 1
+    return alldata
+
+
+def plot_scatter_map_region(datapoints, figsize=(8,10), cmap=plt.cm.coolwarm, colorbar_orientation='horizontal'):
+    '''
+    Make a color map of LC-MS data, each dot a data point
+    '''
+    datapoints = np.array(datapoints).T
+    normZ = np.log2(datapoints[2]+1)
+    normZ = normZ / normZ.max()
+    fig, ax = plt.subplots(figsize=figsize)
+    im = ax.scatter(datapoints[0], datapoints[1], marker='.', c=normZ, cmap=cmap)
+    fig.colorbar(im, ax=ax, orientation=colorbar_orientation, shrink=0.3, ticks=[0], label='relative intensity')
+    #im.set_clim(0.0, 1.0)  # set the color limits 
+
+
+def double_scatter_map_region(datapoints, figsize=(8,10), cmap=plt.cm.coolwarm, colorbar_orientation='horizontal'):
+    datapoints = np.array(datapoints).T
+    normZ = np.log2(datapoints[2]+1)
+    normZ = normZ / normZ.max()
+    fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=figsize)
+    im = ax1.scatter(datapoints[0], datapoints[1], marker='.', c=normZ, cmap=cmap)
+    ax1.set(ylabel='m/z')
+    im2 = ax2.scatter(datapoints[0], datapoints[2], marker='.', c=normZ, cmap=cmap)
+    ax2.set(ylabel='intensity')
+    fig.colorbar(im2, ax=ax2, orientation=colorbar_orientation, shrink=0.3, ticks=[0], label='')
+    
+
+def with_line_scatter_map_region(datapoints, figsize=(8,10), cmap=plt.cm.coolwarm):
+    datapoints = np.array(datapoints).T
+    normZ = np.log2(datapoints[2]+1)
+    normZ = normZ / normZ.max()
+    fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=figsize)
+    im = ax1.scatter(datapoints[0], datapoints[1], marker='.', c=normZ, cmap=cmap)
+    ax1.set(ylabel='m/z')
+    im2 = ax2.plot(datapoints[0], datapoints[2], '*-')
+    ax2.set(ylabel='intensity')
+
+
+
+
+# -----------------------------------------------------------------------------
+# in progress
 
 def plot_peaks_masstrace(sample, mzstr, outfile='masstrace_plot.pdf'):
     '''
@@ -44,7 +112,6 @@ def plot_peaks_masstrace(sample, mzstr, outfile='masstrace_plot.pdf'):
     plt.savefig(outfile)
     plt.close()
 
-
 def plot_peaks():
 
     '''
@@ -63,3 +130,7 @@ def plot_sample_rt_calibration(sample, outfile='rt_calibration.pdf'):
     plt.title("rt_calibration")
     plt.savefig(sample.name+outfile)
     plt.close()
+
+
+
+
