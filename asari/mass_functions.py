@@ -227,7 +227,6 @@ def mass_paired_mapping_with_correction(list1, list2, std_ppm=5, correction_tole
         corrected_list2 = [x/(1+_r) for x in list2]
         mapped, ratio_deltas = mass_paired_mapping(list1, corrected_list2, std_ppm)
 
-    # return mapped, ratio_deltas, corrected_list2
     return mapped, _r
 
 def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks, 

@@ -75,8 +75,11 @@ class ext_Experiment():
         '''
         get_reference_sample_id as sample of most number_anchor_mz_pairs
         '''
-        L = [(v['number_anchor_mz_pairs'], k) for k,v in self.sample_registry.items()]
-        return sorted(L, reverse=True)[0][1]
+        if self.sample_registry:
+            L = [(v['number_anchor_mz_pairs'], k) for k,v in self.sample_registry.items()]
+            return sorted(L, reverse=True)[0][1]
+        else:
+            return None
         
     def get_valid_sample_ids(self):
         return [k for k,v in self.sample_registry.items() if v['status:eic'] == 'passed']

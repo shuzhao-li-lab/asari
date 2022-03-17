@@ -48,13 +48,22 @@ def register_samples(list_input_files):
 # -----------------------------------------------------------------------------
 # Single-core functions
 
-def analyze_single_sample(infile, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000):
+def analyze_single_sample(infile, 
+            mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000,
+            parameters={}):
     '''
     Analyze single mzML file and print statistics.
+    parameters are not used, just place holder to use ext_Experiment class.
     '''
-    get_file_masstrack_stats(infile,
+    print("Analysis of %s\n" %infile)
+    mz_landmarks, mode = get_file_masstrack_stats(infile,
         mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
 
+    EE = ext_Experiment({}, parameters)
+    EE.load_annotation_db()
+    mass_accuracy_ratio = EE.KCD.evaluate_mass_accuracy_ratio(mz_landmarks, mode, mz_tolerance_ppm=10)
+    # print("  Mass accuracy is estimated as %2.1f ppm." %(mass_accuracy_ratio*1000000))
+    print("\n")
 
 
 

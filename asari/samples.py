@@ -12,6 +12,7 @@ import pymzml
 
 from .chromatograms import extract_massTracks_        # extract_massTracks, 
 from .mass_functions import *
+from .workflow import *
 
 
 class SimpleSample:
@@ -176,10 +177,16 @@ def get_file_masstrack_stats(infile,
     intensity range, distri
     pairs of landmarks, distri
     recommended intensity cutoff
+
+    ionization_mode is assumed on one scan, thus not supporting polarity switch in a single file.
     '''
     new = {'sample_id': infile, 'input_file': infile, 'ion_mode': '',}
     list_mass_tracks = []
     exp = pymzml.run.Reader(infile)
+    if exp.next()["positive scan"]:
+        ionization_mode = 'pos'
+    else:
+        ionization_mode = 'neg'
     xdict = extract_massTracks_(exp, 
                 mz_tolerance_ppm=mz_tolerance_ppm, 
                 min_intensity=min_intensity, 
@@ -213,13 +220,21 @@ def get_file_masstrack_stats(infile,
     print("Maxium retention time (sec): %f" %max(new['list_retention_time']))
     print("Found %d mass tracks." %ii)
     print("Found %d 12C/13C isotopic pairs as landmarks." %len(anchor_mz_pairs))
-    print("m/z range = (min %f, median %f, max %f)" %(np.min(all_mz), np.median(all_mz), np.max(all_mz)))
+    print("Ionization mode (looked up on one scan) assumed as %s.\n" %ionization_mode)
+
+    print("m/z range: (min %f, median %f, max %f)\n" %(np.min(all_mz), np.median(all_mz), np.max(all_mz)))
     print("Max intensity in any landmark track is: ", f"{max_peak_height:,}")
     print("Recommended parameter for minimal peak height: ", f"{recommended_min_peak_height:,}", 
-            "\n(half of minimal verified peak height)\n")
+            "\n(half of minimal verified peak height).")
 
     if return_sample:
         return new
+    else:
+        return _mz_landmarks_, ionization_mode
+
+
+
+
 
 
 #---------------------------------------------------------------------------------------------------------------

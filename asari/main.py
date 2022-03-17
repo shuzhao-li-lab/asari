@@ -156,7 +156,7 @@ def main(parameters=PARAMETERS):
 
     elif args.run == 'analyze':
         # use a single sample file to analyze statistics
-        analyze_single_sample(args.input)
+        analyze_single_sample(args.input, parameters=parameters)
 
     elif args.run == 'xic':
         # 
