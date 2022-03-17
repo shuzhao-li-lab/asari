@@ -7,6 +7,17 @@ which may be garbage or useful in someway elsewhere.
 # from .utils import *
 
 
+def metafile_to_dict(infile):
+    '''
+    Optional.
+    Meta data file, tab delimited, first two columns corresponding to [file_name, sample_type].
+    '''
+    meta = {}
+    for line in open(infile).read().splitlines():
+        a = line.split('\t')
+        meta[a[0]] = a[1]
+    return {}
+
 
 def combine_mass_traces(list_mass_traces, mz_tolerance=0.0002):
     '''

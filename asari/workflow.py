@@ -12,6 +12,7 @@ import pymzml
 from .experiment import *
 from .chromatograms import extract_massTracks_        # extract_massTracks, 
 from .mass_functions import *
+from .samples import get_file_masstrack_stats
 
 #
 # -----------------------------------------------------------------------------
@@ -40,6 +41,26 @@ def register_samples(list_input_files):
         sample_registry[ii] = {'sample_id': ii, 'input_file': file}
         ii += 1
     return sample_registry
+
+
+
+#
+# -----------------------------------------------------------------------------
+# Single-core functions
+
+def analyze_single_sample(infile, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000):
+    '''
+    Analyze single mzML file and print statistics.
+    '''
+    get_file_masstrack_stats(infile,
+        mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
+
+
+
+
+#
+# -----------------------------------------------------------------------------
+# Multi-core functions
 
 def make_iter_parameters(sample_registry, parameters, shared_dict):
     '''

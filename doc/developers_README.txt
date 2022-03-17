@@ -17,7 +17,7 @@ When real retention time is used, they are float numbers and not good for indice
 requiring many more comparison operations and decreasing performance.
 
     
-To improve performance in next version:
+Possible to improve performance in next version:
 
 Use C to rewrite chromatogram constructor.
 After initial samples, the peak detection of most features can start from building EIC in C, 

@@ -1,12 +1,18 @@
 from setuptools import setup, find_packages
 
+with open("asari/__init__.py") as f:
+    exec([x for x in f.readlines() if '__version__' in x][0])
+
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+with open("requirements.txt", "r") as f:
+    requirements = f.read()
+
+
 setup(
   name='asari-metabolomics',
-  version='1.2.7',
-
+  version=__version__,
   author='Shuzhao Li',
   author_email='shuzhao.li@gmail.com',
   description='LC-MS metabolomics data preprocessing',
@@ -39,17 +45,6 @@ setup(
     },
 
   python_requires='>=3.7',
-  install_requires=[
-    'metDataModel',
-    'mass2chem',
-    'jms-metabolite-services',
-    'pymzml',
-    #'pyopenms',
-    'statsmodels',
-    # 'matplotlib',
-    'numpy',
-    'scipy',
-    # 'xlsxwriter',
-  ],
+  install_requires=requirements,
 
 )

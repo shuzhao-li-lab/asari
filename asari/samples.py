@@ -4,7 +4,8 @@ Depending on database_mode, sample list_mass_tracks are stored in memory, or on 
 '''
 import pickle
 import os
-
+import random
+import pandas as pd
 import pymzml
 
 #from pyopenms import MSExperiment, MzMLFile
@@ -123,6 +124,102 @@ class SimpleSample:
     def retrieve_from_db(self, cursor):
         pass
 
+
+
+
+#-------------------------------------------------------
+# Analyze functions
+
+
+def get_file_stats_dataframes(infile, max_spectra=100, return_dataframe=False):
+    '''
+    Quick estimate statistics based on max_spectra number.
+    Example output: 
+        Total number of spectra: 780
+                        mz     intensity
+        count  106174.000000  1.061740e+05
+        mean      316.125161  1.627240e+05
+        std       202.411866  2.045669e+06
+        min        80.024223  1.201407e+03
+        25%       159.091602  1.091480e+04
+        50%       239.175484  1.943417e+04
+        75%       428.384628  4.698321e+04
+        max       999.849426  2.154302e+08
+    '''
+    mzData, intensityData = np.array([]), np.array([])
+    exp = pymzml.run.Reader(infile)
+    N_all_spectra = exp.get_spectrum_count()
+    if max_spectra < N_all_spectra:
+        chosen = random.sample(range(N_all_spectra), max_spectra)
+    else:
+        chosen = range(N_all_spectra)
+    ii = -1   # scan_number starts with 0
+    for spec in exp:
+        ii += 1
+        if ii in chosen:
+            if spec.ms_level == 1:
+                mzData = np.concatenate((mzData, spec.mz))
+                intensityData = np.concatenate((intensityData, spec.i))
+                
+    print("Total number of spectra: %d" %N_all_spectra)
+    DF = pd.DataFrame({'mz': mzData, 'intensity': intensityData})
+    print(DF.describe())
+    if return_dataframe:
+        return DF
+    
+
+def get_file_masstrack_stats(infile, 
+                        mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000,
+                        return_sample=False):
+    '''
+    Report: number of spectra (scans), max rtime, m/z range, distri, 
+    intensity range, distri
+    pairs of landmarks, distri
+    recommended intensity cutoff
+    '''
+    new = {'sample_id': infile, 'input_file': infile, 'ion_mode': '',}
+    list_mass_tracks = []
+    exp = pymzml.run.Reader(infile)
+    xdict = extract_massTracks_(exp, 
+                mz_tolerance_ppm=mz_tolerance_ppm, 
+                min_intensity=min_intensity, 
+                min_timepoints=min_timepoints, 
+                min_peak_height=min_peak_height)
+    new['list_scan_numbers'] = xdict['rt_numbers']            # list of scans, starting from 0
+    new['list_retention_time'] = xdict['rt_times']        # full RT time points in sample
+    ii = 0
+    # already in ascending order of m/z from extract_massTracks_, get_thousandth_regions
+    for track in xdict['tracks']:                         
+        list_mass_tracks.append( {
+            'id_number': ii, 
+            'mz': track[0],
+            'rt_scan_numbers': track[1], 
+            'intensity': track[2], 
+            } )
+        ii += 1
+
+    new['list_mass_tracks'] = list_mass_tracks
+    anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(list_mass_tracks, 
+                            list_mz_diff = [1.003355,], mz_tolerance_ppm=mz_tolerance_ppm)
+    _mz_landmarks_ = flatten_tuplelist(anchor_mz_pairs)
+    all_mz = [x['mz'] for x in list_mass_tracks]
+    # down scale list_mass_tracks to verified by _mz_landmarks_
+    list_mass_tracks = [list_mass_tracks[ii] for ii in _mz_landmarks_]
+    peak_heights = [max(x['intensity']) for x in list_mass_tracks]
+    max_peak_height = int(max(peak_heights))
+    recommended_min_peak_height = int(0.5 * min(peak_heights))
+
+    print("Total number of MS1 spectra: %d" %len(new['list_scan_numbers']))
+    print("Maxium retention time (sec): %f" %max(new['list_retention_time']))
+    print("Found %d mass tracks." %ii)
+    print("Found %d 12C/13C isotopic pairs as landmarks." %len(anchor_mz_pairs))
+    print("m/z range = (min %f, median %f, max %f)" %(np.min(all_mz), np.median(all_mz), np.max(all_mz)))
+    print("Max intensity in any landmark track is: ", f"{max_peak_height:,}")
+    print("Recommended parameter for minimal peak height: ", f"{recommended_min_peak_height:,}", 
+            "\n(half of minimal verified peak height)\n")
+
+    if return_sample:
+        return new
 
 
 #---------------------------------------------------------------------------------------------------------------

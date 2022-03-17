@@ -52,19 +52,26 @@ Selectivity is tracked for
 - dSelectivity, how distinct are database records 
 
 
-Use
+Use 
 ===
-Currently 
-`python3 -m asari.main pos mydir/projectx_dir`
+Help information:
+`python3 -m asari.main`
 
-The two arguments are ionization_mode and data_directory.
+To process all mzML files under directory mydir/projectx_dir:
+`python3 -m asari.main process --mode pos --input mydir/projectx_dir`
 
-Parameters are started in main.PARAMETERS, but can be modified on the fly too.
+To get statistical description on a single file (useful to understand data and parameters):
+`python3 -m asari.main analyze --input mydir/projectx_dir/file_to_analyze.mzML`
 
-A number of initiaiton samples are used to select one reference sample and start alignments of both mass tracks and retention time.
-Default 'init_samples_number': 3.
-They are kept in memory, regardless of the database_mode. Thus one may arbitrarily increase this number to avoid I/O load.
+Parameters
+==========
+Only one parameter in asari requires attention, i.e., precision ppm is set at 5 by default. 
+Most modern instruments are fine with 5 ppm, but one may want to change if needed.
 
+For the adventurous:
+Default parameters are set in `defaul_parameters.py`. 
+They can be (work in progress) overwritten by user supplied parameter file in JSON.
+Lastly, parameters specified in command line overwrite all the above.
 
 
 Next to-do
