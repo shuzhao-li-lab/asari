@@ -143,6 +143,12 @@ def main(parameters=PARAMETERS):
 
     args = parser.parse_args()
 
+    # update parameters
+    if args.mode:
+        parameters['mode'] = args.mode
+    if args.ppm:
+        parameters['mz_tolerance_ppm'] = args.ppm
+
     if args.run == 'process':
         # time_stamp is `month daay hour minute second``
         time_stamp = ''.join([str(x) for x in time.localtime()[1:6]])
@@ -164,7 +170,7 @@ def main(parameters=PARAMETERS):
 
     elif args.run == 'annotate':
         # 
-        pass
+        annotate_user_featuretable(args.input, parameters=parameters)
 
     elif args.run == 'join':
         # input a list of directoreis, each a result of asari process
@@ -177,8 +183,6 @@ def main(parameters=PARAMETERS):
 
     else:
         print("Expecting one of the subcommands: analyze, process, xic, annotate, join, viz.")
-
-
 
 
 

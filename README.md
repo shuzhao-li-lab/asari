@@ -55,13 +55,21 @@ Selectivity is tracked for
 Use 
 ===
 Help information:
+
 `python3 -m asari.main`
 
 To process all mzML files under directory mydir/projectx_dir:
+
 `python3 -m asari.main process --mode pos --input mydir/projectx_dir`
 
 To get statistical description on a single file (useful to understand data and parameters):
+
 `python3 -m asari.main analyze --input mydir/projectx_dir/file_to_analyze.mzML`
+
+To get annotation on a tab delimited feature table:
+
+`python3 -m asari.main annotate --mode pos --ppm 10 --input mydir/projectx_dir/feature_table_file.tsv`
+
 
 Parameters
 ==========

@@ -9,6 +9,9 @@ Annotation is facilitated by jms-metabolite-services, mass2chem
 import multiprocessing as mp
 import pymzml
 
+from jms.io import read_table_to_peaks
+from mass2chem.epdsConstructor import epdsConstructor
+
 from .experiment import *
 from .chromatograms import extract_massTracks_        # extract_massTracks, 
 from .mass_functions import *
@@ -56,14 +59,53 @@ def analyze_single_sample(infile,
     parameters are not used, just place holder to use ext_Experiment class.
     '''
     print("Analysis of %s\n" %infile)
-    mz_landmarks, mode = get_file_masstrack_stats(infile,
-        mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
+    mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(infile,
+                mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
 
     EE = ext_Experiment({}, parameters)
     EE.load_annotation_db()
     mass_accuracy_ratio = EE.KCD.evaluate_mass_accuracy_ratio(mz_landmarks, mode, mz_tolerance_ppm=10)
     # print("  Mass accuracy is estimated as %2.1f ppm." %(mass_accuracy_ratio*1000000))
     print("\n")
+
+def annotate_user_featuretable(infile, parameters):
+                        # mode='pos', mz_tolerance_ppm=5):
+    '''
+    infile: tab delimited file with first row as header, first column m/z and 2nd column rtime.
+    output: two files in current directory, Feature_annotation.tsv and Annotated_empricalCompounds.json
+
+    def is_coeluted_by_distance(P1, P2, rt_tolerance=10):
+        _coeluted = False
+        if abs(P1['apex']-P2['apex']) <= rt_tolerance:
+            _coeluted = True
+        return _coeluted
+
+    '''
+    parameters['outdir'] = ''
+    mode = parameters['mode']
+    list_peaks = read_table_to_peaks(infile, 
+                                has_header=True, mz_col=0, rtime_col=1, feature_id=None ,
+                                )
+    # print("Read %d features." %len(list_peaks))
+    EE = ext_Experiment({}, parameters)
+    EE.load_annotation_db()
+    ECCON = epdsConstructor(list_peaks, mode=mode)
+    EED = ExperimentalEcpdDatabase(mode=mode)
+    EED.dict_empCpds = ECCON.peaks_to_epdDict(
+                seed_search_patterns = ECCON.seed_search_patterns, 
+                ext_search_patterns = ECCON.ext_search_patterns,
+                mz_tolerance_ppm= parameters['mz_tolerance_ppm'], 
+                coelution_function='distance',
+                check_isotope_ratio = False
+                ) 
+    EED.index_empCpds()
+    EED.extend_empCpd_annotation(EE.KCD)
+    EED.annotate_singletons(EE.KCD)
+
+    EE.export_peak_annotation(EED.dict_empCpds, EE.KCD, 'Feature_annotation')
+    # also exporting JSON
+    with open('Annotated_empricalCompounds.json', 'w', encoding='utf-8') as f:
+        json.dump(EED.dict_empCpds, f, cls=NpEncoder, ensure_ascii=False, indent=2)
 
 
 

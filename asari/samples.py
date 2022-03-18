@@ -214,23 +214,23 @@ def get_file_masstrack_stats(infile,
     list_mass_tracks = [list_mass_tracks[ii] for ii in _mz_landmarks_]
     peak_heights = [max(x['intensity']) for x in list_mass_tracks]
     max_peak_height = int(max(peak_heights))
-    recommended_min_peak_height = int(0.5 * min(peak_heights))
+    min_peak_height_ = int(min(peak_heights))
+    # recommended_min_peak_height = int(0.5 * min(peak_heights))
 
     print("Total number of MS1 spectra: %d" %len(new['list_scan_numbers']))
     print("Maxium retention time (sec): %f" %max(new['list_retention_time']))
-    print("Found %d mass tracks." %ii)
-    print("Found %d 12C/13C isotopic pairs as landmarks." %len(anchor_mz_pairs))
     print("Ionization mode (looked up on one scan) assumed as %s.\n" %ionization_mode)
-
     print("m/z range: (min %f, median %f, max %f)\n" %(np.min(all_mz), np.median(all_mz), np.max(all_mz)))
-    print("Max intensity in any landmark track is: ", f"{max_peak_height:,}")
-    print("Recommended parameter for minimal peak height: ", f"{recommended_min_peak_height:,}", 
-            "\n(half of minimal verified peak height).")
+
+    print("Found %d mass tracks." %ii)
+    print("Found %d 12C/13C isotopic pairs as landmarks." %len(anchor_mz_pairs))    
+    print("Max intensity in any landmark track: ", f"{max_peak_height:,}")
+    print("Minimal height of landmark tracks: ", f"{min_peak_height_:,}", "\n")
 
     if return_sample:
         return new
     else:
-        return _mz_landmarks_, ionization_mode
+        return _mz_landmarks_, ionization_mode, min_peak_height
 
 
 
