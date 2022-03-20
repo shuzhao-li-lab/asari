@@ -4,11 +4,23 @@ Heavy lifting is in constructors.CompositeMap,
     which contains MassGrid for correspondence, and FeatureList from feature/peak detection.
 Annotation is facilitated by jms-metabolite-services, mass2chem
 
+        samples.append( {
+            'input_file': file,
+            'ion_mode': parameters['mode'],
+            # below will be populated after processing
+            'name': '',
+            'list_scan_numbers': [],
+            'list_retention_time': [],
+            'list_mass_tracks': [], 
+            'anchor_mz_pairs': [],                    # mostly isotopic pairs to establish m/z anchors (landmarks)
+            'number_anchor_mz_pairs': -1,
+        } )
         
 '''
+import random
 import multiprocessing as mp
-import pymzml
 
+import pymzml
 from jms.io import read_table_to_peaks
 from mass2chem.epdsConstructor import epdsConstructor
 
@@ -24,19 +36,6 @@ from .samples import get_file_masstrack_stats
 def register_samples(list_input_files):
     '''
     Establish sample_id here, return sample_registry as a dictionary.
-        samples.append( {
-            'input_file': file,
-            'ion_mode': parameters['mode'],
-            # below will be populated after processing
-            'name': '',
-            'list_scan_numbers': [],
-            'list_retention_time': [],
-            'list_mass_tracks': [], 
-            'anchor_mz_pairs': [],                    # mostly isotopic pairs to establish m/z anchors (landmarks)
-            'number_anchor_mz_pairs': -1,
-        } )
-    , dict_meta_data, parameters
-    dict_meta_data for future use.
     '''
     sample_registry = {}
     ii = 0
@@ -45,6 +44,26 @@ def register_samples(list_input_files):
         ii += 1
     return sample_registry
 
+
+def process_project(list_input_files, parameters):
+    '''
+    list_input_files: Extracted ion chromatogram files.
+    parameters: dictionary of most parameters.
+
+    Expecting multiprocessing to handle single core well - worth testing?
+
+    '''
+    sample_registry = register_samples(list_input_files)
+    shared_dict = batch_EIC_from_samples_ondisk(sample_registry, parameters)
+    for sid, sam in sample_registry.items():
+        sam['status:mzml_parsing'], sam['status:eic'], sam['number_anchor_mz_pairs'
+                ], sam['data_location'] = shared_dict[sid]
+        sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
+    
+    # print(sample_registry)
+    EE = ext_Experiment(sample_registry, parameters)
+    EE.process_all()
+    EE.export_all()
 
 
 #
@@ -67,6 +86,30 @@ def analyze_single_sample(infile,
     mass_accuracy_ratio = EE.KCD.evaluate_mass_accuracy_ratio(mz_landmarks, mode, mz_tolerance_ppm=10)
     # print("  Mass accuracy is estimated as %2.1f ppm." %(mass_accuracy_ratio*1000000))
     print("\n")
+
+
+def estimate_min_peak_height(list_input_files, 
+            mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=500):
+    '''
+    return an estimated parameter for min peak_height as half of the min verified landmark peaks.
+    '''
+    estimated = []
+    if len(list_input_files) <= 3:
+        selected = list_input_files
+    else:
+        selected = random.sample(list_input_files, 3)
+    print("Estimating parameter for min peak_height based on ", selected)
+    for infile in selected:
+        try:
+            mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(infile,
+                        mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
+            estimated.append(min_peak_height_)
+        except:
+            print("Error in analyzing ", infile)
+    recommended = int(0.5 * np.median(estimated))
+    print("Estimated parameter for min peak_height is %d \n" %recommended)
+    return recommended
+
 
 def annotate_user_featuretable(infile, parameters):
                         # mode='pos', mz_tolerance_ppm=5):
@@ -106,7 +149,6 @@ def annotate_user_featuretable(infile, parameters):
     # also exporting JSON
     with open('Annotated_empricalCompounds.json', 'w', encoding='utf-8') as f:
         json.dump(EED.dict_empCpds, f, cls=NpEncoder, ensure_ascii=False, indent=2)
-
 
 
 #

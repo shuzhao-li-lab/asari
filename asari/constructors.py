@@ -9,9 +9,6 @@ then utilizes MS1_pseudo spectra and cumulative elution profiles.
         Potential optimizations to consider, e.g. 2-D deconvolution for low-selectivity mass tracks.
         # also check for empty tracks after composite?
 
-    def process_and_add_sample(self, f):
-        SM = self.experiment.process_single_sample(f, database_mode=self.experiment.database_mode)
-        self.add_sample(SM)
 
 '''
 

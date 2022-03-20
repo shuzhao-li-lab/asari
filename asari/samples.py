@@ -230,7 +230,7 @@ def get_file_masstrack_stats(infile,
     if return_sample:
         return new
     else:
-        return _mz_landmarks_, ionization_mode, min_peak_height
+        return _mz_landmarks_, ionization_mode, min_peak_height_
 
 
 

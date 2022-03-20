@@ -70,6 +70,10 @@ To get annotation on a tab delimited feature table:
 
 `python3 -m asari.main annotate --mode pos --ppm 10 --input mydir/projectx_dir/feature_table_file.tsv`
 
+To add automatic esitmation of min peak height, add this argument:
+
+`--autoheight True`
+
 
 Parameters
 ==========

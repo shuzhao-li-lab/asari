@@ -1,24 +1,6 @@
 '''
 asari, LC-MS metabolomics data preprocessing - trackable, scalable.
 
-subcommands:
-    process: LC-MS data preprocessing
-    xic: construct mass trakcs (chromatogram) from mzML files
-    annotate: annotate a list of features
-    join: merge multiple processed projects (possibly split a large dataset)
-    viz: start interactive data visualization and exploration.
-
-
---params: allow passing paramters via a JSON file
-
-
-
-Example use
------------
-python3 -m asari.main neg /Users/shuzhao/li.projects/asari/T03
-
-
-
 In the asari/mummichog packages, the data entities are presented in any of the four types: 
 class, namedtuple, JSON style dictionary or implicit list. 
 The implicit lists are used sparely as they have reduced clarity. 
@@ -87,23 +69,6 @@ def read_project_dir(directory, file_pattern='.mzML'):
     print("Working on ~~ %s ~~ \n\n" %directory)
     return [os.path.join(directory, f) for f in os.listdir(directory) if file_pattern in f]
 
-def process_project(list_input_files, parameters=PARAMETERS):
-    '''
-    list_input_files: Extracted ion chromatogram files.
-    parameters: dictionary of most parameters.
-    '''
-    sample_registry = register_samples(list_input_files) #, dict_meta_data, parameters)
-    shared_dict = batch_EIC_from_samples_ondisk(sample_registry, parameters)
-    for sid, sam in sample_registry.items():
-        sam['status:mzml_parsing'], sam['status:eic'], sam['number_anchor_mz_pairs'
-                ], sam['data_location'] = shared_dict[sid]
-        sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
-    
-    # print(sample_registry)
-    EE = ext_Experiment(sample_registry, parameters)
-    EE.process_all()
-    EE.export_all()
-
 
 def main(parameters=PARAMETERS):
     '''
@@ -113,15 +78,10 @@ def main(parameters=PARAMETERS):
     annotate: annotate a list of features
     join: merge multiple processed projects (possibly split a large dataset)
     viz: start interactive data visualization and exploration.
-            action='store_const', 
+           
     '''
     print("\n\n~~~~~~~ Hello from Asari! ~~~~~~~~~\n")
-
-    parameters['min_prominence_threshold'] = parameters['min_peak_height']/3.0
-    parameters['multicores'] = min(mp.cpu_count(), parameters['multicores'])
-
     parser = argparse.ArgumentParser(description='asari, LC-MS metabolomics data preprocessing')
-
     parser.add_argument('-v', '--version', action='version', version=__version__, 
             help='print version and exit')
     parser.add_argument('run', metavar='subcommand', 
@@ -138,18 +98,33 @@ def main(parameters=PARAMETERS):
             help='project name')
     parser.add_argument('-p', '--parameters', 
             help='user supplied paramter file in JSON')
-    parser.add_argument('-c', '--cores', 
+    parser.add_argument('-c', '--cores', type=int, 
             help='nunmber of CPU cores intented to use')
+
+    parser.add_argument('--autoheight', default=False,
+            help='automatic determining min peak height')
 
     args = parser.parse_args()
 
     # update parameters
+    parameters['multicores'] = min(mp.cpu_count(), parameters['multicores'])
+    
     if args.mode:
         parameters['mode'] = args.mode
     if args.ppm:
         parameters['mz_tolerance_ppm'] = args.ppm
-
+    if args.cores:
+        parameters['multicores'] = min(mp.cpu_count(), args.cores)
+    if args.project:
+        parameters['project_name'] = args.project
+    if args.output:
+        parameters['outdir'] = args.output
+    
     if args.run == 'process':
+        list_input_files = read_project_dir(args.input)
+        if args.autoheight:
+            parameters['min_peak_height'] = estimate_min_peak_height(list_input_files)
+        parameters['min_prominence_threshold'] = parameters['min_peak_height']/3.0
         # time_stamp is `month daay hour minute second``
         time_stamp = ''.join([str(x) for x in time.localtime()[1:6]])
         if parameters['database_mode'] == 'ondisk':
@@ -158,7 +133,7 @@ def main(parameters=PARAMETERS):
             os.mkdir(os.path.join(parameters['outdir'], 'pickle'))
             os.mkdir(os.path.join(parameters['outdir'], 'export'))
 
-        process_project( read_project_dir(args.input),  parameters )        #directory = args.input
+        process_project( list_input_files,  parameters )        #directory = args.input
 
     elif args.run == 'analyze':
         # use a single sample file to analyze statistics
