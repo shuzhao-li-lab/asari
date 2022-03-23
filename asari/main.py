@@ -160,13 +160,9 @@ def main(parameters=PARAMETERS):
         print("Expecting one of the subcommands: analyze, process, xic, annotate, join, viz.")
 
 
-
 #
 # -----------------------------------------------------------------------------
 #
 if __name__ == '__main__':
-    # PARAMETERS['mode'] = sys.argv[1]
-    # directory = sys.argv[2]
-    # main(directory)
 
     main(PARAMETERS)

@@ -29,9 +29,7 @@ from .chromatograms import extract_massTracks_        # extract_massTracks,
 from .mass_functions import *
 from .samples import get_file_masstrack_stats
 
-#
 # -----------------------------------------------------------------------------
-#
 
 def register_samples(list_input_files):
     '''
@@ -43,7 +41,6 @@ def register_samples(list_input_files):
         sample_registry[ii] = {'sample_id': ii, 'input_file': file}
         ii += 1
     return sample_registry
-
 
 def process_project(list_input_files, parameters):
     '''
@@ -65,10 +62,8 @@ def process_project(list_input_files, parameters):
     EE.process_all()
     EE.export_all()
 
-
-#
 # -----------------------------------------------------------------------------
-# Single-core functions
+# Subcommand functions
 
 def analyze_single_sample(infile, 
             mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000,
@@ -144,7 +139,6 @@ def ext_estimate_min_peak_height(list_input_files,
     else:
         return {'mode': _ionmode[0], 'min_peak_height': recommended}
 
-
 def annotate_user_featuretable(infile, parameters):
                         # mode='pos', mz_tolerance_ppm=5):
     '''
@@ -184,8 +178,6 @@ def annotate_user_featuretable(infile, parameters):
     with open('Annotated_empricalCompounds.json', 'w', encoding='utf-8') as f:
         json.dump(EED.dict_empCpds, f, cls=NpEncoder, ensure_ascii=False, indent=2)
 
-
-#
 # -----------------------------------------------------------------------------
 # Multi-core functions
 

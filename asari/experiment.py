@@ -241,11 +241,7 @@ class ext_Experiment():
 
     def export_feature_tables(self, outfile='cmap_feature_table.tsv'):
         '''
-        To export two tables, one 
-        if full: #full=False, 
-            self.CMAP.FeatureTable.to_csv(outfile, index=False, sep="\t")
-        ['rtime_left_base'], ['rtime_right_base']
-
+        To export two tables, one is full table under `outdir/export/`, the other filtered/preferred table under `outdir`.
         '''
         use_cols = [ 'id_number', 'mz', 'rtime', 'rtime_left_base', 'rtime_right_base', 'parent_masstrack_id', 
                     'peak_area', 'cSelectivity', 'goodness_fitting', 'snr',
@@ -268,8 +264,7 @@ class ext_Experiment():
     def export_log(self):
         '''
         Export project parameters to project.json.
-        asari viz will look for project.json when launched standalone.
-
+        asari viz can look for project.json when launched standalone?
 
         '''
         outfile = os.path.join(self.parameters['outdir'], 'project.json')

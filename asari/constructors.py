@@ -1,18 +1,11 @@
 '''
 MassGrid for correspondence, and FeatureList from feature/peak detection.
-
 We use a similar concept of FeatureMap as in OpenMS here, 
 but the correspondence algorithms take adavantage of high m/z resolution first, 
 then utilizes MS1_pseudo spectra and cumulative elution profiles.
 
-
-        Potential optimizations to consider, e.g. 2-D deconvolution for low-selectivity mass tracks.
-        # also check for empty tracks after composite?
-
-
+The use of CompositeMap facilitates data visualization and exploration.
 '''
-
-import os
 
 import pandas as pd
 from mass2chem.search import *
@@ -31,36 +24,21 @@ class CompositeMap:
     iii) FeatureTable: a matrix for feature intensities per sample
 
     Steps:
-
-    1. Build Mass Grid first. 
-    Choose one reference from the initial samples with largest number of landmark tracks.
-
-    2. Add each of remaining samples to MassGrid.
-    Alignment is guided by matched isotope/adduct pairs. Reference m/z is updated every time.
-
-    3. Optimize mass alignment.
-
-    4. Determine RT alignment function per sample, using selective landmark peaks.
+    1. Build MassGrid. Choose one reference from all samples for the largest number of landmark m/z tracks.
+    2. Add each of remaining samples to MassGrid, 
+    m/z alignment iguided by matched isotope/adduct pairs. Reference m/z is updated every time.
+    RT alignment function is determined per sample, using selective landmark peaks.
     Default is a LOWESS function, but open to others to plugin.
-
-    5. Build composite elution profile (composite_mass_tracks)
+    3. Build composite elution profile (composite_mass_tracks)
     by cumulative sum of mass tracks from all samples after RT correction.
-
-    6. Global peak detection is performed on each composite massTrack, by two rounds -
-    stepping down in prominence. Smoothing (moving average) is performed on tracks with more that 
-    two peaks detected (considered noisy), followed by a fresh round of peak detection.
-
-    7. Mapping global peaks (i.e. features) back to all samples and extract sample specific peak areas.
+    4. Global peak detection is performed on each composite massTrack.
+    5. Mapping global peaks (i.e. features) back to all samples and extract sample specific peak areas.
     This completes the FeatureTable.
-
-    8. Annotation, grouping features to epds, and DB matching. Optional, m/z calibration to refDB.
-
+    6. Grouping features to empirical compounds (defined in metDataModel package).
     '''
-
     def __init__(self, experiment):
         '''
         Composite map of mass tracks and features, with pointers to individual samples.
-
         '''
         self.experiment = experiment
         self._number_of_samples_ = experiment.number_of_samples

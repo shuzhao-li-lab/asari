@@ -6,7 +6,6 @@ XICs without neighbors within x ppm are considered specific (i.e. high selectivi
 Low selectivity regions will be still inspected to determine the true number of XICs.
 Leave calibration to Correspondence step.
 
-To-do: automate parameters' estimation
 
 '''
 
