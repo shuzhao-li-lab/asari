@@ -2,9 +2,8 @@
 ext_Experiment is the container for whole project data.
 Heavy lifting is in constructors.CompositeMap, 
     which contains MassGrid for correspondence, and FeatureList from feature/peak detection.
-Annotation is facilitated by jms-metabolite-services, mass2chem
-
-        samples.append( {
+Annotation is facilitated by jms-metabolite-services, mass2chem.
+Format of a sample: {
             'input_file': file,
             'ion_mode': parameters['mode'],
             # below will be populated after processing
@@ -14,7 +13,7 @@ Annotation is facilitated by jms-metabolite-services, mass2chem
             'list_mass_tracks': [], 
             'anchor_mz_pairs': [],                    # mostly isotopic pairs to establish m/z anchors (landmarks)
             'number_anchor_mz_pairs': -1,
-        } )
+        } 
         
 '''
 import random
@@ -46,15 +45,16 @@ def process_project(list_input_files, parameters):
     '''
     list_input_files: Extracted ion chromatogram files.
     parameters: dictionary of most parameters.
-
-    Expecting multiprocessing to handle single core well - worth testing?
+    sample_registry include: 'status:mzml_parsing', 'status:eic', 'number_anchor_mz_pairs', 
+                'data_location', track_mzs: (mz, masstrack_id)
 
     '''
     sample_registry = register_samples(list_input_files)
     shared_dict = batch_EIC_from_samples_ondisk(sample_registry, parameters)
     for sid, sam in sample_registry.items():
         sam['status:mzml_parsing'], sam['status:eic'], sam['number_anchor_mz_pairs'
-                ], sam['data_location'] = shared_dict[sid]
+                ], sam['data_location'], sam['track_mzs'] = shared_dict[sid]
+
         sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
     
     # print(sample_registry)
@@ -71,6 +71,9 @@ def analyze_single_sample(infile,
     '''
     Analyze single mzML file and print statistics.
     parameters are not used, just place holder to use ext_Experiment class.
+
+    to add output info on instrumentation
+
     '''
     print("Analysis of %s\n" %infile)
     mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(infile,
@@ -230,12 +233,13 @@ def single_sample_EICs_ondisk(sample_id, infile, ion_mode,
                     mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, outfile, shared_dict):
 
     '''
-    Process infile.
-    shared_dict is used to pass back information, 
-    sample_id: ('mzml_parsing', 'eic', number_anchor_mz_pairs, outfile)
+    Process infile. `shared_dict` is used to pass back information, 
+    sample_id: ('mzml_parsing', 'eic', number_anchor_mz_pairs, outfile, track_mzs)
+    track_mzs are used later for aligning m/z tracks.
     '''
     new = {'sample_id': sample_id, 'input_file': infile, 'ion_mode': ion_mode,}
     list_mass_tracks = []
+    track_mzs = []
     try:
         exp = pymzml.run.Reader(infile)
         xdict = extract_massTracks_(exp, 
@@ -254,19 +258,20 @@ def single_sample_EICs_ondisk(sample_id, infile, ion_mode,
                 'rt_scan_numbers': track[1], 
                 'intensity': track[2], 
                 } )
+            track_mzs.append( (track[0], ii) )                  # keep a reconrd in sample registry for fast MassGrid align
             ii += 1
 
         new['list_mass_tracks'] = list_mass_tracks
         anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(list_mass_tracks, mz_tolerance_ppm=mz_tolerance_ppm)
         new['anchor_mz_pairs'] = anchor_mz_pairs
         new['number_anchor_mz_pairs'] = len(anchor_mz_pairs)
-        shared_dict[new['sample_id']] = ('passed', 'passed', new['number_anchor_mz_pairs'], outfile)
-
+        shared_dict[new['sample_id']] = ('passed', 'passed', new['number_anchor_mz_pairs'], outfile, track_mzs)
+    
         with open(outfile, 'wb') as f:
             pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
 
         print("Processed %s with %d mass tracks." %(os.path.basename(infile), ii))
 
     except:
-        shared_dict[new['sample_id']] = ('failed', '', 0, '')
+        shared_dict[new['sample_id']] = ('failed', '', 0, '', [])
         print("mzML processing error in sample %s, skipped." %infile)

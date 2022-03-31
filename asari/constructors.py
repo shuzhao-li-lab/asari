@@ -15,7 +15,6 @@ from .chromatograms import *
 from .peaks import *
 from .samples import SimpleSample
 
-
 class CompositeMap:
     '''
     Each experiment is summarized into a CompositeMap (CMAP), as a master feature map.
@@ -43,6 +42,7 @@ class CompositeMap:
         self.experiment = experiment
         self._number_of_samples_ = experiment.number_of_samples
         self.list_sample_names = [experiment.sample_registry[ii]['name'] for ii in experiment.valid_sample_ids]
+        self._number_of_valid_samples_ = len(self.list_sample_names)
         # designated reference sample; all RT is aligned to this sample
         self.reference_sample_instance = self.reference_sample = self.get_reference_sample_instance(experiment.reference_sample_id)
 
@@ -52,7 +52,7 @@ class CompositeMap:
 
         self._mz_landmarks_ = []                    # m/z landmarks as index numbers
         self.good_reference_landmark_peaks = []     # used for RT alignment and m/z calibration to DB
-        # self.ref_empCpds = []
+        # 
         self.reference_mzdict = {}
         self.composite_mass_tracks = {}             # following MassGrid indices
 
@@ -63,35 +63,40 @@ class CompositeMap:
         SM.list_mass_tracks = SM.get_masstracks_and_anchors()
         self.dict_scan_rtime = dict(zip(SM.rt_numbers, SM.list_retention_time))
         self.max_ref_rtime = max(SM.list_retention_time)
-        #
-        # to add describe SM intensity distri
-        #
         return SM
 
     def construct_mass_grid(self):
         '''
         MassGrid for whole experiment. Use sample name as column identifiers.
-
-        Input
-        =====
-        list_samples: list of Sample instances, used to initiate MassGrid.
-        Each Sample has list_mass_tracks and anchor_mz_pairs.
-
-        All mass traces are included at this stage, regardless if peaks are detected, because
-        peak detection will be an improved process on the composite traces.
-
-        Start by matching anchor pairs, then work thru remaining traces.
-        1. create a reference based on anchor pairs
-        2. align each sample to the reference_anchor_pairs
-
+        All mass tracks are included at this stage, regardless if peaks are detected, because
+        peak detection will be an improved process on the composite tracks.
+        if sample_N < 10:
+            Start by matching anchor pairs, then work thru remaining traces.
+            1. create a reference based on anchor pairs
+            2. align each sample to the reference_anchor_pairs
+        elif sample_N < 100:     # more samples use a different method, as peak density will be apparent in more samples.
+            single batch build
+        else:                    # even more samples should be split to batches for performance reasons
+            multiple batch build
         '''
-        self._initiate_mass_grid()
-        sample_ids = self.experiment.valid_sample_ids
-        sample_ids.pop(self.experiment.reference_sample_id)
-        for sid in sample_ids:
-            SM = SimpleSample(self.experiment.sample_registry[sid],
-                experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode)
-            self.add_sample(SM)
+        if self._number_of_valid_samples_ < 200:        # 10:
+            self._initiate_mass_grid()
+            sample_ids = self.experiment.valid_sample_ids
+            sample_ids.pop(self.experiment.reference_sample_id)
+            for sid in sample_ids:
+                SM = SimpleSample(self.experiment.sample_registry[sid],
+                    experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode)
+                self.add_sample(SM)
+        elif self._number_of_valid_samples_ < 100:
+
+            MGC = MassGridCluster(  )
+            self.MassGrid = MGC.grid()
+
+        else:   # split and do batch build
+
+
+            pass
+
 
     def _initiate_mass_grid(self):
         '''
@@ -106,7 +111,6 @@ class CompositeMap:
         print("\nInitiating MassGrid, ...\n    The reference sample is:\n    ||* %s *||\n" %reference_sample.name)
         print("Max _retention_time is %4.2f at scan number %d.\n" %(self.max_ref_rtime,
                                                                     max(reference_sample.rt_numbers)))
-        # print("Max intensity is %d and median intensity is %d." %(        ))
 
         self._mz_landmarks_ = reference_sample._mz_landmarks_
         reference_mzlist = [ x['mz'] for x in ref_list_mass_tracks ]
@@ -390,3 +394,27 @@ class CompositeMap:
             fList.append( peak_area )
 
         return fList
+
+
+class MassGridCluster:
+    def __init__(self):
+        
+        self.grid = np.array()
+
+    def build_grid(self):
+        '''
+        from [(mz, track_id, sample_num), ...]
+        assemble mass grid
+        
+        '''
+        pass
+
+
+    def join(self, M2):
+        '''
+        Join with another MassGridCluster.
+        Using a common reference, which should be the 1st sample in both clusters.
+        Return the merged MassGridCluster.
+        '''
+
+        pass

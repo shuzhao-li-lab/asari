@@ -40,24 +40,6 @@ class ext_Experiment():
         dict_meta_data: description of sample types for each file, e.g. 'QC', 'pooled', 'sample'. Not used now.
         parameters: including 'ionization_mode', 'min_intensity_threshold', 'min_timepoints'. See main.py.
 
-        self.list_input_files =  sorted(list_input_files)       # ordered by name
-        self.number_of_samples = len(list_input_files)
-
-        self.sample_instances = []
-
-        self.all_samples = []               # list of Sample instances
-        self.samples_nonreference = []
-        
-        self.samples_by_id = {}             # sample ID: Sample instance
-        self.samples_by_name = {}           # input file name: Sample instance
-
-        self.files_meta_data = dict_meta_data
-        
-        self.initiation_samples = self.__choose_initiation_samples__(N=parameters['init_samples_number'])
-           
-
-        # self.max_rtime = parameters['max_rtime'] # to update from each sample
-                                        # max scan number, to update when samples are processed
         '''
         self.sample_registry = sample_registry
         self.valid_sample_ids = self.get_valid_sample_ids()
@@ -98,6 +80,8 @@ class ext_Experiment():
 
         else:
             self.CMAP.mock_rentention_alignment()
+
+
 
         self.CMAP.global_peak_detection()
   

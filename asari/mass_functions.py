@@ -1,11 +1,12 @@
 '''
 Functions related to mass operations.
 
-from numba import jit
-@jit(nopython=True)
+Functions here can be sped up by JIT, but the code is currently weakly typed.
+In order to use Numba for JIT, they need to be rewritten with clear typing and likely compartmentalized.
+Alternatively, some of the mass functions can be implemented in C and compiled to interface Python.
 '''
-
 import numpy as np
+# from numba import jit
 from mass2chem.search import *
 
 
@@ -25,7 +26,7 @@ def check_close_mzs(mzlist, ppm_tol=5):
 
     return warning
 
-
+# @jit(nopython=True)
 def calculate_selectivity(sorted_mz_list, std_ppm=5):
     '''
     To calculate selectivity for all valid mass traces (thus specific m/z values).
@@ -92,6 +93,7 @@ def bin_by_median(List_of_tuples, func_tolerance):
     return PL
 
 
+# @jit(nopython=True)
 def mass_paired_mapping(list1, list2, std_ppm=5):
     '''
     To find unambiguous matches of m/z values between two lists.
@@ -150,7 +152,7 @@ def mass_paired_mapping(list1, list2, std_ppm=5):
 
     return mapped, ratio_deltas
 
-
+# @jit(nopython=True)
 def complete_mass_paired_mapping(list1, list2, std_ppm=5):
     '''
     Similar to mass_paired_mapping, but not enforcing unique matching within std_ppm, 
@@ -228,6 +230,7 @@ def mass_paired_mapping_with_correction(list1, list2, std_ppm=5, correction_tole
         mapped, ratio_deltas = mass_paired_mapping(list1, corrected_list2, std_ppm)
 
     return mapped, _r
+
 
 def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks, 
                             SM_mzlist, SM_landmarks, std_ppm=5, correction_tolerance_ppm=1):

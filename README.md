@@ -12,9 +12,7 @@ Trackable and scalable Python program for high-resolution LC-MS metabolomics dat
 
 Install
 =======
-- From PyPi repository:
-
-`pip3 install --upgrade asari-metabolomics`
+- From PyPi repository: `pip3 install asari-metabolomics`. Add `--upgrade` to update to new versions.
 
 - Or clone from source code: https://github.com/shuzhao-li/asari . One can run it as a Python module by calling Python interpreter.
 

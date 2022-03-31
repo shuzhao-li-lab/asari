@@ -111,6 +111,39 @@ def get_thousandth_regions(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_t
 # mass Traces
 # -----------------------------------------------------------------------------
 
+def extract_massTracks_openms(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000):
+    '''
+    A mass track is an EIC for full RT range, without separating the mass traces. 
+    ms_expt: pyopenms MSExperiment instance, loaded with LC-MS data.
+    return 
+    rt_numbers, rt_times,
+    tracks as [( mz, rtlist, intensities ), ...]
+    '''
+    # rt_numbers = range(ms_expt.getNrSpectra())
+    rt_times = [spec.getRT() for spec in ms_expt]
+    rt_numbers = list(range(len(rt_times)))
+    good_bins = get_thousandth_regions(ms_expt, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
+    tracks = []
+    for bin in good_bins:
+        tracks += bin_to_mass_tracks(bin, mz_tolerance_ppm)
+    #
+    # merge tracks if m/z overlap
+    #
+    tracks.sort()
+    merged, to_remove = [], []
+    tracks_to_merge = check_close_mzs([x[0] for x in tracks], mz_tolerance_ppm)
+    # this returns [(ii, ii-1), ...]
+    for (a,b) in tracks_to_merge:
+        merged.append( merge_two_mass_tracks(tracks[a], tracks[b]) )
+        to_remove += [a, b]
+
+    updated_tracks = [tracks[ii] for ii in range(len(tracks)) if ii not in to_remove] + merged
+    return {
+        'rt_numbers': rt_numbers,
+        'rt_times': rt_times,
+        'tracks': updated_tracks,
+    }
+
 def extract_massTraces(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000):
     '''
     ms_expt: pyopenms MSExperiment instance, loaded with LC-MS data.
