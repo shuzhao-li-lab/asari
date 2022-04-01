@@ -79,23 +79,16 @@ class CompositeMap:
         else:                    # even more samples should be split to batches for performance reasons
             multiple batch build
         '''
-        if self._number_of_valid_samples_ < 200:        # 10:
-            self._initiate_mass_grid()
-            sample_ids = self.experiment.valid_sample_ids
-            sample_ids.pop(self.experiment.reference_sample_id)
-            for sid in sample_ids:
-                SM = SimpleSample(self.experiment.sample_registry[sid],
-                    experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode)
-                self.add_sample(SM)
-        elif self._number_of_valid_samples_ < 100:
 
-            MGC = MassGridCluster(  )
-            self.MassGrid = MGC.grid()
-
-        else:   # split and do batch build
+        self._initiate_mass_grid()
+        sample_ids = self.experiment.valid_sample_ids
+        sample_ids.pop(self.experiment.reference_sample_id)
+        for sid in sample_ids:
+            SM = SimpleSample(self.experiment.sample_registry[sid],
+                experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode)
+            self.add_sample(SM)
 
 
-            pass
 
 
     def _initiate_mass_grid(self):

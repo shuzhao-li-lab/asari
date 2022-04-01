@@ -259,13 +259,14 @@ def extract_single_track_(bin):
         _d[r[1]] = max(r[2], _d[r[1]])
     intensities = [_d[x] for x in rtlist]
 
-    
+
     return ( mz, list(rtlist), intensities ) # range object is not desired - use list
 
 
 def bin_to_mass_tracks(bin_data_tuples, mz_tolerance_ppm=5):
     '''
-    input a flexible bin by units of 0.001 amu, in format of [(mz, scan_num, intensity_int), ...].
+    input a flexible bin by units of 0.001 amu, in format of 
+                                    [(mz, scan_num, intensity_int), ...].
     A mass track is an EIC for full RT range, without separating the mass traces. 
     An optimization step is carried out in CMAP.MassGrid, to verify m/z separation.
 

@@ -53,6 +53,7 @@ def main(parameters=PARAMETERS):
 
     # update parameters
     parameters['multicores'] = min(mp.cpu_count(), parameters['multicores'])
+    parameters['input'] = args.input
     
     if args.mode:
         parameters['mode'] = args.mode

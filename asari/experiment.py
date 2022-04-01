@@ -85,7 +85,6 @@ class ext_Experiment():
             self.CMAP.mock_rentention_alignment()
 
 
-
         self.CMAP.global_peak_detection()
   
 
@@ -230,10 +229,20 @@ class ext_Experiment():
         '''
         To export two tables, one is full table under `outdir/export/`, the other filtered/preferred table under `outdir`.
         '''
+        good_samples = [sample.name for sample in self.all_samples if sample.rt_cal_dict]  # verify sample not dropped in rt_cal
+        filtered_FeatureTable = self.CMAP.FeatureTable[good_samples]                       # non zero counts
+        count = filtered_FeatureTable[filtered_FeatureTable>1].count(axis='columns')
+        self.CMAP.FeatureTable['detection_counts'] = count
+
         use_cols = [ 'id_number', 'mz', 'rtime', 'rtime_left_base', 'rtime_right_base', 'parent_masstrack_id', 
-                    'peak_area', 'cSelectivity', 'goodness_fitting', 'snr',
-                ] + [sample.name for sample in self.all_samples if sample.rt_cal_dict]  # verify sample not dropped in rt_cal
+                    'peak_area', 'cSelectivity', 'goodness_fitting', 'snr', 'detection_counts' ] + good_samples
         filtered_FeatureTable = self.CMAP.FeatureTable[use_cols]
+        filtered_FeatureTable['mz'] = filtered_FeatureTable['mz'].round(4)
+        filtered_FeatureTable['rtime'] = filtered_FeatureTable['rtime'].round(2)
+        filtered_FeatureTable['rtime_left_base'] = filtered_FeatureTable['rtime_left_base'].round(2)
+        filtered_FeatureTable['rtime_right_base'] = filtered_FeatureTable['rtime_right_base'].round(2)
+        filtered_FeatureTable['cSelectivity'] = filtered_FeatureTable['cSelectivity'].round(2)
+        filtered_FeatureTable['goodness_fitting'] = filtered_FeatureTable['goodness_fitting'].round(2)
 
         outfile = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
         filtered_FeatureTable.to_csv(outfile, index=False, sep="\t")
