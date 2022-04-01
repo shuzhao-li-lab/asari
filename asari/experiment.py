@@ -67,13 +67,16 @@ class ext_Experiment():
         return [k for k,v in self.sample_registry.items() if v['status:eic'] == 'passed']
 
     def process_all(self):
+        '''
+        '''
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
 
-        # automatic update of parameters based on ref sample
 
-        if self.parameters['rt_align']:
-            self.CMAP.align_retention_time()
+        if self.parameters['rt_align_on']:
+
+            self.CMAP.align_retention_time()            # add rt_align_method as arg
+            
             # some samples could fail alignment; can be processed and aligned at the end
 
             # add 3rd option of RT align

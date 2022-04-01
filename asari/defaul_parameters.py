@@ -25,7 +25,7 @@ PARAMETERS = {
     'gaussian_shape': 0.3,              # min cutoff
     
     # retention time alignment
-    'rt_align_method': 'loess',         # 'loess', 'tolerance', or to implement           
+    'rt_align_method': 'lowess',         # 'lowess', 'tolerance', or to implement           
     'rt_align_on': True,                # False to bypass retention time alignment
     'rtime_tolerance': 50,              # feature rtime shift threshold under 10 seconds; or 10% of rtime   
     'cal_min_peak_height': 100000,      # minimal peak height required for peaks used for RT calibration

@@ -258,6 +258,8 @@ def extract_single_track_(bin):
     for r in bin:                       # this gets max intensity on the same RT scan
         _d[r[1]] = max(r[2], _d[r[1]])
     intensities = [_d[x] for x in rtlist]
+
+    
     return ( mz, list(rtlist), intensities ) # range object is not desired - use list
 
 
