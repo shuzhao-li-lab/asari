@@ -1,18 +1,8 @@
-import time
 import argparse
 
 from asari import __version__
 from .workflow import *
 from .defaul_parameters import PARAMETERS
-
-
-def read_project_dir(directory, file_pattern='.mzML'):
-    '''
-    This reads centroided LC-MS files.
-    For OpenMS based XIC workflow, file_pattern='chrom.mzML'.
-    '''
-    print("Working on ~~ %s ~~ \n\n" %directory)
-    return [os.path.join(directory, f) for f in os.listdir(directory) if file_pattern in f]
 
 
 def main(parameters=PARAMETERS):
@@ -70,19 +60,13 @@ def main(parameters=PARAMETERS):
         list_input_files = read_project_dir(args.input)
         if args.autoheight:
             parameters['min_peak_height'] = estimate_min_peak_height(list_input_files)
-        parameters['min_prominence_threshold'] = parameters['min_peak_height']/3.0
-        # time_stamp is `month daay hour minute second``
-        time_stamp = ''.join([str(x) for x in time.localtime()[1:6]])
-        if parameters['database_mode'] == 'ondisk':
-            parameters['outdir'] = '_'.join([parameters['project_name'], parameters['outdir'], time_stamp]) 
-            os.mkdir(parameters['outdir'])
-            os.mkdir(os.path.join(parameters['outdir'], 'pickle'))
-            os.mkdir(os.path.join(parameters['outdir'], 'export'))
+        parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
 
-        process_project( list_input_files,  parameters )        #directory = args.input
+        process_project( list_input_files,  parameters )
 
     elif args.run == 'analyze':
-        # use a single sample file to analyze statistics
+        # analyze a single sample file to get descriptions
+        from .analyze import analyze_single_sample
         analyze_single_sample(args.input, parameters=parameters)
 
     elif args.run == 'xic':
@@ -97,6 +81,7 @@ def main(parameters=PARAMETERS):
 
     elif args.run == 'annotate':
         # 
+        from .annotate_user_table import annotate_user_featuretable
         annotate_user_featuretable(args.input, parameters=parameters)
 
     elif args.run == 'join':

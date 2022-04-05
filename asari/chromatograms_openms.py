@@ -16,6 +16,8 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 
 from .mass_functions import check_close_mzs
 
+from pyopenms import MSExperiment, MzMLFile
+
 
 def sum_dict(dict1, dict2):
     new = {}

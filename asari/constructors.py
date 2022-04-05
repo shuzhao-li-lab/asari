@@ -43,6 +43,7 @@ class CompositeMap:
         self._number_of_samples_ = experiment.number_of_samples
         self.list_sample_names = [experiment.sample_registry[ii]['name'] for ii in experiment.valid_sample_ids]
         self._number_of_valid_samples_ = len(self.list_sample_names)
+
         # designated reference sample; all RT is aligned to this sample
         self.reference_sample_instance = self.reference_sample = self.get_reference_sample_instance(experiment.reference_sample_id)
         self.rt_length = len(self.reference_sample.rt_numbers)
@@ -71,34 +72,24 @@ class CompositeMap:
         MassGrid for whole experiment. Use sample name as column identifiers.
         All mass tracks are included at this stage, regardless if peaks are detected, because
         peak detection will be an improved process on the composite tracks.
-        if sample_N < 10:
-            Start by matching anchor pairs, then work thru remaining traces.
-            1. create a reference based on anchor pairs
-            2. align each sample to the reference_anchor_pairs
-        elif sample_N < 100:     # more samples use a different method, as peak density will be apparent in more samples.
-            single batch build
-        else:                    # even more samples should be split to batches for performance reasons
-            multiple batch build
         '''
-
-        if self._number_of_valid_samples_ < 99:     # 10:
-
-
+        if self._number_of_valid_samples_ <= self.experiment.parameters['project_sample_number_small']:
             self._initiate_mass_grid()
             sample_ids = self.experiment.valid_sample_ids
             sample_ids.pop(self.experiment.reference_sample_id)
             for sid in sample_ids:
                 SM = SimpleSample(self.experiment.sample_registry[sid],
                     experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode)
+
                 self.add_sample(SM)
                 
-        elif self._number_of_valid_samples_ < 100:
+        elif self._number_of_valid_samples_ <= self.experiment.parameters['project_sample_number_large']:
 
             MGC = MassGridCluster(  )
             self.MassGrid = MGC.grid()
 
-        else:   # split and do batch build
 
+        else:   # split and do batch build
 
             pass
 

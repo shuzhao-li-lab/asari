@@ -1,6 +1,5 @@
 import os
 import sys
-# import random
 import json
 import pickle
 
@@ -174,33 +173,7 @@ class ext_Experiment():
             'parent_epd_id': 15}],
             'MS2_Spectra': [],
             'list_matches': [('C6H14N_100.112624', 'M[1+]', 2),
-            ('C6H13N_99.104799', 'M+H[1+]', 2)]}
-        {'interim_id': 1744,
-            'neutral_formula_mass': None,
-            'neutral_formula': None,
-            'Database_referred': [],
-            'identity': [],
-            'MS1_pseudo_Spectra': [{'id_number': 'F9723',
-                'mz': 131.11659958783318,
-                'apex': 427.0,
-                'ion_relation': 'anchor',
-                'parent_epd_id': 1744},
-            {'id_number': 'F6237',
-                'mz': 153.09836047808778,
-                'apex': 434.0,
-                'ion_relation': 'Na/H',
-                'parent_epd_id': 1744}],
-            'MS2_Spectra': []},
-        {'interim_id': 1745,
-            'neutral_formula_mass': 80.037448138,
-            'neutral_formula': 'C4H4N2',
-            'MS1_pseudo_Spectra': [{'id_number': 'F1',
-                'mz': 81.04470247776916,
-                'apex': 84.0,
-                'height': 172960.79114030077,
-                'cSelectivity': 1.0,
-                'goodness_fitting': 0.9466921897715592,
-                'snr': 35.0}]},...
+            ('C6H13N_99.104799', 'M+H[1+]', 2)]},...
         '''
         s = "[peak]id_number\tmz\trtime\tapex(scan number)\t[EmpCpd]interim_id\t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\
         \tname_1st_guess\tmatched_DB_shorts\tmatched_DB_records\n"
@@ -224,6 +197,7 @@ class ext_Experiment():
             O.write(s)
 
         print("\nAnnotation of %d Empirical compounds was written to %s.\n\n" %(len(dict_empCpds), outfile))
+
 
     def export_feature_tables(self, outfile='cmap_feature_table.tsv'):
         '''
@@ -256,6 +230,7 @@ class ext_Experiment():
         filtered_FeatureTable.to_csv(outfile, index=False, sep="\t")
         print("Filtered Feature table (%d x %d) was written to %s.\n" %(
                                 filtered_FeatureTable.shape[0], self.number_of_samples, outfile))
+        
         
     def export_log(self):
         '''

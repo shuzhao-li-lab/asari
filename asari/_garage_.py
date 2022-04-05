@@ -400,10 +400,7 @@ class Sample(SimpleSample):
             O.write( '\t'.join(header) + '\n' + '\n'.join( peaklist ) + '\n' )
 
 
-
     #---------------------------------------------------------------------------------------------------------------
-
-
 
     def convert_empCpd_mzlist(self, SM):
         '''
@@ -417,6 +414,107 @@ class Sample(SimpleSample):
             )
         return new
 
+
+
+#---------------------------------------------------------------------------------------------------------------
+
+
+class fullSample(SimpleSample):
+
+    def process(self, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height):
+        '''From input file to list_MassTraces with detected peaks and selectivity on peaks.
+        '''
+        self.generate_mass_tracks( mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
+
+    def generate_mass_tracks(self, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000):
+        '''
+        A mass track is an EIC for full RT range, without separating the mass traces,
+        using asari.chromatograms algorithm.
+        tracks as [( mz, rtlist, intensities ), ...].
+        '''
+        list_mass_tracks = []
+
+        exp = pymzml.run.Reader(self.input_file)
+        
+        # exp = MSExperiment()                                                                                          
+        # MzMLFile().load(self.input_file, exp)
+
+        xdict = extract_massTracks_(exp, 
+                    mz_tolerance_ppm=mz_tolerance_ppm, 
+                    min_intensity=min_intensity, 
+                    min_timepoints=min_timepoints, 
+                    min_peak_height=min_peak_height)
+        self.rt_numbers = xdict['rt_numbers']            # list of scans, starting from 0
+        self.list_retention_time = xdict['rt_times']     # full RT time points in sample
+        ii = 0
+        # already in ascending order of m/z from extract_massTracks_, get_thousandth_regions
+        for track in xdict['tracks']:                         
+            list_mass_tracks.append( {
+                'id_number': ii, 
+                'mz': track[0],
+                'rt_scan_numbers': track[1],                  # list
+                'intensity': track[2],                        # list
+                } )
+            ii += 1
+
+        print("Processing %s, found %d mass tracks." %(os.path.basename(self.input_file), ii))
+        self.generate_anchor_mz_pairs(list_mass_tracks)
+        print("    Number of anchor m/z pairs = %d" %self._number_anchor_mz_pairs_)
+
+        if self.database_mode == 'memory':
+            self.list_mass_tracks = list_mass_tracks
+        elif self.database_mode == 'ondisk': 
+            self.push_to_disk(list_mass_tracks)
+        else:                         # requiring self.experiment and db connection
+            self.push_to_db(list_mass_tracks
+                # to implement
+            )
+
+    def generate_mass_tracks_openms(self, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000):
+        '''
+        A mass track is an EIC for full RT range, without separating the mass traces,
+        using asari.chromatograms algorithm.
+        tracks as [( mz, rtlist, intensities ), ...].
+        '''
+        list_mass_tracks = []
+        exp = MSExperiment()                                                                                          
+        MzMLFile().load(self.input_file, exp)
+        xdict = extract_massTracks_(exp, 
+                    mz_tolerance_ppm=mz_tolerance_ppm, 
+                    min_intensity=min_intensity, 
+                    min_timepoints=min_timepoints, 
+                    min_peak_height=min_peak_height)
+        self.rt_numbers = xdict['rt_numbers']            # list of scans, starting from 0
+        self.list_retention_time = xdict['rt_times']     # full RT time points in sample
+        ii = 0
+        # already in ascending order of m/z from extract_massTracks_, get_thousandth_regions
+        for track in xdict['tracks']:                         
+            list_mass_tracks.append( {
+                'id_number': ii, 
+                'mz': track[0],
+                'rt_scan_numbers': track[1],                  # list
+                'intensity': track[2],                        # list
+                } )
+            ii += 1
+
+        print("Processing %s, found %d mass tracks." %(os.path.basename(self.input_file), ii))
+        self.generate_anchor_mz_pairs(list_mass_tracks)
+        print("    Number of anchor m/z pairs = %d" %self._number_anchor_mz_pairs_)
+
+        if self.database_mode == 'memory':
+            self.list_mass_tracks = list_mass_tracks
+        elif self.database_mode == 'ondisk': 
+            self.push_to_disk(list_mass_tracks)
+        else:                         # requiring self.experiment and db connection
+            self.push_to_db(list_mass_tracks
+                # to implement
+            )
+
+    def push_to_disk(self, list_mass_tracks):
+        '''Write pickle file for list_mass_tracks under project directory, pickle/samplename.pickle.
+        '''
+        with open(self.pickle_file, 'wb') as f:
+            pickle.dump(list_mass_tracks, f, pickle.HIGHEST_PROTOCOL)
 
 
 #

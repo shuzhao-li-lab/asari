@@ -5,9 +5,6 @@ Use mz tol (default 5 pmm) in XIC construction.
 XICs without neighbors within x ppm are considered specific (i.e. high selectivity). 
 Low selectivity regions will be still inspected to determine the true number of XICs.
 Leave calibration to Correspondence step.
-
-# from operator import itemgetter
-
 '''
 import numpy as np
 from scipy.signal import find_peaks 
@@ -17,6 +14,7 @@ from scipy.ndimage import uniform_filter1d
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
 from .mass_functions import check_close_mzs
+
 
 def sum_dict(dict1, dict2):
     new = {}
@@ -406,13 +404,12 @@ def dwt_rt_calibrate(good_landmark_peaks, selected_reference_landmark_peaks, sam
 def remap_intensity_track(intensity_track, new, rt_cal_dict):
     '''
     new = basetrack.copy(), possible longer than intensity_track
-    Remap intensity_track based on rt_cal_dict. [Optimization?]
+    Remap intensity_track based on rt_cal_dict. 
+    Can we make this faster?
     '''
     for k,v in rt_cal_dict.items():
         new[v] = intensity_track[k]
     return new
-
-
 
 
 
