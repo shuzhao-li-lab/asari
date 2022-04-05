@@ -45,6 +45,7 @@ class CompositeMap:
         self._number_of_valid_samples_ = len(self.list_sample_names)
         # designated reference sample; all RT is aligned to this sample
         self.reference_sample_instance = self.reference_sample = self.get_reference_sample_instance(experiment.reference_sample_id)
+        self.rt_length = len(self.reference_sample.rt_numbers)
 
         self.MassGrid = None                        # will be DF
         self.FeatureTable = None
@@ -80,15 +81,26 @@ class CompositeMap:
             multiple batch build
         '''
 
-        self._initiate_mass_grid()
-        sample_ids = self.experiment.valid_sample_ids
-        sample_ids.pop(self.experiment.reference_sample_id)
-        for sid in sample_ids:
-            SM = SimpleSample(self.experiment.sample_registry[sid],
-                experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode)
-            self.add_sample(SM)
+        if self._number_of_valid_samples_ < 99:     # 10:
 
 
+            self._initiate_mass_grid()
+            sample_ids = self.experiment.valid_sample_ids
+            sample_ids.pop(self.experiment.reference_sample_id)
+            for sid in sample_ids:
+                SM = SimpleSample(self.experiment.sample_registry[sid],
+                    experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode)
+                self.add_sample(SM)
+                
+        elif self._number_of_valid_samples_ < 100:
+
+            MGC = MassGridCluster(  )
+            self.MassGrid = MGC.grid()
+
+        else:   # split and do batch build
+
+
+            pass
 
 
     def _initiate_mass_grid(self):
@@ -168,6 +180,8 @@ class CompositeMap:
         3. use RT from 2, do LOWESS fit to reference RT values. 
         The fitted function will be recorded for each sample, 
         and applied to all RT scan numbers in the samples when used for CMAP construction.
+
+        sample.rt_cal_dict, sample.reverse_rt_cal_dict are kept for changed values only and set within sample RT boundaries.
         
         Marked samples that fail in RT alignment, and deal with them at the end.
 
@@ -175,7 +189,7 @@ class CompositeMap:
         print("\nCalibrating retention time to reference, ...\n")
         cal_min_peak_height = self.experiment.parameters['cal_min_peak_height']
         MIN_PEAK_NUM = self.experiment.parameters['peak_number_rt_calibration']
-        self.good_reference_landmark_peaks = self.set_RT_reference()
+        self.good_reference_landmark_peaks = self.set_RT_reference(cal_min_peak_height)
         for SM in self.experiment.all_samples[1:]:      # first sample is reference
             self.calibrate_sample_RT(SM, cal_min_peak_height=cal_min_peak_height, MIN_PEAK_NUM=MIN_PEAK_NUM)
         
@@ -204,9 +218,7 @@ class CompositeMap:
             if not pd.isna(ii):
                 ii = int(ii)
                 this_mass_track = list_mass_tracks[ii]
-                rt_numbers, list_intensity = this_mass_track['rt_scan_numbers'], this_mass_track['intensity']
-                # continuity in rt_scan_numbers is implemented in chromatograms.extract_single_track_ 
-                Upeak = quick_detect_unique_elution_peak(rt_numbers, list_intensity, 
+                Upeak = quick_detect_unique_elution_peak(this_mass_track['intensity'], 
                             min_peak_height=cal_min_peak_height, 
                             min_fwhm=3, min_prominence_threshold_ratio=0.2)
                 if Upeak:
@@ -219,8 +231,8 @@ class CompositeMap:
         if _NN >  MIN_PEAK_NUM:
             try:
                 sample.rt_cal_dict, sample.reverse_rt_cal_dict = calibration_fuction( 
-                                good_landmark_peaks, selected_reference_landmark_peaks, 
-                                sample.rt_numbers, self.reference_sample.rt_numbers, )
+                                            good_landmark_peaks, selected_reference_landmark_peaks, 
+                                            sample.rt_numbers, self.reference_sample.rt_numbers, )
             except ValueError:
                 print("    ~warning~ Faluire in retention time alignment, %s" %sample.name)
         else:
@@ -236,7 +248,8 @@ class CompositeMap:
         Return 
         good_reference_landmark_peaks: [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...]
         '''
-        selectivities = calculate_selectivity( self.MassGrid['mz'][self._mz_landmarks_] )
+        selectivities = calculate_selectivity( self.MassGrid['mz'][self._mz_landmarks_], 
+                                                self.experiment.parameters['mz_tolerance'])
         good_reference_landmark_peaks = []
         ref_list_mass_tracks = self.reference_sample.list_mass_tracks
         for ii in range(len(self._mz_landmarks_)):
@@ -244,9 +257,7 @@ class CompositeMap:
                 ref_ii = self.MassGrid[self.reference_sample.name][self._mz_landmarks_[ii]]
                 if ref_ii:
                     this_mass_track = ref_list_mass_tracks[ int(ref_ii) ]
-                    rt_numbers, list_intensity = this_mass_track['rt_scan_numbers'], this_mass_track['intensity']
-                    # continuity in rt_scan_numbers is implemented in chromatograms.extract_single_track_ 
-                    Upeak = quick_detect_unique_elution_peak(rt_numbers, list_intensity, 
+                    Upeak = quick_detect_unique_elution_peak(this_mass_track['intensity'], 
                                 min_peak_height=cal_peak_intensity_threshold, 
                                 min_fwhm=3, min_prominence_threshold_ratio=0.2)
                     if Upeak:
@@ -293,53 +304,32 @@ class CompositeMap:
         Start a RT_index: intensity dict, and cummulate intensity values. 
         Convert back to rtlist, intensities at the end.
         Because RT may be distorted, e.g. from sample to ref mapping: 
-            {384: 387,
-                385: 387,
-                386: 388,
-                387: 388,
-                388: 389,
-                389: 389,
-                390: 390,
-                391: 390, },
+            {384: 387, 385: 387, 386: 388, 387: 388, 388: 389, 389: 389, 390: 390, 391: 390, },
         smoothing is needed in doing the composite.
 
         Return:
+        Dict {mz_index_number: intensity_track, ...}
         Dict of dict {mz_index_number: {'rt_scan_numbers': xx, 'intensity':yy }, ...}
         '''
         mzDict = dict(self.MassGrid['mz'])
-        mzlist = list(self.MassGrid.index)              # this gets indices as keys, per mass track
+        mzlist = list(self.MassGrid.index)                          # this gets indices as keys, per mass track
+        basetrack = np.zeros(self.rt_length, dtype=np.int64)        # self.rt_length defines max rt number
         _comp_dict = {}
-        ref_list_mass_tracks = self.reference_sample.list_mass_tracks
         for k in mzlist: 
-            _comp_dict[k] = {}       # will be {rt_index: intensity}
-            # init using reference_sample
-            ref_index = self.MassGrid[self.reference_sample.name][k]
-            if not pd.isna(ref_index):
-                this_mass_track = ref_list_mass_tracks[int(ref_index)]
-                # ref mass track should be continuous
-                _comp_dict[k] = dict(zip(this_mass_track['rt_scan_numbers'], this_mass_track['intensity']))
+            _comp_dict[k] = basetrack.copy()
 
-        for SM in self.experiment.all_samples[1:]:      # first sample is reference
+        for SM in self.experiment.all_samples:
             list_mass_tracks = SM.get_masstracks_and_anchors()
             if SM.rt_cal_dict:
                 for k in mzlist:
                     ref_index = self.MassGrid[SM.name][k]
                     if not pd.isna(ref_index): # ref_index and 
-                        this_mass_track = list_mass_tracks[int(ref_index)]
-                        # after remapping RT indices, no guaranty rt/intensity vector is continuous; thus smoothing is needed
-                        remapped_rt = [ SM.rt_cal_dict[ii] for ii in this_mass_track['rt_scan_numbers'] ] # convert to ref RT
-                        _comp_dict[k] = sum_dict( _comp_dict[k], smooth_rt_intensity_remap(remapped_rt, this_mass_track['intensity']))
-
-        # reformat result
+                        _comp_dict[k] += remap_intensity_track(list_mass_tracks[int(ref_index)]['intensity'], 
+                                                                basetrack.copy(), SM.rt_cal_dict)
         result = {}
-        for k,vdict in _comp_dict.items():
-            if vdict:
-                rt_scan_numbers = sorted(list(vdict.keys()))
-                result[k] = { 'id_number': k, 'mz': mzDict[k], 'rt_scan_numbers': rt_scan_numbers, 
-                                                    'intensity': [vdict[x] for x in rt_scan_numbers], }
-            else:
-                # From samples that failed to align 
-                print("    ... mass track in unaligned sample dropped ... %4.4f ... " %mzDict[k])
+        for k,v in _comp_dict.items():
+            result[k] = { 'id_number': k, 'mz': mzDict[k], 'intensity': v }
+
         return result
 
 
@@ -361,28 +351,22 @@ class CompositeMap:
 
     def extract_features_per_sample(self, sample):
         '''
-        rt_scan_numbers can be out of range due to calibration/conversion. Fill with max.
+        watch for range due to calibration/conversion.
+
+
         '''
         fList = []
         mass_track_map = self.MassGrid[sample.name]
         list_mass_tracks = sample.get_masstracks_and_anchors()
-        max_rt_number = max(sample.rt_numbers)+1                # to have none intensity if peak out of RT range
         for peak in self.FeatureList:
             track_number = mass_track_map[peak['parent_masstrack_id']]
             peak_area = 0
             if not pd.isna(track_number):           # watch out dtypes
                 mass_track = list_mass_tracks[ int(track_number) ]
-                left_base, right_base = max_rt_number, max_rt_number
-                try:
-                    left_base = sample.reverse_rt_cal_dict[peak['left_base']]
-                    right_base = sample.reverse_rt_cal_dict[peak['right_base']]
-                except KeyError:
-                    print("    ... in %s ... incomplete elution peak at ... %4.4f ..." %(sample.name, mass_track['mz']))
-
-                # can optimize below
-                for ii in range(len(mass_track['rt_scan_numbers'])):
-                    if left_base <= mass_track['rt_scan_numbers'][ii] <= right_base:
-                        peak_area += mass_track['intensity'][ii]
+                # ?? 
+                left_base = sample.reverse_rt_cal_dict.get(peak['left_base'], peak['left_base'])
+                right_base = sample.reverse_rt_cal_dict.get(peak['right_base'], peak['right_base'])
+                peak_area = mass_track['intensity'][left_base: right_base+1].sum()
 
             fList.append( peak_area )
 

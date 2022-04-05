@@ -71,13 +71,10 @@ def analyze_single_sample(infile,
     '''
     Analyze single mzML file and print statistics.
     parameters are not used, just place holder to use ext_Experiment class.
-
-    to add output info on instrumentation
-
     '''
     print("Analysis of %s\n" %infile)
     mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(infile,
-                mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
+                        mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
 
     EE = ext_Experiment({}, parameters)
     EE.load_annotation_db()
@@ -255,18 +252,19 @@ def single_sample_EICs_ondisk(sample_id, infile, ion_mode,
             list_mass_tracks.append( {
                 'id_number': ii, 
                 'mz': track[0],
-                'rt_scan_numbers': track[1], 
-                'intensity': track[2], 
+                # 'rt_scan_numbers': track[1],              # format changed after v1.5
+                'intensity': track[1], 
                 } )
             track_mzs.append( (track[0], ii) )                  # keep a reconrd in sample registry for fast MassGrid align
             ii += 1
 
         new['list_mass_tracks'] = list_mass_tracks
         anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(list_mass_tracks, mz_tolerance_ppm=mz_tolerance_ppm)
+        # find_mzdiff_pairs_from_masstracks is not too sensitive to massTrack format
         new['anchor_mz_pairs'] = anchor_mz_pairs
         new['number_anchor_mz_pairs'] = len(anchor_mz_pairs)
         shared_dict[new['sample_id']] = ('passed', 'passed', new['number_anchor_mz_pairs'], outfile, track_mzs)
-    
+
         with open(outfile, 'wb') as f:
             pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
 

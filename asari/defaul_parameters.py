@@ -3,7 +3,7 @@
 #
 
 PARAMETERS = {
-    'project_name': 'test_asari',
+    'project_name': 'asari_project',
     'outdir': 'output',
     'database_mode': 'ondisk',          # 'ondisk', 'memory' (run in memory, only small studies), 
                                         # 'mongo' (MongoDB, requiring installation of DB server)

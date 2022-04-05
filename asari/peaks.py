@@ -30,13 +30,14 @@ def goodness_fitting__(y_orignal, y_fitted):                  # R^2 as goodness 
 def evaluate_gaussian_peak(mass_track, peak):
     '''
     Use Gaussian models to fit peaks, R^2 as goodness of fitting.
-    mass_track: {'id_number': k, 'mz': mz, 'rt_scan_numbers': [..], 'intensity': [..]}
+    mass_track: {'id_number': k, 'mz': mz, 'intensity': [..]}
     Peak: {'parent_masstrace_id': 2812, 'mz': 359.9761889867791, 'apex': 91.0, 'height': 491241.0, 'left_base': 49.0, 'right_base': 267.0}
     return: goodness_fitting
     '''
     goodness_fitting = 0
-    xx = mass_track['rt_scan_numbers'][peak['left_index']: peak['right_index']+1]
-    yy = mass_track['intensity'][peak['left_index']: peak['right_index']+1]
+    xx = range(peak['left_base'], peak['right_base']+1, 1)
+    yy = mass_track['intensity'][xx]
+    # yy = mass_track['intensity'][peak['left_index']: peak['right_index']+1]
     # set initial parameters
     a, mu, sigma =  peak['height'], peak['apex'], np.std(xx)
     try:
@@ -75,12 +76,22 @@ def iter_peak_detection_parameters(list_mass_tracks, max_rt_number, parameters, 
     min_prominence_ratio = 0.1
     iteration = False
     for mass_track in list_mass_tracks:
-        if max(mass_track['intensity']) > min_peak_height:
+        if mass_track['intensity'].max() > min_peak_height:
             iters.append(
                 (mass_track, max_rt_number, min_peak_height, min_fwhm, min_prominence_threshold,
                 wlen, snr, min_prominence_ratio, iteration, shared_list)
             )
     return iters
+
+
+
+
+
+
+
+
+
+
 
 
 def deep_detect_elution_peaks( mass_track, max_rt_number, 
@@ -141,6 +152,10 @@ def deep_detect_elution_peaks( mass_track, max_rt_number,
         new_list_intensity = list_intensity.copy()
         if peaks.size <= 2:
             for ii in range(peaks.size):
+
+
+
+
                 _jpeak = convert_peak_json__(ii, mass_track, peaks, properties, cSelectivity=list_cSelectivity[ii])
                 # evaluate peak quality by goodness_fitting of Gaussian model
                 _jpeak['goodness_fitting'] = evaluate_gaussian_peak(mass_track, _jpeak)
@@ -214,7 +229,7 @@ def deep_detect_elution_peaks( mass_track, max_rt_number,
         # do SNR, defined as mean of all non-peak data points
         _peak_datapoints = []
         for _jpeak in list_json_peaks:
-            _peak_datapoints += list(range( _jpeak['left_index'], _jpeak['right_index'] ))
+            _peak_datapoints += list(range( _jpeak['left_base'], _jpeak['right_base'] ))
         _valid_datapoints = [x for x in range(len(list_intensity)) if x not in _peak_datapoints]
         __noise_level__ =  __list_intensity[_valid_datapoints]
         __noise_level__ = __noise_level__[__noise_level__>0]
@@ -233,22 +248,23 @@ def deep_detect_elution_peaks( mass_track, max_rt_number,
 
 def convert_peak_json__( ii, mass_track, peaks, properties, cSelectivity=None):
     '''peaks, properties as from find_peaks; rt_numbers from mass_track
+
     '''
-    rt_numbers  = mass_track['rt_scan_numbers']
+    #  rt_numbers  = mass_track['rt_scan_numbers']
     left_index, right_index = properties['left_bases'][ii], properties['right_bases'][ii]   # index positions on mass track
-    left_base, right_base = rt_numbers[left_index], rt_numbers[right_index]
-    peak_area = int(sum(mass_track['intensity'][left_index: right_index+1])) 
+    #  left_base, right_base = rt_numbers[left_index], rt_numbers[right_index]
+    peak_area = int( mass_track['intensity'][left_index: right_index+1].sum() ) 
     return {
             'parent_masstrack_id': mass_track['id_number'],
             'mz': mass_track['mz'],
-            'apex': rt_numbers[peaks[ii]], 
+            'apex': peaks[ii],   #  rt_numbers[peaks[ii]], 
             # 'rtime': rt_numbers[peaks[ii]], 
             'peak_area': peak_area,
             'height': int(properties['peak_heights'][ii]),
-            'left_base': left_base,                                                         # rt_numbers
-            'right_base': right_base,   
-            'left_index': left_index,                                                       # specific to the referred mass track
-            'right_index': right_index,
+            'left_base': left_index, # left_base,                                                         # rt_numbers
+            'right_base': right_index, # right_base,   
+            #'left_index': left_index,                                                       # specific to the referred mass track
+            #'right_index': right_index,
             'cSelectivity': cSelectivity,
     }
 
@@ -299,7 +315,30 @@ def detect_elution_peaks( mass_track,
     return list_peaks
 
 
-def quick_detect_unique_elution_peak(rt_numbers, list_intensity, 
+def quick_detect_unique_elution_peak(intensity_track, 
+                            min_peak_height=100000, min_fwhm=3, min_prominence_threshold_ratio=0.2):
+    '''Quick peak detection, only looking for highest peak with high prominence.
+    This is used for quick check on good peaks, or selecting landmarks for alignment purposes.
+    
+    '''
+    max_intensity = intensity_track.max()
+    prominence = min_prominence_threshold_ratio * max_intensity
+    unique_peak = None
+    if max_intensity > min_peak_height:
+        peaks, properties = find_peaks(intensity_track, height=min_peak_height, width=min_fwhm, 
+                                                        prominence=prominence) 
+        if peaks.size == 1:
+            unique_peak = {
+                'apex': peaks[0], 
+                'height': properties['peak_heights'][0], # not used now
+            }
+    return unique_peak
+
+
+
+# -----------------------------------------------------------------------------
+
+def quick_detect_unique_elution_peak_old(rt_numbers, list_intensity, 
                             min_peak_height=100000, min_fwhm=3, min_prominence_threshold_ratio=0.2):
     '''Quick peak detection, only looking for highest peak with high prominence.
     This is used for quick check on good peaks, or selecting landmarks for alignment purposes.
@@ -317,4 +356,3 @@ def quick_detect_unique_elution_peak(rt_numbers, list_intensity,
                 'height': properties['peak_heights'][0], # not used now
             }
     return unique_peak
-

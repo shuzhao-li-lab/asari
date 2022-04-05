@@ -173,20 +173,36 @@ def get_file_masstrack_stats(infile,
                         mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000,
                         return_sample=False):
     '''
-    Report: number of spectra (scans), max rtime, m/z range, distri, 
-    intensity range, distri
-    pairs of landmarks, distri
-    recommended intensity cutoff
+    Example output:
+        Total number of MS1 spectra: 741
+        of which 0 are positive ionization mode.
+
+        Assuming ionization mode is neg.
+
+        Maxium retention time (sec): 299.818228
+        m/z range: (min 80.011578, median 358.010062, max 997.616794)
+
+        Found 14063 mass tracks.
+        Found 4054 12C/13C isotopic pairs as landmarks.
+        Max intensity in any landmark track:  687,714,048
+        Minimal height of landmark tracks:  2,334 
+
+        Mass accuracy was estimated on 124 matched values as -1.8 ppm.
 
     ionization_mode is assumed on one scan, thus not supporting polarity switch in a single file.
+        to add output info on instrumentation
     '''
     new = {'sample_id': infile, 'input_file': infile, 'ion_mode': '',}
     list_mass_tracks = []
     exp = pymzml.run.Reader(infile)
-    if exp.next()["positive scan"]:
-        ionization_mode = 'pos'
-    else:
-        ionization_mode = 'neg'
+    jj = 0
+    for spec in exp:
+        if spec["positive scan"]:
+            ionization_mode = 'pos'
+            jj += 1
+        else:
+            ionization_mode = 'neg'
+
     xdict = extract_massTracks_(exp, 
                 mz_tolerance_ppm=mz_tolerance_ppm, 
                 min_intensity=min_intensity, 
@@ -200,8 +216,7 @@ def get_file_masstrack_stats(infile,
         list_mass_tracks.append( {
             'id_number': ii, 
             'mz': track[0],
-            'rt_scan_numbers': track[1], 
-            'intensity': track[2], 
+            'intensity': track[1], 
             } )
         ii += 1
 
@@ -212,14 +227,19 @@ def get_file_masstrack_stats(infile,
     all_mz = [x['mz'] for x in list_mass_tracks]
     # down scale list_mass_tracks to verified by _mz_landmarks_
     list_mass_tracks = [list_mass_tracks[ii] for ii in _mz_landmarks_]
-    peak_heights = [max(x['intensity']) for x in list_mass_tracks]
+    peak_heights = [x['intensity'].max() for x in list_mass_tracks]
     max_peak_height = int(max(peak_heights))
     min_peak_height_ = int(min(peak_heights))
     # recommended_min_peak_height = int(0.5 * min(peak_heights))
 
     print("Total number of MS1 spectra: %d" %len(new['list_scan_numbers']))
+    if jj > 1:
+        print("of which %d are positive ionization mode." %jj)
+    else:
+        print("of which %d is positive ionization mode." %jj)
+    print("Assuming ionization mode is %s.\n" %ionization_mode)
+
     print("Maxium retention time (sec): %f" %max(new['list_retention_time']))
-    print("Ionization mode (looked up on one scan) assumed as %s.\n" %ionization_mode)
     print("m/z range: (min %f, median %f, max %f)\n" %(np.min(all_mz), np.median(all_mz), np.max(all_mz)))
 
     print("Found %d mass tracks." %ii)

@@ -70,6 +70,18 @@ Because scan numbers are integers, they are efficient as indices and should be u
 When real retention time is used, they are float numbers and not good for indices, 
 requiring many more comparison operations and decreasing performance.
 
+
+MassTrack as full RT range np.array
+===================================
+In version 1.5, the massTrack format was changed from
+( mz, rtlist, intensities ) to ( mz, intensity_track ).
+intensity_track is np.array(full RT length).
+This increases storage for processed samples, but simplifies
+i) CMAP construction
+ii) RT index switching btw peak detection functions and others.
+
+
+
     
 Possible to improve performance in next version:
 
@@ -98,6 +110,13 @@ Notebooks
 
 - batched processing; separate CMAP per processing batch and assemble afterwards. 
     Or, how to combine multiple asari projects (based on empCpds and massTracks).
+
+- targeted extraction of ROI; allowing lowering m/z boundaries under ppm tolerance
+
+- alternative workflow as XCMS, peak detection first followed by correspondence
+
+
+
 
 
 
