@@ -56,7 +56,12 @@ class ext_Experiment():
         '''
         get_reference_sample_id as sample of most number_anchor_mz_pairs
         '''
-        if self.sample_registry:
+        if self.parameters['reference']:
+            # match file name; k is sm['sample_id']
+            for k,v in self.sample_registry.items():
+                if os.path.basename(self.parameters['reference']) == os.path.basename(v['input_file']):
+                    return k
+        elif self.sample_registry:
             L = [(v['number_anchor_mz_pairs'], k) for k,v in self.sample_registry.items()]
             return sorted(L, reverse=True)[0][1]
         else:

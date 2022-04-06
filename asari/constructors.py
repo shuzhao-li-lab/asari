@@ -246,7 +246,7 @@ class CompositeMap:
         for ii in range(len(self._mz_landmarks_)):
             if selectivities[ii] > 0.99:
                 ref_ii = self.MassGrid[self.reference_sample.name][self._mz_landmarks_[ii]]
-                if ref_ii:
+                if ref_ii and not pd.isna(ref_ii):
                     this_mass_track = ref_list_mass_tracks[ int(ref_ii) ]
                     Upeak = quick_detect_unique_elution_peak(this_mass_track['intensity'], 
                                 min_peak_height=cal_peak_intensity_threshold, 
@@ -314,7 +314,7 @@ class CompositeMap:
             if SM.rt_cal_dict:
                 for k in mzlist:
                     ref_index = self.MassGrid[SM.name][k]
-                    if not pd.isna(ref_index): # ref_index and 
+                    if not pd.isna(ref_index): # ref_index can be NA 
                         _comp_dict[k] += remap_intensity_track(list_mass_tracks[int(ref_index)]['intensity'], 
                                                                 basetrack.copy(), SM.rt_cal_dict)
         result = {}

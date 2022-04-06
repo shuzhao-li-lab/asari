@@ -25,6 +25,7 @@ PARAMETERS = {
     'gaussian_shape': 0.3,              # min cutoff
     
     # retention time alignment
+    'reference': None,
     'rt_align_method': 'lowess',        # 'lowess', 'tolerance', or to implement           
     'rt_align_on': True,                # False to bypass retention time alignment
     'rtime_tolerance': 50,              # feature rtime shift threshold under 10 seconds; or 10% of rtime   

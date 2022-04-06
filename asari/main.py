@@ -35,6 +35,9 @@ def main(parameters=PARAMETERS):
             help='user supplied paramter file in JSON')
     parser.add_argument('-c', '--cores', type=int, 
             help='nunmber of CPU cores intented to use')
+    parser.add_argument('-f', '--reference', 
+            help='designated reference file for alignments')
+
 
     parser.add_argument('--autoheight', default=False,
             help='automatic determining min peak height')
@@ -55,7 +58,10 @@ def main(parameters=PARAMETERS):
         parameters['project_name'] = args.project
     if args.output:
         parameters['outdir'] = args.output
-    
+    if args.reference:
+        parameters['reference'] = args.reference
+
+
     if args.run == 'process':
         list_input_files = read_project_dir(args.input)
         if args.autoheight:
