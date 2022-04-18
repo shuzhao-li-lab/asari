@@ -1,5 +1,14 @@
-# Attention is required for ionization mode and ppm of mz_tolerance.
-# Default values of others should be acceptable for most studies.
+# Here are default values of parameters. Please do NOT modify unless necesssary.
+# 
+# One can specify parameters via 
+# 1) custom parameters.yaml
+# 2) commandline arguments
+# Priority is: commandline overwriting parameters.yaml overwriting this file.
+#
+# Default values of others should be acceptable for most studies. Really, 
+# only ionization mode (default pos) and ppm of mz_tolerance (defulat 5) may need attention, 
+# but they should be given via commandline arguments.
+# 
 
 PARAMETERS = {
     'project_name': 'asari_project',
@@ -12,7 +21,7 @@ PARAMETERS = {
     # mass parameters
     'mode': 'pos',                      # ionization mode
     'mass_range': (50, 2000),
-    'mz_tolerance': 5,                  # ppm, high selectivity meaning no overlap neighbors to confuse; 
+    'mz_tolerance_ppm': 5,                  # ppm, high selectivity meaning no overlap neighbors to confuse; 
                                         # Low selectivity regions will be still inspected to determine the true number of features
 
     # chromatogram and peak parameters
@@ -20,7 +29,7 @@ PARAMETERS = {
     'signal_noise_ratio': 5,            # peak height at least x fold over noise, which is median of non-peak data points.
     'min_intensity_threshold': 1000,    # minimal intensity for mass track extraction, filtering baseline
     'min_peak_height': 10000,           # minimal peak height.
-                                        # min_peak_height can be estimated automatically by setting autoheight on in CLI
+    'autoheight': False,                # min_peak_height can be estimated automatically by setting autoheight on in CLI  
     'prominence_window': 30,            # no need to modify  
     'gaussian_shape': 0.3,              # min cutoff
     

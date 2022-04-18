@@ -23,10 +23,12 @@ if not sys.warnoptions:
     warnings.simplefilter("ignore")
 
 
-class ext_Experiment():
+class ext_Experiment:
     '''
-    Extend metDataModel.core.Experiment with preprocessing methods.
-    This encapsulates a set of LC-MS files using the same method to be processed together.
+    Similar to metDataModel.core.Experiment with preprocessing methods.
+    This encapsulates a set of LC-MS files using the same experimental method 
+    (chromatography and ionization) to be processed together.
+    E.g., data from postive ESI and negative ESI should not in the same ext_Experiment instance.
     '''
     def __init__(self, sample_registry, parameters):
         '''
@@ -75,7 +77,6 @@ class ext_Experiment():
         '''
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
-
 
         if self.parameters['rt_align_on']:
 

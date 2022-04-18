@@ -290,7 +290,7 @@ class CompositeMap:
         good_reference_landmark_peaks: [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...]
         '''
         selectivities = calculate_selectivity( self.MassGrid['mz'][self._mz_landmarks_], 
-                                                self.experiment.parameters['mz_tolerance'])
+                                                self.experiment.parameters['mz_tolerance_ppm'])
         good_reference_landmark_peaks = []
         ref_list_mass_tracks = self.reference_sample.list_mass_tracks
         for ii in range(len(self._mz_landmarks_)):

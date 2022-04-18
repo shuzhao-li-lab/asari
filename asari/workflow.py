@@ -104,7 +104,7 @@ def make_iter_parameters(sample_registry, parameters, shared_dict):
     [('sample_id', input_file, mode, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, output_file, shared_dict), ...]
     '''
     iters = []
-    mz_tolerance_ppm = parameters['mz_tolerance']
+    mz_tolerance_ppm = parameters['mz_tolerance_ppm']
     min_intensity = parameters['min_intensity_threshold']
     min_timepoints = parameters['min_timepoints']
     min_peak_height = parameters['min_peak_height']

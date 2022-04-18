@@ -1,4 +1,5 @@
 import argparse
+from yaml import load, Loader
 
 from asari import __version__
 from .workflow import *
@@ -8,6 +9,7 @@ from .defaul_parameters import PARAMETERS
 def main(parameters=PARAMETERS):
     '''
     asari, Trackable and scalable Python program for high-resolution LC-MS metabolomics data preprocessing.
+
         analyze: analyze a single mzML file to print summary of statistics and recommended parameters.
         process: LC-MS data preprocessing
         xic: construct mass trakcs (chromatogram) from mzML files
@@ -32,19 +34,21 @@ def main(parameters=PARAMETERS):
     parser.add_argument('-j', '--project', 
             help='project name')
     parser.add_argument('-p', '--parameters', 
-            help='user supplied paramter file in JSON')
+            help='user supplied paramter file in YAML. Template from parameters.yaml.')
     parser.add_argument('-c', '--cores', type=int, 
             help='nunmber of CPU cores intented to use')
     parser.add_argument('-f', '--reference', 
             help='designated reference file for alignments')
-
-
     parser.add_argument('--autoheight', default=False,
             help='automatic determining min peak height')
 
     args = parser.parse_args()
 
     # update parameters
+    if args.parameters:
+        parameters.update(
+            load(open(args.parameters).read(), Loader=Loader)
+        )
     parameters['multicores'] = min(mp.cpu_count(), parameters['multicores'])
     parameters['input'] = args.input
     

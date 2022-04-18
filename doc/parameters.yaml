@@ -1,0 +1,21 @@
+# A template you can modify and use as an argument to asari command line
+# via `--parameters new_filename.yaml`
+
+project_name: asari_project
+mz_tolerance_ppm: 5
+mode: pos
+# Below rarely modified
+multicores: 4
+outdir: output
+reference: null
+autoheight: false
+database_mode: auto
+gaussian_shape: 0.3
+min_intensity_threshold: 1000
+min_peak_height: 10000
+min_timepoints: 6
+prominence_window: 30
+rt_align_method: lowess
+rt_align_on: true
+rtime_tolerance: 50
+signal_noise_ratio: 5

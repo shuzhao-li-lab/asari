@@ -5,15 +5,15 @@ Functions here can be sped up by JIT, but the code is currently weakly typed.
 In order to use Numba for JIT, they need to be rewritten with clear typing and likely compartmentalized.
 Alternatively, some of the mass functions can be implemented in C and compiled to interface Python.
 '''
-import numpy as np
 # from numba import jit
+
+import numpy as np
 from mass2chem.search import *
 
 
 def flatten_tuplelist(L):
     '''Reformat [(a,b), ...] to [a, b, ...], keep unique entries'''
     return list(set([x[0] for x in L] + [x[1] for x in L]))
-
 
 def check_close_mzs(mzlist, ppm_tol=5):
     '''check potentially overlapping m/z values in a sample. mzlist already in ascending order.'''

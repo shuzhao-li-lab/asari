@@ -46,13 +46,16 @@ Alternative to a standalone command, to run as a module via Python interpreter, 
 
 Parameters
 ==========
-Only one parameter in asari requires attention, i.e., precision ppm is set at 5 by default. 
+Only one parameter in asari requires real attention, i.e., precision ppm is set at 5 by default. 
 Most modern instruments are fine with 5 ppm, but one may want to change if needed.
 
-For the adventurous:
-Default parameters are set in `defaul_parameters.py`. 
-They can be (work in progress) overwritten by user supplied parameter file in JSON.
-Lastly, parameters specified in command line overwrite all the above.
+Default ionization mode is `pos`. Change to `neg` if needed, by specifying `--mode neg` in command line.
+
+Users can supply a custom parameter file `xyz.yaml`, via `--parameters xyz.yaml` in command line.
+A template YAML file can be found at `doc/parameters.yaml`.
+When the above methods overlap, command line arguments take priority.
+That is, commandline overwrites `xyz.yaml`, which overwrites default asari parameters in `defaul_parameters.py`. 
+
 
 Algorithms
 ==========

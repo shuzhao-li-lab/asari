@@ -5,3 +5,4 @@ pymzml
 numpy
 scipy
 statsmodels
+pyyaml
