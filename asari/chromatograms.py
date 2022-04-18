@@ -381,6 +381,14 @@ def __hacked_lowess__(yy, xx, frac, it, xvals):
 
 
 def mock_rt_calibration(sample_rt_numbers, reference_rt_numbers):
+    '''
+    Create map dictionaries to allow sample to be used without RT calibration.
+
+    Input
+    =====
+    sample_rt_numbers, reference_rt_numbers are lists not np.arrays - important.
+
+    '''
     _total = sorted(set(sample_rt_numbers + reference_rt_numbers))
     rt_cal_dict = reverse_rt_cal_dict = dict(zip( _total, _total ))
     return rt_cal_dict, reverse_rt_cal_dict
@@ -409,6 +417,8 @@ def dwt_rt_calibrate(good_landmark_peaks, selected_reference_landmark_peaks, sam
 def remap_intensity_track(intensity_track, new, rt_cal_dict):
     '''
     new = basetrack.copy(), possible longer than intensity_track
+
+    
     Remap intensity_track based on rt_cal_dict. 
     Can we make this faster?
     '''

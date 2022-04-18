@@ -208,7 +208,7 @@ class ext_Experiment():
         '''
         To export two tables, one is full table under `outdir/export/`, the other filtered/preferred table under `outdir`.
         '''
-        good_samples = [sample.name for sample in self.all_samples if sample.rt_cal_dict]  # verify sample not dropped in rt_cal
+        good_samples = [sample.name for sample in self.all_samples] 
         filtered_FeatureTable = self.CMAP.FeatureTable[good_samples]                       # non zero counts
         count = filtered_FeatureTable[filtered_FeatureTable>1].count(axis='columns')
         self.CMAP.FeatureTable['detection_counts'] = count

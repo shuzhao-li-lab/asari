@@ -1,6 +1,8 @@
 '''
 Functions for subcommand `analyze`
 '''
+
+import random
 import pymzml
 from .chromatograms import extract_massTracks_ 
 from .experiment import ext_Experiment
@@ -107,6 +109,66 @@ def get_file_masstrack_stats(infile,
     else:
         return _mz_landmarks_, ionization_mode, min_peak_height_
 
+
+# -----------------------------------------------------------------------------
+# estimate_min_peak_height
+
+def estimate_min_peak_height(list_input_files, 
+            mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=500,
+            num_files_to_use=3):
+    '''
+    return an estimated parameter for min peak_height as half of the min verified landmark peaks.
+    '''
+    estimated = []
+    if len(list_input_files) <= num_files_to_use:
+        selected = list_input_files
+    else:
+        selected = random.sample(list_input_files, num_files_to_use)
+    print("Estimating parameter for min peak_height based on ", selected)
+    for infile in selected:
+        try:
+            mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(infile,
+                        mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
+                        # not all above parameters are used or relevant
+            estimated.append(min_peak_height_)
+        except:
+            print("Error in analyzing ", infile)
+    recommended = int(0.5 * np.median(estimated))
+    print("Estimated parameter for min peak_height is %d \n" %recommended)
+    return recommended
+
+def ext_estimate_min_peak_height(list_input_files, 
+            mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=500,
+            num_files_to_use=3):
+    '''
+    return dict of
+    ion mode and
+    an estimated parameter for min peak_height as half of the min verified landmark peaks.
+
+    Extended estimate_min_peak_height for X-asari use.
+    '''
+    estimated, _ionmode = [], []
+    if len(list_input_files) <= num_files_to_use:
+        selected = list_input_files
+    else:
+        selected = random.sample(list_input_files, num_files_to_use)
+    print("Estimating parameter for min peak_height based on ", selected)
+    for infile in selected:
+        try:
+            mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(infile,
+                        mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
+                        # not all above parameters are used or relevant
+            estimated.append(min_peak_height_)
+            _ionmode.append(mode)
+        except:
+            print("Error in analyzing ", infile)
+    recommended = int(0.5 * np.median(estimated))
+    if len(set(_ionmode)) > 1:
+        print("Error occured due to inconsistent ion mode." )
+        print(selected, _ionmode)
+        return None
+    else:
+        return {'mode': _ionmode[0], 'min_peak_height': recommended}
 
 
 

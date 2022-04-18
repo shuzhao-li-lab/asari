@@ -18,7 +18,6 @@ Annotation is facilitated by jms-metabolite-services, mass2chem.
 
 '''
 import time
-import random
 import multiprocessing as mp
 
 import pymzml
@@ -30,34 +29,6 @@ from .mass_functions import *
 # -----------------------------------------------------------------------------
 # main workflow for `process`
 # -----------------------------------------------------------------------------
-
-def read_project_dir(directory, file_pattern='.mzML'):
-    '''
-    This reads centroided LC-MS files.
-    For OpenMS based XIC workflow, file_pattern='chrom.mzML'.
-    '''
-    print("Working on ~~ %s ~~ \n\n" %directory)
-    return [os.path.join(directory, f) for f in os.listdir(directory) if file_pattern in f]
-
-def register_samples(list_input_files):
-    '''
-    Establish sample_id here, return sample_registry as a dictionary.
-    '''
-    sample_registry = {}
-    ii = 0
-    for file in sorted(list_input_files):
-        sample_registry[ii] = {'sample_id': ii, 'input_file': file}
-        ii += 1
-    return sample_registry
-
-def create_export_folders(parameters, time_stamp):
-    parameters['outdir'] = '_'.join([parameters['project_name'], parameters['outdir'], time_stamp]) 
-    os.mkdir(parameters['outdir'])
-    os.mkdir(os.path.join(parameters['outdir'], 'pickle'))
-    os.mkdir(os.path.join(parameters['outdir'], 'export'))
-
-
-# main workflow for `process`
 def process_project(list_input_files, parameters):
     '''
     list_input_files: Extracted ion chromatogram files.
@@ -95,67 +66,30 @@ def process_project(list_input_files, parameters):
         create_export_folders(parameters, time_stamp)
     EE.export_all()
 
-
-# -----------------------------------------------------------------------------
-# estimate_min_peak_height
-
-def estimate_min_peak_height(list_input_files, 
-            mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=500,
-            num_files_to_use=3):
+def read_project_dir(directory, file_pattern='.mzML'):
     '''
-    return an estimated parameter for min peak_height as half of the min verified landmark peaks.
+    This reads centroided LC-MS files.
+    For OpenMS based XIC workflow, file_pattern='chrom.mzML'.
     '''
-    estimated = []
-    if len(list_input_files) <= num_files_to_use:
-        selected = list_input_files
-    else:
-        selected = random.sample(list_input_files, num_files_to_use)
-    print("Estimating parameter for min peak_height based on ", selected)
-    for infile in selected:
-        try:
-            mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(infile,
-                        mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
-                        # not all above parameters are used or relevant
-            estimated.append(min_peak_height_)
-        except:
-            print("Error in analyzing ", infile)
-    recommended = int(0.5 * np.median(estimated))
-    print("Estimated parameter for min peak_height is %d \n" %recommended)
-    return recommended
+    print("Working on ~~ %s ~~ \n\n" %directory)
+    return [os.path.join(directory, f) for f in os.listdir(directory) if file_pattern in f]
 
-def ext_estimate_min_peak_height(list_input_files, 
-            mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=500,
-            num_files_to_use=3):
+def register_samples(list_input_files):
     '''
-    return dict of
-    ion mode and
-    an estimated parameter for min peak_height as half of the min verified landmark peaks.
-
-    Extended estimate_min_peak_height for X-asari use.
+    Establish sample_id here, return sample_registry as a dictionary.
     '''
-    estimated, _ionmode = [], []
-    if len(list_input_files) <= num_files_to_use:
-        selected = list_input_files
-    else:
-        selected = random.sample(list_input_files, num_files_to_use)
-    print("Estimating parameter for min peak_height based on ", selected)
-    for infile in selected:
-        try:
-            mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(infile,
-                        mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
-                        # not all above parameters are used or relevant
-            estimated.append(min_peak_height_)
-            _ionmode.append(mode)
-        except:
-            print("Error in analyzing ", infile)
-    recommended = int(0.5 * np.median(estimated))
-    if len(set(_ionmode)) > 1:
-        print("Error occured due to inconsistent ion mode." )
-        print(selected, _ionmode)
-        return None
-    else:
-        return {'mode': _ionmode[0], 'min_peak_height': recommended}
+    sample_registry = {}
+    ii = 0
+    for file in sorted(list_input_files):
+        sample_registry[ii] = {'sample_id': ii, 'input_file': file}
+        ii += 1
+    return sample_registry
 
+def create_export_folders(parameters, time_stamp):
+    parameters['outdir'] = '_'.join([parameters['project_name'], parameters['outdir'], time_stamp]) 
+    os.mkdir(parameters['outdir'])
+    os.mkdir(os.path.join(parameters['outdir'], 'pickle'))
+    os.mkdir(os.path.join(parameters['outdir'], 'export'))
 
 
 # -----------------------------------------------------------------------------

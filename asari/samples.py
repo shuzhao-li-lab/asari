@@ -1,7 +1,3 @@
-'''
-SimpleSample as a wrapper for a sample, lightweight to facilitate workflow.
-Depending on database_mode, sample list_mass_tracks are stored in memory, or on disk, or in MongoDB.
-'''
 import pickle
 
 from .mass_functions import flatten_tuplelist
@@ -10,35 +6,10 @@ from .workflow import *
 
 class SimpleSample:
     '''
-    LC-MS Sample to get mass tracks from a mzML file, and as a container for peaks and empCpds.
-    Use scan numbers whereas possible. 
-    Use dictionary formats for mass_track, etc for clarity.
-    {
-    input_file: '',
-    name: '',                               # usually short form of input_file
-    ion_mode: '',
-    # status
-    'status:mzml_parsing': '',
-    'status:eic': '',
-    'mass_aligned': '',
-    'rtime_aligned': '',
-    'peaks_extracted': '',
-    #
-    list_scan_numbers = [],
-    list_retention_time: [],
-    list_mass_tracks: [
-        {'id_number': ii, 
-                'mz': float,
-                'intensity': [],
-                }, ...
-    ], 
-    anchor_mz_pairs: [],                    # mostly isotopic pairs to establish m/z anchors (landmarks)
-    number_anchor_mz_pairs: int,
-    }
-
-    Registry for mass traces, peaks & empCpds.
-    RT and m/z values will have calibration functions after CompositeMap.
-
+    Lightweight class of an experimental sample to facilitate workflow.
+    Depending on database_mode, sample list_mass_tracks are stored in memory, or on disk, or in MongoDB.
+    Function to get mass tracks from a mzML file is in workflow.process_project and batch_EIC_from_samples_.
+    Peaks and empCpds are determined in constructors.CompositeMap.
     '''
     def __init__(self, registry={}, experiment=None, database_mode='ondisk', mode='pos'):
         '''

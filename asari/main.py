@@ -65,7 +65,9 @@ def main(parameters=PARAMETERS):
     if args.run == 'process':
         list_input_files = read_project_dir(args.input)
         if args.autoheight:
+            from .analyze import estimate_min_peak_height
             parameters['min_peak_height'] = estimate_min_peak_height(list_input_files)
+            
         parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
 
         process_project( list_input_files,  parameters )

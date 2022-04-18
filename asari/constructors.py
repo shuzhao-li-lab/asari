@@ -156,13 +156,14 @@ class CompositeMap:
 
     def mock_rentention_alignment(self):
         for sample in self.experiment.all_samples[1:]:      # first sample is reference
-            sample.rt_cal_dict, sample.reverse_rt_cal_dict = mock_rt_calibration(sample.rt_numbers, self.reference_sample.rt_numbers)
+            sample.rt_cal_dict, sample.reverse_rt_cal_dict = {}, {}
+            # mock_rt_calibration(sample.rt_numbers, self.reference_sample.rt_numbers)
+
 
     def align_retention_time(self):
         '''
         Because RT will not match precisely btw samples, it's remapped to a common set of time coordinates.
-        The default is a LOWESS algorith, while 
-        dynamic time warp (DTW) and univariate spline are also used in the field.
+        The default is a LOWESS algorith, while dynamic time warp (DTW) and univariate spline are also used in the field.
 
         Do alignment function using high-selectivity mass tracks.
         Step 1. get high-selectivity mass tracks among landmarks.
@@ -191,14 +192,9 @@ class CompositeMap:
                                 cal_min_peak_height=100000,
                                 MIN_PEAK_NUM=15):
         '''
-        Calibrate retention time, via spline func, per sample
-        Use anchor mass trakcs, do quick peak detection. Use tracks of single peaks for RT alignment.
-        This produces a new set of RT coordinates (intensity values shifted along the RT, no need to change).
-
-        Because RT is using scan numbers, landmarks can overlap, e.g. rt_cal:
-        (55, 55), (56, 56), (56, 57), (56, 59), (57, 55), (57, 59), (58, 60), (60, 61), (61, 59), (61, 61), (62, 62), 
-        (63, 63), (67, 67), (69, 69), (69, 70), (70, 70), (71, 71), (72, 72), (73, 72), (73, 74), (74, 75), (76, 75), (76, 78), (77, 75), (77, 77), ...,
-        (190, 190), (190, 191), (190, 192), (191, 189), (191, 191), (191, 192), (192, 192), (192, 193),...
+        Calibrate retention time per sample.
+        This is based on a set of unambiguous peaks: quich peak detection on anchor mass trakcs, 
+        and peaks that are unique to each track are used for RT alignment.
         '''
         candidate_landmarks = [self.MassGrid[sample.name].values[
                                 p['ref_id_num']] for p in self.good_reference_landmark_peaks] # contains NaN
@@ -217,18 +213,22 @@ class CompositeMap:
                     good_landmark_peaks.append(Upeak)
                     selected_reference_landmark_peaks.append(self.good_reference_landmark_peaks[jj])
 
-        _NN = len(good_landmark_peaks)
+        _NN, _CALIBRATED = len(good_landmark_peaks), False
         # only do RT calibration if MIN_PEAK_NUM is met
         if _NN >  MIN_PEAK_NUM:
             try:
                 sample.rt_cal_dict, sample.reverse_rt_cal_dict = calibration_fuction( 
                                             good_landmark_peaks, selected_reference_landmark_peaks, 
                                             sample.rt_numbers, self.reference_sample.rt_numbers, )
+                _CALIBRATED = True
             except ValueError:
-                print("    ~warning~ Faluire in retention time alignment, %s" %sample.name)
-        else:
-            print("    ~Warning~ Faluire in retention time alignment on %s, due to too few aligned features (%d)." 
-                                %(sample.name, _NN))
+                pass
+        if not _CALIBRATED:
+                sample.rt_cal_dict, sample.reverse_rt_cal_dict =  {}, {}
+                #           mock_rt_calibration(sample.rt_numbers, self.reference_sample.rt_numbers)
+                print("    ~warning~ Faluire in retention time alignment (%d); %s is used without alignment." 
+                                            %( _NN, sample.name))
+                
 
 
     def set_RT_reference(self, cal_peak_intensity_threshold=100000):
@@ -262,7 +262,8 @@ class CompositeMap:
         '''
         Using peaks.deep_detect_elution_peaks on composite mass tracks.
         Results are deemed as features, because it's at Experiment level.
-        Peak area and height are cumulated from all samples. Not trying to average because some peaks are in only few samples.
+        Peak area and height are cumulated from all samples. 
+        Not trying to average because some peaks are in only few samples.
 
         Performance can be improved further - quick filter to ROI will help long LC runs.
 
@@ -280,9 +281,10 @@ class CompositeMap:
             # convert scan numbers to rtime
             try:
                 peak['rtime'] = self.dict_scan_rtime[peak['apex']]
-                peak['rtime_left_base'], peak['rtime_right_base'] = self.dict_scan_rtime[peak['left_base']], self.dict_scan_rtime[peak['right_base']]
+                peak['rtime_left_base'], peak['rtime_right_base'] = self.dict_scan_rtime[peak['left_base']
+                                ], self.dict_scan_rtime[peak['right_base']]
             except KeyError:
-                peak['rtime'] = self.max_ref_rtime                                  # imputed value set at max rtime
+                peak['rtime'] = self.max_ref_rtime                # imputed value set at max rtime
                 print("Peak rtime out of bound on", ii)
 
         self.generate_feature_table()
@@ -291,16 +293,12 @@ class CompositeMap:
     def make_composite_mass_tracks(self):
         '''
         Generate composite mass tracks by summing up signals from all samples after RT calibration.
-
-        Start a RT_index: intensity dict, and cummulate intensity values. 
-        Convert back to rtlist, intensities at the end.
-        Because RT may be distorted, e.g. from sample to ref mapping: 
-            {384: 387, 385: 387, 386: 388, 387: 388, 388: 389, 389: 389, 390: 390, 391: 390, },
-        smoothing is needed in doing the composite.
+        Each mass track from a sample is np.array of full RT range.
+        The SM.rt_cal_dict only records changes to be made. 
+        It's also empty if no RT alignment was done, in which case RT is assumed to match to reference.
 
         Return:
-        Dict {mz_index_number: intensity_track, ...}
-        Dict of dict {mz_index_number: {'rt_scan_numbers': xx, 'intensity':yy }, ...}
+        Dict of dict {mz_index_number: {'id_number': k, 'mz': mzDict[k], 'intensity': v}, ...}
         '''
         mzDict = dict(self.MassGrid['mz'])
         mzlist = list(self.MassGrid.index)                          # this gets indices as keys, per mass track
@@ -311,12 +309,14 @@ class CompositeMap:
 
         for SM in self.experiment.all_samples:
             list_mass_tracks = SM.get_masstracks_and_anchors()
-            if SM.rt_cal_dict:
-                for k in mzlist:
-                    ref_index = self.MassGrid[SM.name][k]
-                    if not pd.isna(ref_index): # ref_index can be NA 
-                        _comp_dict[k] += remap_intensity_track(list_mass_tracks[int(ref_index)]['intensity'], 
-                                                                basetrack.copy(), SM.rt_cal_dict)
+            # if SM.rt_cal_dict:
+            for k in mzlist:
+                ref_index = self.MassGrid[SM.name][k]
+                if not pd.isna(ref_index): # ref_index can be NA 
+                    _comp_dict[k] += remap_intensity_track(list_mass_tracks[int(ref_index)]['intensity'], 
+                                                            basetrack.copy(), SM.rt_cal_dict)
+
+
         result = {}
         for k,v in _comp_dict.items():
             result[k] = { 'id_number': k, 'mz': mzDict[k], 'intensity': v }
@@ -334,8 +334,7 @@ class CompositeMap:
         '''
         FeatureTable = pd.DataFrame(self.FeatureList)
         for SM in self.experiment.all_samples:
-            if SM.rt_cal_dict:
-                FeatureTable[SM.name] = self.extract_features_per_sample(SM)
+            FeatureTable[SM.name] = self.extract_features_per_sample(SM)
 
         self.FeatureTable = FeatureTable
 
@@ -386,3 +385,25 @@ class MassGridCluster:
         '''
 
         pass
+
+
+
+
+
+class SampleAssembly(CompositeMap):
+    '''
+    
+    
+    Alternative workflow:
+    peak detection in each sample, then align by distance threshold.
+
+
+
+    '''
+
+
+    def align_samples(self, ):
+        pass
+
+
+
