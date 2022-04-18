@@ -15,83 +15,36 @@ from .chromatograms import *
 from .peaks import *
 from .samples import SimpleSample
 
-class CompositeMap:
-    '''
-    Each experiment is summarized into a CompositeMap (CMAP), as a master feature map.
-    i) MassGrid: a matrix (DataFrame) for correspondence of mass tracks to each sample 
-    ii) FeatureList: list of feature definitions, i.e. peaks defined on composite mass tracks.
-    iii) FeatureTable: a matrix for feature intensities per sample
 
-    Steps:
-    1. Build MassGrid. Choose one reference from all samples for the largest number of landmark m/z tracks.
-    2. Add each of remaining samples to MassGrid, 
-    m/z alignment iguided by matched isotope/adduct pairs. Reference m/z is updated every time.
-    RT alignment function is determined per sample, using selective landmark peaks.
-    Default is a LOWESS function, but open to others to plugin.
-    3. Build composite elution profile (composite_mass_tracks)
-    by cumulative sum of mass tracks from all samples after RT correction.
-    4. Global peak detection is performed on each composite massTrack.
-    5. Mapping global peaks (i.e. features) back to all samples and extract sample specific peak areas.
-    This completes the FeatureTable.
-    6. Grouping features to empirical compounds (defined in metDataModel package).
-    '''
-    def __init__(self, experiment):
-        '''
-        Composite map of mass tracks and features, with pointers to individual samples.
-        '''
+
+class MassGrid:
+    def __init__(self, cmap=None, experiment=None):
         self.experiment = experiment
-        self._number_of_samples_ = experiment.number_of_samples
-        self.list_sample_names = [experiment.sample_registry[ii]['name'] for ii in experiment.valid_sample_ids]
-        self._number_of_valid_samples_ = len(self.list_sample_names)
-
-        # designated reference sample; all RT is aligned to this sample
-        self.reference_sample_instance = self.reference_sample = self.get_reference_sample_instance(experiment.reference_sample_id)
-        self.rt_length = len(self.reference_sample.rt_numbers)
-
-        self.MassGrid = None                        # will be DF
-        self.FeatureTable = None
-        self.FeatureList = []
-
-        self._mz_landmarks_ = []                    # m/z landmarks as index numbers
-        self.good_reference_landmark_peaks = []     # used for RT alignment and m/z calibration to DB
-        # 
-        self.reference_mzdict = {}
-        self.composite_mass_tracks = {}             # following MassGrid indices
+        self.CMAP = cmap
+        self.reference_sample_instance = self.CMAP.reference_sample_instance
+        self.max_ref_rtime = self.CMAP.max_ref_rtime
+        self.list_sample_names = self.CMAP.list_sample_names
+        self._number_of_samples_ = self.CMAP._number_of_samples_
 
 
-    def get_reference_sample_instance(self, reference_sample_id):
-        SM = SimpleSample(self.experiment.sample_registry[reference_sample_id],
+        # ??
+        # self.grid = np.array()
+
+
+    def build_grid(self):
+        '''
+        from [(mz, track_id, sample_num), ...]
+        assemble mass grid
+        
+        '''
+        self._initiate_mass_grid()
+        sample_ids = self.experiment.valid_sample_ids
+        sample_ids.pop(self.experiment.reference_sample_id)
+        for sid in sample_ids:
+            SM = SimpleSample(self.experiment.sample_registry[sid],
                 experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode)
-        SM.list_mass_tracks = SM.get_masstracks_and_anchors()
-        self.dict_scan_rtime = dict(zip(SM.rt_numbers, SM.list_retention_time))
-        self.max_ref_rtime = max(SM.list_retention_time)
-        return SM
 
-    def construct_mass_grid(self):
-        '''
-        MassGrid for whole experiment. Use sample name as column identifiers.
-        All mass tracks are included at this stage, regardless if peaks are detected, because
-        peak detection will be an improved process on the composite tracks.
-        '''
-        if self._number_of_valid_samples_ <= self.experiment.parameters['project_sample_number_small']:
-            self._initiate_mass_grid()
-            sample_ids = self.experiment.valid_sample_ids
-            sample_ids.pop(self.experiment.reference_sample_id)
-            for sid in sample_ids:
-                SM = SimpleSample(self.experiment.sample_registry[sid],
-                    experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode)
-
-                self.add_sample(SM)
-                
-        elif self._number_of_valid_samples_ <= self.experiment.parameters['project_sample_number_large']:
-
-            MGC = MassGridCluster(  )
-            self.MassGrid = MGC.grid()
-
-
-        else:   # split and do batch build
-
-            pass
+            self.add_sample(SM)
 
 
     def _initiate_mass_grid(self):
@@ -152,6 +105,103 @@ class CompositeMap:
         
         self.experiment.number_scans = max(self.experiment.number_scans, max(sample.rt_numbers))
         self.experiment.all_samples.append(sample)
+
+
+
+
+    def join(self, M2):
+        '''
+        Join with another MassGridCluster.
+        Using a common reference, which should be the 1st sample in both clusters.
+        Return the merged MassGridCluster.
+        '''
+
+        pass
+
+
+
+
+
+
+
+
+
+
+class CompositeMap:
+    '''
+    Each experiment is summarized into a CompositeMap (CMAP), as a master feature map.
+    i) MassGrid: a matrix (DataFrame) for correspondence of mass tracks to each sample 
+    ii) FeatureList: list of feature definitions, i.e. peaks defined on composite mass tracks.
+    iii) FeatureTable: a matrix for feature intensities per sample
+
+    Steps:
+    1. Build MassGrid. Choose one reference from all samples for the largest number of landmark m/z tracks.
+    2. Add each of remaining samples to MassGrid, 
+    m/z alignment iguided by matched isotope/adduct pairs. Reference m/z is updated every time.
+    RT alignment function is determined per sample, using selective landmark peaks.
+    Default is a LOWESS function, but open to others to plugin.
+    3. Build composite elution profile (composite_mass_tracks)
+    by cumulative sum of mass tracks from all samples after RT correction.
+    4. Global peak detection is performed on each composite massTrack.
+    5. Mapping global peaks (i.e. features) back to all samples and extract sample specific peak areas.
+    This completes the FeatureTable.
+    6. Grouping features to empirical compounds (defined in metDataModel package).
+    '''
+    def __init__(self, experiment):
+        '''
+        Composite map of mass tracks and features, with pointers to individual samples.
+        '''
+        self.experiment = experiment
+        self._number_of_samples_ = experiment.number_of_samples
+        self.list_sample_names = [experiment.sample_registry[ii]['name'] for ii in experiment.valid_sample_ids]
+        self._number_of_valid_samples_ = len(self.list_sample_names)
+
+        # designated reference sample; all RT is aligned to this sample
+        self.reference_sample_instance = self.reference_sample = self.get_reference_sample_instance(experiment.reference_sample_id)
+        self.rt_length = len(self.reference_sample.rt_numbers)
+
+        self.MassGrid = None                        # will be DF
+        self.FeatureTable = None
+        self.FeatureList = []
+
+        self._mz_landmarks_ = []                    # m/z landmarks as index numbers
+        self.good_reference_landmark_peaks = []     # used for RT alignment and m/z calibration to DB
+        # 
+        self.reference_mzdict = {}
+        self.composite_mass_tracks = {}             # following MassGrid indices
+
+
+    def get_reference_sample_instance(self, reference_sample_id):
+        SM = SimpleSample(self.experiment.sample_registry[reference_sample_id],
+                experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode)
+        SM.list_mass_tracks = SM.get_masstracks_and_anchors()
+        self.dict_scan_rtime = dict(zip(SM.rt_numbers, SM.list_retention_time))
+        self.max_ref_rtime = max(SM.list_retention_time)
+        return SM
+
+    def construct_mass_grid(self):
+        '''
+        MassGrid for whole experiment. Use sample name as column identifiers.
+        All mass tracks are included at this stage, regardless if peaks are detected, because
+        peak detection will be an improved process on the composite tracks.
+        '''
+        MG = MassGrid( self, self.experiment )
+        if self._number_of_valid_samples_ <= self.experiment.parameters['project_sample_number_small']:
+            MG.build_grid()
+            self.MassGrid = MG.MassGrid
+            self._mz_landmarks_ = MG._mz_landmarks_
+
+
+                
+        elif self._number_of_valid_samples_ <= self.experiment.parameters['project_sample_number_large']:
+            
+            self.MassGrid = MGC.MassGrid
+
+
+        else:   # split and do batch build
+
+            pass
+
 
 
     def mock_rentention_alignment(self):
@@ -326,11 +376,6 @@ class CompositeMap:
 
     def generate_feature_table(self):
         '''
-        cmap_header = ['feature_id', 'cmap_masstrack_id', 'mz', 'rtime', 'rt_min', 'rt_max', 
-                'peak_quality', 'selectivity_mz', 'height_mean', 'peak_area_mean', ]
-        header = cmap_header + self.list_sample_names
-        FeatureTable = pd.DataFrame( 
-                np.zeros((len(self.FeatureList), len(header))), columns=header, )
         '''
         FeatureTable = pd.DataFrame(self.FeatureList)
         for SM in self.experiment.all_samples:
@@ -363,28 +408,6 @@ class CompositeMap:
         return fList
 
 
-class MassGridCluster:
-    def __init__(self):
-        
-        self.grid = np.array()
-
-    def build_grid(self):
-        '''
-        from [(mz, track_id, sample_num), ...]
-        assemble mass grid
-        
-        '''
-        pass
-
-
-    def join(self, M2):
-        '''
-        Join with another MassGridCluster.
-        Using a common reference, which should be the 1st sample in both clusters.
-        Return the merged MassGridCluster.
-        '''
-
-        pass
 
 
 
