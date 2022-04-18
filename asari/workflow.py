@@ -46,7 +46,9 @@ def process_project(list_input_files, parameters):
             parameters['database_mode'] = 'ondisk'       # to implement 'split' 
 
     # time_stamp is `month daay hour minute second``
-    time_stamp = ''.join([str(x) for x in time.localtime()[1:6]])
+    time_stamp = [str(x) for x in time.localtime()[1:6]]
+    parameters['time_stamp'] = ':'.join(time_stamp)
+    time_stamp = ''.join(time_stamp)
     if parameters['database_mode'] == 'ondisk':
         create_export_folders(parameters, time_stamp)
         

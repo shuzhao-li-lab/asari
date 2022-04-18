@@ -67,7 +67,7 @@ def main(parameters=PARAMETERS):
         if args.autoheight:
             from .analyze import estimate_min_peak_height
             parameters['min_peak_height'] = estimate_min_peak_height(list_input_files)
-            
+
         parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
 
         process_project( list_input_files,  parameters )
@@ -109,5 +109,5 @@ def main(parameters=PARAMETERS):
 # -----------------------------------------------------------------------------
 #
 if __name__ == '__main__':
-
+    PARAMETERS['asari_version'] = __version__
     main(PARAMETERS)
