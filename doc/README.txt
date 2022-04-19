@@ -1,12 +1,24 @@
 # Notes for Developers
 
+## Algorithms and work flows
+
+- From each mzML data file, mass tracks of unique m/z values are extracted, then aligned into a MassGrid.
+- Retention time is calibrated for each sample to a common reference sample.
+- For each m/z value, corresponding mass tracks from all sample files are summarized into one composite mass track.
+- Peak detection is performed on the composite mass trackes to generate a feature list for the experiment.
+- The features and mapped back to each sample to extract peak area as intensity values.
+
+The approach of MassGrid and composite mass trackes is highly scalable.
+Should one wish to take the traditional way, an alternative workflow allows peak detection upfront, 
+followed by retention time alignment and correspondence.
+
 Terminology is mostly defined in metDataModel (https://github.com/shuzhao-li/metDataModel).
 Major difference to proteomics is that a feature in LC-MS metabolomics is defined by m/z and retention time across one experiment.
 We use `empirical compound` to group degenerate features into a tentative compound/metabolite.
 Mass track is used in asari, to cover full range of retention time, because alignment of m/z values is fixed in an early step.
 
-Data formats
-============
+## Data formats
+
 In the asari/mummichog packages, the data entities are presented in any of the four types: 
 class, namedtuple, JSON style dictionary or implicit list. 
 The implicit lists are used sparely as they have reduced clarity. 
@@ -100,18 +112,6 @@ Registry example format:
     }
 ```
 
-RT and m/z values will have calibration functions after CompositeMap.
-
-
-
-
-
-
-### to add to doc/
-
-notebook explaining the algorithms.
-
-notebook example of how to use the library for advanced functions.
 
 CenturionTree
 =============
@@ -136,12 +136,13 @@ i) CMAP construction
 ii) RT index switching btw peak detection functions and others.
 
 
-Notebooks 
-=========
+Notebooks (wishlist) 
+====================
+
+notebooks explaining the algorithms, and examples of how to use the library for advanced functions.
 
 - Single sample processing, inspection, and determine ppm precision.
     Quick peak detection; plot m/z peaks and LC peaks; Figure 1 in paper.
-
 
 - Process data without upfront LC alignment
 
@@ -170,5 +171,4 @@ Possible to improve performance in next version:
 Use C to rewrite chromatogram constructor.
 After initial samples, the peak detection of most features can start from building EIC in C, 
 to reduce workload in scipy.signal.find_peak.
-
 

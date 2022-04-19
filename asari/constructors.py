@@ -215,7 +215,9 @@ class CompositeMap:
     def align_retention_time(self):
         '''
         Because RT will not match precisely btw samples, it's remapped to a common set of time coordinates.
-        The default is a LOWESS algorith, while dynamic time warp (DTW) and univariate spline are also used in the field.
+        The default is a LOWESS algorithm.
+        Also used in the field include dynamic time warp (DTW) and univariate spline.
+        We saw no reason to use them, but people are welcome to implement alternative functions.
 
         Do alignment function using high-selectivity mass tracks.
         Step 1. get high-selectivity mass tracks among landmarks.
@@ -224,11 +226,10 @@ class CompositeMap:
         3. use RT from 2, do LOWESS fit to reference RT values. 
         The fitted function will be recorded for each sample, 
         and applied to all RT scan numbers in the samples when used for CMAP construction.
-
+        Important:
         sample.rt_cal_dict, sample.reverse_rt_cal_dict are kept for changed values only and set within sample RT boundaries.
-        
-        Marked samples that fail in RT alignment, and deal with them at the end.
-
+        This is efficient by ignoring unnecessary tracking, and {} is consistent with samples without RT alignment.
+        When samples fail in RT alignment,they are logged in warning and treated at the end as if no alignment is required.
         '''
         print("\nCalibrating retention time to reference, ...\n")
         cal_min_peak_height = self.experiment.parameters['cal_min_peak_height']
@@ -247,6 +248,12 @@ class CompositeMap:
         Calibrate retention time per sample.
         This is based on a set of unambiguous peaks: quich peak detection on anchor mass trakcs, 
         and peaks that are unique to each track are used for RT alignment.
+
+        When calibration_fuction fails, e.g. inf on lowess_predicted,
+        it is assumed that this sample is not amendable to computational alignment,
+        and the sample will be attached later without adjusting retention time.
+        One can also use alternative workflow if so desired, 
+        to do peak detection in all samples and correspond the peaks after.
         '''
         candidate_landmarks = [self.MassGrid[sample.name].values[
                                 p['ref_id_num']] for p in self.good_reference_landmark_peaks] # contains NaN

@@ -245,16 +245,11 @@ def rt_lowess_calibration(good_landmark_peaks, selected_reference_landmark_peaks
     lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=1, xvals=sample_rt_numbers)
     interf = interpolate.interp1d(lowess_predicted, sample_rt_numbers, fill_value="extrapolate")
     ref_interpolated = interf( reference_rt_numbers )
-
     lowess_predicted = [int(round(ii)) for ii in lowess_predicted]
-
-    # check inf on int(round(ii))
-
     rt_cal_dict = dict( 
         [(x,y) for x,y in zip(sample_rt_numbers, lowess_predicted) if x!=y and 0<=y<=reference_rt_bound] )
 
     ref_interpolated = [int(round(ii)) for ii in ref_interpolated]
-
     reverse_rt_cal_dict = dict(
         [(x,y) for x,y in zip(reference_rt_numbers, ref_interpolated) if x!=y and 0<=y<=sample_rt_bound] )
         
@@ -303,7 +298,6 @@ def remap_intensity_track(intensity_track, new, rt_cal_dict):
     return new
 
 
-
 # -----------------------------------------------------------------------------
 # smoothing function
 # -----------------------------------------------------------------------------
@@ -338,4 +332,3 @@ def smooth_lowess(list_intensity, frac=0.02):
     lxy = lowess(list_intensity, range(len(list_intensity)), frac=frac, it=1)
     _, newy = list(zip(*lxy))
     return newy
-

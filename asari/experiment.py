@@ -36,7 +36,7 @@ class ext_Experiment:
         Samples are sorted by name and assigned unique IDs.
 
         Input
-        -----
+        =====
         list_input_files: list of inputfiles, including directory path, to read
         dict_meta_data: description of sample types for each file, e.g. 'QC', 'pooled', 'sample'. Not used now.
         parameters: including 'ionization_mode', 'min_intensity_threshold', 'min_timepoints'. See main.py.
@@ -74,22 +74,15 @@ class ext_Experiment:
 
     def process_all(self):
         '''
+        This is default asari workflow, whereas samples are aligned via LOWESS regression,
+        and peak detection is performed on composite mass tracks.
         '''
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
-
         if self.parameters['rt_align_on']:
-
-            self.CMAP.align_retention_time()            # add rt_align_method as arg
-            
-            # some samples could fail alignment; can be processed and aligned at the end
-
-            # add 3rd option of RT align
-
+            self.CMAP.align_retention_time() 
         else:
             self.CMAP.mock_rentention_alignment()
-
-
         self.CMAP.global_peak_detection()
   
 
