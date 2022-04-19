@@ -1065,9 +1065,227 @@ class ext_Experiment_old(Experiment):
 #---------------------------------------------------------------------------------------------------------------
 
 
+from collections import namedtuple
+
+# from scipy.stats import norm as normal_distribution
+
+
+# feature id will be assigned at the end; intensities is a list; mass_id links to MassTrace
+Feature = namedtuple('Feature', ['feature_id', 'mass_id', 'mz', 'rtime', 'rt_min', 'rt_max', 
+                                'peak_quality_max', 'peak_quality_median', 'number_peaks', 'perc_peaks',
+                                'selectivity_combined', 'selectivity_mz', 'intensity_mean',
+                                'intensities'])
+
+def peaks_to_features(peak_dict, rtime_tolerance, ordered_sample_names):
+    
+    '''peak_dict: {formula_mass or _M_id: list of Peaks}
+    return List of Features (namedTuples, 'mass_id,mz,rtime,peak_quality,selectivity_rt,intensities'), 
+    following the input sample order.
+    '''
+    
+    def __get_peaks_intensities__(peaks, ordered_sample_names):
+        dict_intensities = {}
+        for P in peaks: 
+            if P.sample_name in dict_intensities:
+                dict_intensities[P.sample_name] += P.peak_area      # redundant peaks in same m/z & rt are merged/summed here
+            else:
+                dict_intensities[P.sample_name] = P.peak_area
+        return [dict_intensities.get(name, 0) for name in ordered_sample_names]
+
+    def __bin_by_median_rt__(List_of_peaks, tolerance):
+        List_of_tuples = [(P.cal_rtime, P) for P in List_of_peaks]
+        List_of_tuples.sort()
+        return bin_by_median(List_of_tuples, lambda x: max(tolerance, 0.1*x))
+
+    FeatureList = []            # still possibly not distinguishing close peaks well, which may be treated as combined peaks. 
+    for k,v in peak_dict.items():
+        for F in __bin_by_median_rt__(v, rtime_tolerance):
+            median_mz, median_rt = np.median([P.mz for P in F]), np.median([P.cal_rtime for P in F])
+            feature_id = str(round(median_mz,4)) + '@' + str(round(median_rt,2))
+            rt_min = float(min([P.left_rtime for P in F]))          # checking if this is np.array ???
+            rt_max = float(max([P.right_rtime for P in F]))
+            peak_quality_max = max([P.goodness_fitting for P in F])
+            peak_quality_median = np.median([P.goodness_fitting for P in F])
+            number_peaks = len(set([P.sample_name for P in F]))
+            perc_peaks = 100.0 * number_peaks/len(ordered_sample_names)
+            selectivity_mz = np.mean([P.selectivity for P in F])
+            selectivity_combined = 9
+            intensities = __get_peaks_intensities__(F, ordered_sample_names)
+            intensity_mean = int(sum(intensities)/number_peaks)
+            FeatureList += [Feature(feature_id, k, median_mz, median_rt, rt_min, rt_max, 
+                            peak_quality_max, peak_quality_median, number_peaks, perc_peaks,
+                            selectivity_combined, selectivity_mz, intensity_mean, intensities)]
+
+    return FeatureList
+
+
+# -----------------------------------------------------------------------------
+#
+# Not used now
+# -----------------------------------------------------------------------------
+
+def _get_downstair_neighbor_mixedlist_(all_sorted_list, ii, ii_limit=0):
+    # return nearest m/z neighbor of same list_origin in sorted [(mz, list_origin, index_origin), ...]
+    # -1 indicates none found
+    list_origin = all_sorted_list[ii][1]        # from list 1 or 2
+    ii -= 1
+    while ii >= ii_limit and all_sorted_list[ii][1] != list_origin:
+        ii -= 1
+    if all_sorted_list[ii][1] == list_origin:
+        return ii
+    else:
+        return -1
+
+def _get_upstair_neighbor_mixedlist_(all_sorted_list, ii, ii_limit):
+    # return nearest m/z neighbor of same list_origin in sorted [(mz, list_origin, index_origin), ...]
+    # -1 indicates none found
+    list_origin = all_sorted_list[ii][1]        # from list 1 or 2
+    ii += 1
+    while ii < ii_limit and all_sorted_list[ii][1] != list_origin:
+        ii += 1
+    if all_sorted_list[ii][1] == list_origin:
+        return ii
+    else:
+        return -1
 
 
 
+# -----------------------------------------------------------------------------
+# indexing function
+# -----------------------------------------------------------------------------
+
+def get_thousandth_regions(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000):
+    '''
+    Process all LC-MS spectral data into flexible bins by units of 0.001 amu.
+
+    Input
+    =====
+    ms_expt = pymzml.run.Reader(f), a parsed object of LC-MS data file
+    mz_tolerance_ppm: m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
+    min_intensity: minimal intentsity value, needed because some instruments keep 0s 
+    min_timepoints: minimal consecutive scans to be considered real signal.
+    min_peak_height: a bin is not considered if the max intensity < min_peak_height.
+    
+    Return: a list of flexible bins, [ [(mz, scan_num, intensity_int), ...], ... ]
+    '''
+    def __rough_check_consecutive_scans__(datatuples, check_max_len=20, gap_allowed=2, min_timepoints=min_timepoints):
+        # a list of data points in format of (mz_int, scan_num, intensity_int)
+        _checked = True
+        if len(datatuples) < check_max_len:
+            min_check_val = gap_allowed + min_timepoints -1 # step is 4 in five consecutive values without gap
+            rts = sorted([x[1] for x in datatuples])
+            steps = [rts[ii]-rts[ii-min_timepoints+1] for ii in range(min_timepoints-1, len(rts))]
+            if min(steps) > min_check_val:
+                _checked = False
+        return _checked
+
+    def __check_min_peak_height__(datatuples, min_peak_height):
+        return max([x[2] for x in datatuples]) >= min_peak_height
+
+    tol_ = 0.000001 * mz_tolerance_ppm
+    number_spectra = ms_expt.getNrSpectra()
+
+    alldata = []
+    for ii in range(number_spectra):
+        if ms_expt[ii].getMSLevel() == 1:                               # MS Level 1 only
+            for (mz, intensity) in zip(*ms_expt[ii].get_peaks()):
+                if intensity > min_intensity:
+                    alldata.append((mz, ii, int(intensity)))
+
+    #print("extracted %d valide data points." %len(alldata))
+    mzTree = {}
+    for x in alldata:
+        ii = int(x[0]*1000)
+        if ii in mzTree:
+            mzTree[ii].append(x)
+        else:
+            mzTree[ii] = [x]
+
+    del alldata
+    ks = sorted([k for k,v in mzTree.items() if len(v) >= min_timepoints]) # ascending order enforced
+    bins_of_bins = []
+    tmp = [ks[0]]
+    for ii in range(1, len(ks)):
+        _delta = ks[ii] - ks[ii-1]
+        # merge adjacent bins if they are next to each other or within ppm tolerance
+        if _delta==1 or _delta < tol_ * ks[ii]:
+            tmp.append(ks[ii])
+        else:
+            bins_of_bins.append(tmp)
+            tmp = [ks[ii]]
+
+    bins_of_bins.append(tmp)
+    good_bins = []
+    for bin in bins_of_bins:
+        datatuples = []
+        for b in bin:
+            datatuples += mzTree[b]
+        # check the presence of min consecutive RT in small traces, to filter out more noises
+        # e.g. in an example datafile, 5958 reduced to 4511 traces
+        if __check_min_peak_height__(datatuples, min_peak_height) and __rough_check_consecutive_scans__(datatuples):
+            good_bins.append(datatuples)
+    
+    # del mzTree
+    return good_bins
+
+
+def sum_dict(dict1, dict2):
+    new = {}
+    for k in dict2:
+        if k in dict1:
+            new[k] = dict1[k] + dict2[k]
+        else:
+            new[k] = dict2[k]
+    return new
+
+
+def merge_two_mass_tracks_old(T1, T2):
+    '''
+    massTrack as ( mz, rtlist, intensities )
+    '''
+    mz = 0.5 * (T1[0] + T2[0])
+    d_ = sum_dict( dict(zip(T1[1], T1[2])), dict(zip(T2[1], T2[2])) )
+    return (mz, list(d_.keys()), list(d_.values()))
+
+
+def extract_single_track_old(bin):
+    '''
+    Phased out after v1.4.
+    A mass track is an EIC for full RT range, without separating the mass traces. 
+    input bins in format of [(mz_int, scan_num, intensity_int), ...].
+    return a massTrack as ( mz, rtlist, intensities ).
+    '''
+    mz = np.mean([x[0] for x in bin])
+    # bin.sort(key=itemgetter(1))   # sort by increasing RT (scan number), not needed any more
+    rtlist = [x[1] for x in bin]
+    min_rt, max_rt = min(rtlist), max(rtlist)
+    rtlist = range(min_rt, max_rt+1)    # filling gaps of RT this way if needed, and sorted
+    _d = {}                             # dict to hold rt to intensity mapping
+    for ii in rtlist: 
+        _d[ii] = 0
+    for r in bin:                       # this gets max intensity on the same RT scan
+        _d[r[1]] = max(r[2], _d[r[1]])
+    intensities = [_d[x] for x in rtlist]
+
+    return ( mz, list(rtlist), intensities ) # range object is not desired - use list
+
+# -----------------------------------------------------------------------------
+# Not used for now
+# -----------------------------------------------------------------------------
+
+def mock_rt_calibration(sample_rt_numbers, reference_rt_numbers):
+    '''
+    Create map dictionaries to allow sample to be used without RT calibration.
+
+    Input
+    =====
+    sample_rt_numbers, reference_rt_numbers are lists not np.arrays - important.
+
+    '''
+    _total = sorted(set(sample_rt_numbers + reference_rt_numbers))
+    rt_cal_dict = reverse_rt_cal_dict = dict(zip( _total, _total ))
+    return rt_cal_dict, reverse_rt_cal_dict
+    
 
 
 

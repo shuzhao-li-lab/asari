@@ -34,7 +34,7 @@ def main(parameters=PARAMETERS):
     parser.add_argument('-j', '--project', 
             help='project name')
     parser.add_argument('-p', '--parameters', 
-            help='user supplied paramter file in YAML. Template from parameters.yaml.')
+            help='Custom paramter file in YAML. Use parameters.yaml as template.')
     parser.add_argument('-c', '--cores', type=int, 
             help='nunmber of CPU cores intented to use')
     parser.add_argument('-f', '--reference', 

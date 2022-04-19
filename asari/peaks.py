@@ -1,13 +1,5 @@
 '''
-While classes are provided in metDataModel, 
-mass tracks (i.e. XIC, EIC or chromatogram) and peaks are not instanced as classes in asari
-internal processing for efficiency.
-XICs as [( mz, rtlist, intensities ), ...].
-Peak format: 
-{
-    'id_number': 0, 'mz', 'apex', 'left_base', 'right_base', 'height', 'parent_masstrace_id', 
-    'rtime', 'peak_area', 'goodness_fitting', 'snr', 'cSelectivity',
-}
+Functions for peak detection and evaluation.
 '''
 
 import multiprocessing as mp

@@ -16,7 +16,6 @@ from .peaks import *
 from .samples import SimpleSample
 
 
-
 class MassGrid:
     def __init__(self, cmap=None, experiment=None):
         self.experiment = experiment
@@ -26,16 +25,11 @@ class MassGrid:
         self.list_sample_names = self.CMAP.list_sample_names
         self._number_of_samples_ = self.CMAP._number_of_samples_
 
-
-        # ??
-        # self.grid = np.array()
-
-
-    def build_grid(self):
-        '''
-        from [(mz, track_id, sample_num), ...]
-        assemble mass grid
         
+    def build_grid_sample_wise(self):
+        '''
+        Align one sample a time to reference m/z grid, based on their anchor m/z tracks.
+        This is better for reliable assembly of small number of samples.
         '''
         self._initiate_mass_grid()
         sample_ids = self.experiment.valid_sample_ids
@@ -43,8 +37,20 @@ class MassGrid:
         for sid in sample_ids:
             SM = SimpleSample(self.experiment.sample_registry[sid],
                 experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode)
-
             self.add_sample(SM)
+
+
+    def build_grid_by_centroiding(self):
+        '''
+        assemble mass grid by grouping m/z values to centroids.
+        Each centroid can have no more than one mass track per sample.
+        This is more efficient for large number of samples.
+        
+        '''
+        self._initiate_mass_grid()
+        # self.grid = np.array()
+
+        self.MassGrid = []
 
 
     def _initiate_mass_grid(self):
@@ -187,27 +193,23 @@ class CompositeMap:
         '''
         MG = MassGrid( self, self.experiment )
         if self._number_of_valid_samples_ <= self.experiment.parameters['project_sample_number_small']:
-            MG.build_grid()
-            self.MassGrid = MG.MassGrid
-            self._mz_landmarks_ = MG._mz_landmarks_
-
-
+            MG.build_grid_sample_wise()
                 
         elif self._number_of_valid_samples_ <= self.experiment.parameters['project_sample_number_large']:
-            
-            self.MassGrid = MGC.MassGrid
-
+            MG.build_grid_by_centroiding()
+           
 
         else:   # split and do batch build
 
             pass
 
+        self.MassGrid = MG.MassGrid
+        self._mz_landmarks_ = MG._mz_landmarks_
 
 
     def mock_rentention_alignment(self):
         for sample in self.experiment.all_samples[1:]:      # first sample is reference
             sample.rt_cal_dict, sample.reverse_rt_cal_dict = {}, {}
-            # mock_rt_calibration(sample.rt_numbers, self.reference_sample.rt_numbers)
 
 
     def align_retention_time(self):
@@ -275,7 +277,6 @@ class CompositeMap:
                 pass
         if not _CALIBRATED:
                 sample.rt_cal_dict, sample.reverse_rt_cal_dict =  {}, {}
-                #           mock_rt_calibration(sample.rt_numbers, self.reference_sample.rt_numbers)
                 print("    ~warning~ Faluire in retention time alignment (%d); %s is used without alignment." 
                                             %( _NN, sample.name))
                 

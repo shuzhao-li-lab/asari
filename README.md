@@ -20,9 +20,9 @@ Use
 ===
 If installed from pip, one can run `asari` as a command in a terminal, followed by a subcommand for specific tasks.
 
-Help information is evoked without argument:
+For help information:
 
-`asari`
+`asari -h`
 
 To process all mzML files under directory mydir/projectx_dir:
 
@@ -36,7 +36,7 @@ To get annotation on a tab delimited feature table:
 
 `asari annotate --mode pos --ppm 10 --input mydir/projectx_dir/feature_table_file.tsv`
 
-To add automatic esitmation of min peak height, add this argument:
+To do automatic esitmation of min peak height, add this argument:
 
 `--autoheight True`
 
@@ -46,13 +46,14 @@ Alternative to a standalone command, to run as a module via Python interpreter, 
 
 Parameters
 ==========
-Only one parameter in asari requires real attention, i.e., precision ppm is set at 5 by default. 
+Only one parameter in asari requires real attention, i.e., m/z precision is set at 5 ppm by default. 
 Most modern instruments are fine with 5 ppm, but one may want to change if needed.
 
 Default ionization mode is `pos`. Change to `neg` if needed, by specifying `--mode neg` in command line.
 
 Users can supply a custom parameter file `xyz.yaml`, via `--parameters xyz.yaml` in command line.
 A template YAML file can be found at `doc/parameters.yaml`.
+
 When the above methods overlap, command line arguments take priority.
 That is, commandline overwrites `xyz.yaml`, which overwrites default asari parameters in `defaul_parameters.py`. 
 
