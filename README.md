@@ -96,6 +96,14 @@ Selectivity is tracked for
 This package uses `mass2chem` and `JMS` for mass search and annotation functions.
 
 
+Large studies
+=============
+Asari is designed to run > 1000 samples on a laptop computer. 
+If the individual files are large or the sample number is very high, it is easy to split the data and run asari separately. One can then use `asari join` to merge the results.
+
+When a study has 10 or fewer samples, the MassGrid assembly uses a slower algorithm to compensate statistical distribution.
+
+
 Links
 =====
 Source code: https://github.com/shuzhao-li/asari

@@ -52,6 +52,8 @@ class MassGrid:
         self.MassGrid = []
 
 
+
+
     def _initiate_mass_grid(self):
         '''
         Initiate MassGrid using reference sample
@@ -60,7 +62,7 @@ class MassGrid:
         _d = dict(zip(reference_sample.rt_numbers, reference_sample.rt_numbers))
         reference_sample.rt_cal_dict = reference_sample.reverse_rt_cal_dict = _d
         ref_list_mass_tracks = reference_sample.list_mass_tracks
-        self.experiment.number_scans = max(reference_sample.rt_numbers)
+        # self.experiment.number_scans = max(reference_sample.rt_numbers)
 
         print("\nInitiating MassGrid, ...\n    The reference sample is:\n    ||* %s *||\n" %reference_sample.name)
         print("Max _retention_time is %4.2f at scan number %d.\n" %(self.max_ref_rtime,
@@ -108,7 +110,8 @@ class MassGrid:
         self._mz_landmarks_ = updated_REF_landmarks
         sample.mz_calibration_ratio = _r
         
-        self.experiment.number_scans = max(self.experiment.number_scans, max(sample.rt_numbers))
+        # self.experiment.number_scans = max(self.experiment.number_scans, max(sample.rt_numbers))
+
         self.experiment.all_samples.append(sample)
 
 
@@ -189,19 +192,16 @@ class CompositeMap:
         MassGrid for whole experiment. Use sample name as column identifiers.
         All mass tracks are included at this stage, regardless if peaks are detected, because
         peak detection will be an improved process on the composite tracks.
+        Number of samples dictate workflow: 
+        build_grid_by_centroiding is fast, but build_grid_sample_wise is used for small studies 
+        to compensate limited size for statistical distribution.
         '''
         MG = MassGrid( self, self.experiment )
         if self._number_of_valid_samples_ <= self.experiment.parameters['project_sample_number_small']:
             MG.build_grid_sample_wise()
-                
-        elif self._number_of_valid_samples_ <= self.experiment.parameters['project_sample_number_large']:
+        else:
             MG.build_grid_by_centroiding()
            
-
-        else:   # split and do batch build
-
-            pass
-
         self.MassGrid = MG.MassGrid
         self._mz_landmarks_ = MG._mz_landmarks_
 
@@ -283,10 +283,9 @@ class CompositeMap:
                 pass
         if not _CALIBRATED:
                 sample.rt_cal_dict, sample.reverse_rt_cal_dict =  {}, {}
-                print("    ~warning~ Faluire in retention time alignment (%d); %s is used without alignment." 
+                print("    ~warning~ Faluire in retention time alignment (%d); %s is used without alignment.\n" 
                                             %( _NN, sample.name))
                 
-
 
     def set_RT_reference(self, cal_peak_intensity_threshold=100000):
         '''
@@ -394,7 +393,6 @@ class CompositeMap:
     def extract_features_per_sample(self, sample):
         '''
         watch for range due to calibration/conversion.
-
 
         '''
         fList = []

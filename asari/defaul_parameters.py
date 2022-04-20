@@ -42,9 +42,9 @@ PARAMETERS = {
     'peak_number_rt_calibration': 15,   # minimal number of selected high-quality peaks required for RT calibration. 
                                         # Samples with fewer selected peaks are dropped out.
 
-    # Number of samples dictate workflow - will set to 10, 1000
-    'project_sample_number_small': 1000,
-    'project_sample_number_large': 10000,
+    # Number of samples dictate workflow 
+    'project_sample_number_small': 10,
+    'project_sample_number_large': 1000, # not used now
 
     # default output names
     'output_feature_table': 'Feature_table.tsv',

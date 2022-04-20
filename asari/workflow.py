@@ -1,5 +1,7 @@
 '''
 ext_Experiment is the container for whole project data.
+sample_registry is the dict to track sample information and status,
+outside class to facilitate multiprocessing.
 Heavy lifting is in constructors.CompositeMap, 
     which contains MassGrid for correspondence, and FeatureList from feature/peak detection.
 Annotation is facilitated by jms-metabolite-services, mass2chem. 
@@ -43,7 +45,8 @@ def process_project(list_input_files, parameters):
     shared_dict = batch_EIC_from_samples_(sample_registry, parameters)
     for sid, sam in sample_registry.items():
         sam['status:mzml_parsing'], sam['status:eic'], sam['number_anchor_mz_pairs'
-                ], sam['data_location'], sam['track_mzs'], sam['sample_data'] = shared_dict[sid]
+                ], sam['data_location'], sam['track_mzs'], sam['sample_data'
+                ] = shared_dict[sid]
         sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
     
     # print(sample_registry)
@@ -138,6 +141,7 @@ def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
                     min_timepoints=min_timepoints, 
                     min_peak_height=min_peak_height)
         new['list_scan_numbers'] = xdict['rt_numbers']            # list of scans, starting from 0
+        new['max_scan_number'] = max(xdict['rt_numbers'])
         new['list_retention_time'] = xdict['rt_times']        # full RT time points in sample
         ii = 0
         # already in ascending order of m/z from extract_massTracks_, get_thousandth_regions
@@ -158,8 +162,9 @@ def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
         new['number_anchor_mz_pairs'] = len(anchor_mz_pairs)
 
         if database_mode == 'ondisk':
-
-            shared_dict[new['sample_id']] = ('passed', 'passed', new['number_anchor_mz_pairs'], outfile, track_mzs, {})
+            shared_dict[new['sample_id']] = ('passed', 'passed', new['number_anchor_mz_pairs'], outfile, track_mzs, {
+                'max_scan_number': new['max_scan_number']
+            })
             with open(outfile, 'wb') as f:
                 pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
 
