@@ -1,7 +1,7 @@
-# Notes for Developers
+Notes for Developers
 
-## Algorithms and work flows
-
+Algorithms and work flows
+=========================
 - From each mzML data file, mass tracks of unique m/z values are extracted, then aligned into a MassGrid.
 - Retention time is calibrated for each sample to a common reference sample.
 - For each m/z value, corresponding mass tracks from all sample files are summarized into one composite mass track.
@@ -17,8 +17,9 @@ Major difference to proteomics is that a feature in LC-MS metabolomics is define
 We use `empirical compound` to group degenerate features into a tentative compound/metabolite.
 Mass track is used in asari, to cover full range of retention time, because alignment of m/z values is fixed in an early step.
 
-## Data formats
 
+Data formats
+============
 In the asari/mummichog packages, the data entities are presented in any of the four types: 
 class, namedtuple, JSON style dictionary or implicit list. 
 The implicit lists are used sparely as they have reduced clarity. 

@@ -82,10 +82,6 @@ def iter_peak_detection_parameters(list_mass_tracks, max_rt_number, parameters, 
 
 
 
-
-
-
-
 def deep_detect_elution_peaks( mass_track, max_rt_number, 
                 min_peak_height, min_fwhm, min_prominence_threshold,
                 wlen, snr, min_prominence_ratio, iteration,

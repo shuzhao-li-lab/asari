@@ -24,7 +24,6 @@ class MassGrid:
         self.max_ref_rtime = self.CMAP.max_ref_rtime
         self.list_sample_names = self.CMAP.list_sample_names
         self._number_of_samples_ = self.CMAP._number_of_samples_
-
         
     def build_grid_sample_wise(self):
         '''

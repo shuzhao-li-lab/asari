@@ -234,7 +234,7 @@ class ext_Experiment:
     def export_log(self):
         '''
         Export project parameters to project.json.
-        asari viz can look for project.json when launched standalone?
+        Should asari viz can look for project.json when launched standalone?
 
         '''
         outfile = os.path.join(self.parameters['outdir'], 'project.json')
