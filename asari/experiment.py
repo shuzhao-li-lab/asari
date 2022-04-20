@@ -64,8 +64,13 @@ class ext_Experiment:
                 if os.path.basename(self.parameters['reference']) == os.path.basename(v['input_file']):
                     return k
         elif self.sample_registry:
-            L = [(v['number_anchor_mz_pairs'], k) for k,v in self.sample_registry.items()]
-            return sorted(L, reverse=True)[0][1]
+            L = [(v['number_anchor_mz_pairs'], v) for v in self.sample_registry.values()]
+            L.sort(reverse=True)
+            ref = L[0][1]
+            print("\n    The reference sample is:\n    ||* %s *||\n" %ref['name'])
+            print("Max reference retention time is %4.2f at scan number %d.\n" %(
+                max(ref['sample_data']['list_retention_time']), ref['sample_data']['max_scan_number']))
+            return ref['sample_id']
         else:
             return None
         
@@ -224,7 +229,7 @@ class ext_Experiment:
 
         outfile = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
         filtered_FeatureTable.to_csv(outfile, index=False, sep="\t")
-        print("Feature table (%d x %d) was written to %s." %(
+        print("\nFeature table (%d x %d) was written to %s." %(
                                 filtered_FeatureTable.shape[0], self.number_of_samples, outfile))
 
         outfile = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])

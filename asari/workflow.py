@@ -22,24 +22,22 @@ def process_project(list_input_files, parameters):
     '''
     list_input_files: mzML files.
     parameters: dictionary of parameters.
-    sample_registry include: 'status:mzml_parsing', 'status:eic', 'number_anchor_mz_pairs', 
-                'data_location', track_mzs: (mz, masstrack_id), 'sample_data': {}
+
+    Will adjust disk writing according to database_mode
     '''
     sample_registry = register_samples(list_input_files)
     if parameters['database_mode'] == 'auto':
         if len(list_input_files) <= parameters['project_sample_number_small']:
             parameters['database_mode'] = 'memory'
-        elif len(list_input_files) <= parameters['project_sample_number_large']:
-            parameters['database_mode'] = 'ondisk'
         else:
-            parameters['database_mode'] = 'ondisk'       # to implement 'split' 
+            parameters['database_mode'] = 'ondisk'       # yet to implement mongo etc
 
     # time_stamp is `month daay hour minute second``
     time_stamp = [str(x) for x in time.localtime()[1:6]]
     parameters['time_stamp'] = ':'.join(time_stamp)
     time_stamp = ''.join(time_stamp)
-    if parameters['database_mode'] == 'ondisk':
-        create_export_folders(parameters, time_stamp)
+    # if parameters['database_mode'] == 'ondisk':
+    create_export_folders(parameters, time_stamp)
         
     # samples are processed to mass tracks (EICs) here
     shared_dict = batch_EIC_from_samples_(sample_registry, parameters)
@@ -49,13 +47,8 @@ def process_project(list_input_files, parameters):
                 ] = shared_dict[sid]
         sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
     
-    # print(sample_registry)
     EE = ext_Experiment(sample_registry, parameters)
     EE.process_all()
-
-    # export is separated, as it may be limited in some environments
-    if parameters['database_mode'] != 'ondisk':
-        create_export_folders(parameters, time_stamp)
     EE.export_all()
 
 def read_project_dir(directory, file_pattern='.mzML'):

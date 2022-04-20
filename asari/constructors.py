@@ -46,10 +46,12 @@ class MassGrid:
         This is more efficient for large number of samples.
         
         '''
-        self._initiate_mass_grid()
         # self.grid = np.array()
 
-        self.MassGrid = []
+        self.MassGrid = pd.DataFrame(
+            np.full((len(reference_mzlist), 1+self._number_of_samples_), None),
+            columns=['mz'] + self.list_sample_names,
+        )
 
 
 
@@ -62,12 +64,8 @@ class MassGrid:
         _d = dict(zip(reference_sample.rt_numbers, reference_sample.rt_numbers))
         reference_sample.rt_cal_dict = reference_sample.reverse_rt_cal_dict = _d
         ref_list_mass_tracks = reference_sample.list_mass_tracks
-        # self.experiment.number_scans = max(reference_sample.rt_numbers)
 
-        print("\nInitiating MassGrid, ...\n    The reference sample is:\n    ||* %s *||\n" %reference_sample.name)
-        print("Max _retention_time is %4.2f at scan number %d.\n" %(self.max_ref_rtime,
-                                                                    max(reference_sample.rt_numbers)))
-
+        print("\nInitiating MassGrid, ...\n")
         self._mz_landmarks_ = reference_sample._mz_landmarks_
         reference_mzlist = [ x['mz'] for x in ref_list_mass_tracks ]
         # setting up DataFrame for MassGrid
@@ -110,8 +108,6 @@ class MassGrid:
         self._mz_landmarks_ = updated_REF_landmarks
         sample.mz_calibration_ratio = _r
         
-        # self.experiment.number_scans = max(self.experiment.number_scans, max(sample.rt_numbers))
-
         self.experiment.all_samples.append(sample)
 
 
@@ -162,11 +158,12 @@ class CompositeMap:
         self.experiment = experiment
         self._number_of_samples_ = experiment.number_of_samples
         self.list_sample_names = [experiment.sample_registry[ii]['name'] for ii in experiment.valid_sample_ids]
-        self._number_of_valid_samples_ = len(self.list_sample_names)
 
         # designated reference sample; all RT is aligned to this sample
         self.reference_sample_instance = self.reference_sample = self.get_reference_sample_instance(experiment.reference_sample_id)
-        self.rt_length = len(self.reference_sample.rt_numbers)
+        self.rt_length = self.experiment.number_scans
+        self.dict_scan_rtime = self.get_reference_rtimes(self.rt_length)
+        self.max_ref_rtime = self.dict_scan_rtime[self.rt_length-1]
 
         self.MassGrid = None                        # will be DF
         self.FeatureTable = None
@@ -174,18 +171,25 @@ class CompositeMap:
 
         self._mz_landmarks_ = []                    # m/z landmarks as index numbers
         self.good_reference_landmark_peaks = []     # used for RT alignment and m/z calibration to DB
-        # 
-        self.reference_mzdict = {}
+        # self.reference_mzdict = {}
         self.composite_mass_tracks = {}             # following MassGrid indices
-
 
     def get_reference_sample_instance(self, reference_sample_id):
         SM = SimpleSample(self.experiment.sample_registry[reference_sample_id],
                 experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode)
         SM.list_mass_tracks = SM.get_masstracks_and_anchors()
-        self.dict_scan_rtime = dict(zip(SM.rt_numbers, SM.list_retention_time))
-        self.max_ref_rtime = max(SM.list_retention_time)
         return SM
+
+    def get_reference_rtimes(self, rt_length):
+        '''
+        Extrapolate retention time on self.reference_sample_instance to max scan number in the experiment.
+        '''
+        X, Y = self.reference_sample.rt_numbers, self.reference_sample.list_retention_time
+        interf = interpolate.interp1d(X, Y, fill_value="extrapolate")
+        newX = range(rt_length)
+        newY = interf(newX)
+        return dict(zip(newX, newY))
+
 
     def construct_mass_grid(self):
         '''
@@ -197,7 +201,7 @@ class CompositeMap:
         to compensate limited size for statistical distribution.
         '''
         MG = MassGrid( self, self.experiment )
-        if self._number_of_valid_samples_ <= self.experiment.parameters['project_sample_number_small']:
+        if self._number_of_samples_ <= self.experiment.parameters['project_sample_number_small']:
             MG.build_grid_sample_wise()
         else:
             MG.build_grid_by_centroiding()
@@ -337,11 +341,14 @@ class CompositeMap:
             # convert scan numbers to rtime
             try:
                 peak['rtime'] = self.dict_scan_rtime[peak['apex']]
+            except KeyError:
+                peak['rtime'] = self.max_ref_rtime                # imputed value set at max rtime
+                print("Feature rtime out of bound - ", peak['id_number'], peak['apex'])
+            try:
                 peak['rtime_left_base'], peak['rtime_right_base'] = self.dict_scan_rtime[peak['left_base']
                                 ], self.dict_scan_rtime[peak['right_base']]
             except KeyError:
-                peak['rtime'] = self.max_ref_rtime                # imputed value set at max rtime
-                print("Peak rtime out of bound on", ii)
+                print("Feature rtime out of bound on", peak['id_number'], (peak['apex'], peak['left_base'], peak['right_base']))
 
         self.generate_feature_table()
 
