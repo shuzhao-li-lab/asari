@@ -301,3 +301,49 @@ def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks,
 
     return new_reference_mzlist, new_reference_map2, REF_landmarks, _r
 
+
+
+# -----------------------------------------------------------------------------
+
+
+def seed_nn_mz_cluster(bin_data_tuples, seed_indices):
+    '''
+    complete NN clustering
+    '''
+    seeds = [bin_data_tuples[ii] for ii in seed_indices]
+    _NN = len(seed_indices)
+    clusters = [[]] * _NN
+    # assing cluster number by nearest distance to a seed
+    for x in bin_data_tuples:
+        deltas = sorted([(abs(x[0]-seeds[ii][0]), ii) for ii in range(_NN)])
+        clusters[deltas[0][1]].append(x)
+
+    return clusters
+
+
+def gap_divide_mz_cluster(bin_data_tuples, mz_tolerance):
+    '''
+    return all clusters and each must be within mz_tolerance
+    '''
+    def __divide_by_largest_gap__(L):
+        gaps = [L[ii][0]-L[ii-1][0] for ii in range(1, len(L))]
+        largest = np.argmax(gaps) + 1
+        return L[:largest], L[largest:]
+
+    def __group_by_tolcheck__(good, bad, mz_tolerance):
+        tmp = []
+        for TT in bad:
+            for C in __divide_by_largest_gap__(TT):
+                # 
+                if C[-1][0] - C[0][0] < mz_tolerance:
+                    good.append(C)
+                else:
+                    tmp.append(C)
+
+        return good, tmp
+
+    good, bad = [], [bin_data_tuples]
+    while bad:
+        good, bad = __group_by_tolcheck__(good, bad, mz_tolerance)
+    
+    return good

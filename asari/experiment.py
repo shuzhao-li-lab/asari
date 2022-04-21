@@ -33,14 +33,9 @@ class ext_Experiment:
     def __init__(self, sample_registry, parameters):
         '''
         This is the overall container for all data in an experiment/project.
-        Samples are sorted by name and assigned unique IDs.
-
-        Input
-        =====
-        list_input_files: list of inputfiles, including directory path, to read
-        dict_meta_data: description of sample types for each file, e.g. 'QC', 'pooled', 'sample'. Not used now.
-        parameters: including 'ionization_mode', 'min_intensity_threshold', 'min_timepoints'. See main.py.
-
+        sample_registry: dictionary of sample and selected data after mass track extraction.
+            The bulk mass track data are not kept in memory unless specified so.
+        parameters: processing parameters passed from main.py.
         '''
         self.sample_registry = sample_registry
         self.valid_sample_ids = self.get_valid_sample_ids()
@@ -56,7 +51,8 @@ class ext_Experiment:
         
     def get_reference_sample_id(self):
         '''
-        get_reference_sample_id as sample of most number_anchor_mz_pairs
+        get_reference_sample_id either by user specification, or
+        as sample of most number_anchor_mz_pairs, limited to first 100 samples to search.
         '''
         if self.parameters['reference']:
             # match file name; k is sm['sample_id']
@@ -64,7 +60,8 @@ class ext_Experiment:
                 if os.path.basename(self.parameters['reference']) == os.path.basename(v['input_file']):
                     return k
         elif self.sample_registry:
-            L = [(v['number_anchor_mz_pairs'], v) for v in self.sample_registry.values()]
+            L = [(v['number_anchor_mz_pairs'], v) for v in self.sample_registry.values()][:100
+                    ]      # no need to look beyond 100 samples
             L.sort(reverse=True)
             ref = L[0][1]
             print("\n    The reference sample is:\n    ||* %s *||\n" %ref['name'])
@@ -86,13 +83,15 @@ class ext_Experiment:
         '''
         This is default asari workflow, whereas samples are aligned via LOWESS regression,
         and peak detection is performed on composite mass tracks.
+
+
         '''
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
-        if self.parameters['rt_align_on']:
-            self.CMAP.align_retention_time() 
-        else:
+        if not self.parameters['rt_align_on']:
             self.CMAP.mock_rentention_alignment()
+
+        self.CMAP.build_composite_tracks()
         self.CMAP.global_peak_detection()
   
 
@@ -103,18 +102,17 @@ class ext_Experiment:
         If refDB is used, it's better to be used after all samples are processed, 
         because the m/z values of samples are closer to other samples than refDB.
         '''
-        
         self.CMAP.MassGrid.to_csv(
             os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
         self.export_feature_tables()
         self.annotate()
         self.export_log()
 
-
-    def annotate(self):
+    def annotate(self
+                                    ):
         '''
         Reference databases can be pre-loaded.
-
+        Will verify ppm
         '''
         self.load_annotation_db()
         self.db_mass_calibrate()
@@ -250,53 +248,3 @@ class ext_Experiment:
         outfile = os.path.join(self.parameters['outdir'], 'project.json')
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(self.parameters, f, cls=NpEncoder, ensure_ascii=False, indent=2)
-
-
-#---------------------------------------------------------------------------------------------------------------
-# not used for now
-
-    def store_initiation_samples(self, init_Samples):
-        '''Since initiation samples were proecssed in memory,
-        this step store them according to experiment.database_mode
-        '''
-        for sample in init_Samples:
-            if self.database_mode == 'ondisk': 
-                sample.push_to_disk(sample.list_mass_tracks)
-            elif self.database_mode == 'mongo': 
-                sample.push_to_db(sample.list_mass_tracks
-                    # to implement
-                )
-
-
-    def process_single_sample(self, input_file, database_mode):
-        '''
-        Some parameters can be automatically determined here.
-
-        '''
-        mz_tolerance_ppm = self.parameters['mz_tolerance']
-        min_intensity = self.parameters['min_intensity_threshold']
-        min_timepoints = self.parameters['min_timepoints']
-        min_peak_height = self.parameters['min_peak_height']
-        try:
-            SM = SimpleSample(experiment=self, database_mode=database_mode, 
-                                mode=self.mode, input_file=input_file)
-            SM.process( mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
-            return SM
-        except IndexError:
-            print("Input error in sample %s, dropped from processing." %input_file)
-            return None
-        
-
-    def __choose_initiation_samples__(self, N=3):
-        '''
-        N initial samples are chosen to be analyzed first.
-        One best sample among them is chosen as the reference, especially for retention time alignment.
-        '''
-        if self.parameters['initiation_samples']:
-            return self.parameters['initiation_samples']
-        else:
-            if self.number_of_samples < N+1:
-                return self.list_input_files
-            else:
-                return random.sample(self.list_input_files, N)
-

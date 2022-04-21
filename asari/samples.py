@@ -25,7 +25,7 @@ class SimpleSample:
         self.experiment = experiment
         self.mode = mode
         self.database_mode = database_mode 
-        self.is_reference = is_reference        # not used now
+        self.is_reference = is_reference 
 
         self.input_file = registry['input_file']
         self.name = registry['name']

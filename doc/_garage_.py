@@ -1289,5 +1289,117 @@ def mock_rt_calibration(sample_rt_numbers, reference_rt_numbers):
 
 
 
+class CompositeMap_:
+    def align_retention_time(self):
+        '''
+        Because RT will not match precisely btw samples, it's remapped to a common set of time coordinates.
+        The default is a LOWESS algorithm.
+        Also used in the field include dynamic time warp (DTW) and univariate spline.
+        We saw no reason to use them, but people are welcome to implement alternative functions.
+
+        Do alignment function using high-selectivity mass tracks.
+        Step 1. get high-selectivity mass tracks among landmarks.
+        2. for tracks of highest intensities, do quick peak detection to identify RT apexes.
+        Only masstracks with single peaks will be used for RT alignment.
+        3. use RT from 2, do LOWESS fit to reference RT values. 
+        The fitted function will be recorded for each sample, 
+        and applied to all RT scan numbers in the samples when used for CMAP construction.
+        Important:
+        sample.rt_cal_dict, sample.reverse_rt_cal_dict are kept for changed values only and set within sample RT boundaries.
+        This is efficient by ignoring unnecessary tracking, and {} is consistent with samples without RT alignment.
+        When samples fail in RT alignment,they are logged in warning and treated at the end as if no alignment is required.
+        '''
+        print("\nCalibrating retention time to reference, ...\n")
+        cal_min_peak_height = self.experiment.parameters['cal_min_peak_height']
+        MIN_PEAK_NUM = self.experiment.parameters['peak_number_rt_calibration']
+        self.good_reference_landmark_peaks = self.set_RT_reference(cal_min_peak_height)
+        
+        for SM in self.experiment.all_samples[1:]:      # first sample is reference
+            self.calibrate_sample_RT(SM, 
+                                     cal_min_peak_height=cal_min_peak_height, MIN_PEAK_NUM=MIN_PEAK_NUM)
+        
+
+    def make_composite_mass_tracks(self):
+        '''
+        Generate composite mass tracks by summing up signals from all samples after RT calibration.
+        Each mass track from a sample is np.array of full RT range.
+        The SM.rt_cal_dict only records changes to be made. 
+        It's also empty if no RT alignment was done, in which case RT is assumed to match to reference.
+
+        Return:
+        Dict of dict {mz_index_number: {'id_number': k, 'mz': mzDict[k], 'intensity': v}, ...}
+        '''
+        mzDict = dict(self.MassGrid['mz'])
+        mzlist = list(self.MassGrid.index)                          # this gets indices as keys, per mass track
+        basetrack = np.zeros(self.rt_length, dtype=np.int64)        # self.rt_length defines max rt number
+        _comp_dict = {}
+        for k in mzlist: 
+            _comp_dict[k] = basetrack.copy()
+
+        for SM in self.experiment.all_samples:
+            print("   ", SM.name)
+            list_mass_tracks = SM.get_masstracks_and_anchors()
+            # if SM.rt_cal_dict:
+            for k in mzlist:
+                ref_index = self.MassGrid[SM.name][k]
+                if not pd.isna(ref_index): # ref_index can be NA 
+                    _comp_dict[k] += remap_intensity_track(list_mass_tracks[int(ref_index)]['intensity'], 
+                                                                        basetrack.copy(), SM.rt_cal_dict)
+        result = {}
+        for k,v in _comp_dict.items():
+            result[k] = { 'id_number': k, 'mz': mzDict[k], 'intensity': v }
+
+        return result
+
+
+
+#---------------------------------------------------------------------------------------------------------------
+# not used for now
+
+    def store_initiation_samples(self, init_Samples):
+        '''Since initiation samples were proecssed in memory,
+        this step store them according to experiment.database_mode
+        '''
+        for sample in init_Samples:
+            if self.database_mode == 'ondisk': 
+                sample.push_to_disk(sample.list_mass_tracks)
+            elif self.database_mode == 'mongo': 
+                sample.push_to_db(sample.list_mass_tracks
+                    # to implement
+                )
+
+
+    def process_single_sample(self, input_file, database_mode):
+        '''
+        Some parameters can be automatically determined here.
+
+        '''
+        mz_tolerance_ppm = self.parameters['mz_tolerance']
+        min_intensity = self.parameters['min_intensity_threshold']
+        min_timepoints = self.parameters['min_timepoints']
+        min_peak_height = self.parameters['min_peak_height']
+        try:
+            SM = SimpleSample(experiment=self, database_mode=database_mode, 
+                                mode=self.mode, input_file=input_file)
+            SM.process( mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
+            return SM
+        except IndexError:
+            print("Input error in sample %s, dropped from processing." %input_file)
+            return None
+        
+
+    def __choose_initiation_samples__(self, N=3):
+        '''
+        N initial samples are chosen to be analyzed first.
+        One best sample among them is chosen as the reference, especially for retention time alignment.
+        '''
+        if self.parameters['initiation_samples']:
+            return self.parameters['initiation_samples']
+        else:
+            if self.number_of_samples < N+1:
+                return self.list_input_files
+            else:
+                return random.sample(self.list_input_files, N)
+
 
 

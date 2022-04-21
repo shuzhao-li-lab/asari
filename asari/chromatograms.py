@@ -127,11 +127,13 @@ def bin_to_mass_tracks(bin_data_tuples, rt_length, mz_tolerance_ppm=5):
                 tracks.append( extract_single_track_fullrt_length(
                             bin_data_tuples[hist_starts[left]: hist_starts[right]], rt_length) )
             return tracks
+        # possible improvement to make
         else:
             peak = np.argmax(hist)  # if find_peaks fails, get position of max value
             left = max(0, peak-2)
             right = min(peak+3, num_steps)
             return [extract_single_track_fullrt_length(bin_data_tuples[hist_starts[left]: hist_starts[right]], rt_length)]
+
 
 def merge_two_mass_tracks(T1, T2):
     '''

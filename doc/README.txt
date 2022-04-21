@@ -59,6 +59,24 @@ RT is using scan numbers and they can overlap after calibration, e.g. rt_cal:
         (63, 63), (67, 67), (69, 69), (69, 70), (70, 70), (71, 71), (72, 72), (73, 72), (73, 74), (74, 75), (76, 75), (76, 78), (77, 75), (77, 77), ...,
         (190, 190), (190, 191), (190, 192), (191, 189), (191, 191), (191, 192), (192, 192), (192, 193),...
 
+The default is a LOWESS algorithm.
+        Also used in the field include dynamic time warp (DTW) and univariate spline.
+        We saw no reason to use them, but people are welcome to implement alternative functions.
+
+        Do alignment function using high-selectivity mass tracks.
+        Step 1. get high-selectivity mass tracks among landmarks.
+        2. for tracks of highest intensities, do quick peak detection to identify RT apexes.
+        Only masstracks with single peaks will be used for RT alignment.
+        3. use RT from 2, do LOWESS fit to reference RT values. 
+        The fitted function will be recorded for each sample, 
+        and applied to all RT scan numbers in the samples when used for CMAP construction.
+        Important:
+        sample.rt_cal_dict, sample.reverse_rt_cal_dict are kept for changed values only and set within sample RT boundaries.
+        This is efficient by ignoring unnecessary tracking, and {} is consistent with samples without RT alignment.
+        When samples fail in RT alignment,they are logged in warning and treated at the end as if no alignment is required.
+
+
+
 Empirical Compound, list and tree
 =================================
 Constructing trees of emperical compounds (epdTree) from a list of peaks or features,
