@@ -43,7 +43,7 @@ PARAMETERS = {
                                         # Samples with fewer selected peaks are dropped out.
 
     # Number of samples dictate workflow 
-    'project_sample_number_small': 10,
+    'project_sample_number_small': 12,    # 10
     'project_sample_number_large': 1000, # not used now
 
     # default output names

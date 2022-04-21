@@ -42,9 +42,12 @@ def process_project(list_input_files, parameters):
     # samples are processed to mass tracks (EICs) here
     shared_dict = batch_EIC_from_samples_(sample_registry, parameters)
     for sid, sam in sample_registry.items():
-        sam['status:mzml_parsing'], sam['status:eic'], sam['number_anchor_mz_pairs'
-                ], sam['data_location'], sam['track_mzs'], sam['sample_data'
-                ] = shared_dict[sid]
+        sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'
+            ], sam['max_scan_number'], sam['list_scan_numbers'], sam['list_retention_time'
+            ], sam['track_mzs'
+            ], sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'
+            ], sam['sample_data'] = shared_dict[sid]
+
         sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
     
     EE = ext_Experiment(sample_registry, parameters)
@@ -91,10 +94,10 @@ def make_iter_parameters(sample_registry, parameters, shared_dict):
     min_timepoints = parameters['min_timepoints']
     min_peak_height = parameters['min_peak_height']
     for sample in sample_registry.values():
+        outfile = os.path.join(parameters['outdir'], 'pickle', os.path.basename(sample['input_file']).replace('.mzML', '')+'.pickle')
         iters.append(
             (sample['sample_id'], sample['input_file'], parameters['mode'], parameters['database_mode'],
-            mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height,
-            os.path.join(parameters['outdir'], 'pickle', os.path.basename(sample['input_file']).replace('.mzML', '')+'.pickle'),
+            mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, outfile,
             shared_dict
             )
         )
@@ -119,9 +122,15 @@ def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
                     mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, outfile, 
                     shared_dict):
     '''
-    Process infile. `shared_dict` is used to pass back information, 
-    sample_id: ('status:mzml_parsing', 'status:eic', number_anchor_mz_pairs, outfile, track_mzs, list_mass_tracks)
-    track_mzs are used later for aligning m/z tracks.
+    Process infile. 
+    `shared_dict` is used to pass back information, thus critical. Designed here as
+    sample_id: ('status:mzml_parsing', 'status:eic', outfile,
+                max_scan_number, list_scan_numbers, list_retention_time,
+                track_mzs,
+                number_anchor_mz_pairs, anchor_mz_pairs, 
+                dict({mass tracks}) )
+    track_mzs or anchor_mz_pairs are used later for aligning m/z tracks.
+    list of scans starts from 0. 
     '''
     new = {'sample_id': sample_id, 'input_file': infile, 'ion_mode': ion_mode,}
     list_mass_tracks = []
@@ -133,9 +142,7 @@ def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
                     min_intensity=min_intensity, 
                     min_timepoints=min_timepoints, 
                     min_peak_height=min_peak_height)
-        new['list_scan_numbers'] = xdict['rt_numbers']            # list of scans, starting from 0
         new['max_scan_number'] = max(xdict['rt_numbers'])
-        new['list_retention_time'] = xdict['rt_times']        # full RT time points in sample
         ii = 0
         # already in ascending order of m/z from extract_massTracks_, get_thousandth_regions
         for track in xdict['tracks']:                         
@@ -155,21 +162,28 @@ def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
         new['number_anchor_mz_pairs'] = len(anchor_mz_pairs)
 
         if database_mode == 'ondisk':
-            shared_dict[new['sample_id']] = ('passed', 'passed', new['number_anchor_mz_pairs'], outfile, track_mzs, {
-                'max_scan_number': new['max_scan_number']
-            })
+            shared_dict[new['sample_id']] = ('passed', 'passed', outfile,
+                                            new['max_scan_number'], xdict['rt_numbers'], xdict['rt_times'],
+                                            track_mzs,
+                                            new['number_anchor_mz_pairs'], anchor_mz_pairs,  
+                                            {} )  
             with open(outfile, 'wb') as f:
                 pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
 
         elif database_mode == 'memory':
-            shared_dict[new['sample_id']] = ('passed', 'passed', new['number_anchor_mz_pairs'], outfile, track_mzs, 
-                                            new)
+            shared_dict[new['sample_id']] = ('passed', 'passed', outfile,
+                                            new['max_scan_number'], xdict['rt_numbers'], xdict['rt_times'],
+                                            track_mzs,
+                                            new['number_anchor_mz_pairs'], anchor_mz_pairs,  
+                                            new )
 
-        print("Processed %s with %d mass tracks." %(os.path.basename(infile), ii))
+        print("Extracted %s to %d mass tracks." %(os.path.basename(infile), ii))
 
     except:
         # xml.etree.ElementTree.ParseError
-        shared_dict[new['sample_id']] = ('failed', '', 0, '', [], {})
+        shared_dict[new['sample_id']] = ('failed', '', '', 
+                                            0, [], [], [], 0, [], 
+                                            {})
         print("mzML processing error in sample %s, skipped." %infile)
 
 

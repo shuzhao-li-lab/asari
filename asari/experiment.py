@@ -69,7 +69,7 @@ class ext_Experiment:
             ref = L[0][1]
             print("\n    The reference sample is:\n    ||* %s *||\n" %ref['name'])
             print("Max reference retention time is %4.2f at scan number %d.\n" %(
-                max(ref['sample_data']['list_retention_time']), ref['sample_data']['max_scan_number']))
+                max(ref['list_retention_time']), ref['max_scan_number']))
             return ref['sample_id']
         else:
             return None
@@ -79,7 +79,7 @@ class ext_Experiment:
 
     def get_max_scan_number(self, sample_registry):
         return max(
-            [sample_registry[k]['sample_data']['max_scan_number'] for k in self.valid_sample_ids]
+            [sample_registry[k]['max_scan_number'] for k in self.valid_sample_ids]
         )
 
     def process_all(self):

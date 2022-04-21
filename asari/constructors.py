@@ -46,7 +46,14 @@ class MassGrid:
         This is more efficient for large number of samples.
         
         '''
-        # self.grid = np.array()
+        all = []
+        for ii in range(self.experiment.number_of_samples):
+            sid = self.experiment.valid_sample_ids[ii]
+            for jj in self.experiment.sample_registry[sid]['track_mzs']:
+                all.append(
+                    (jj[0], jj[1], ii)      # m/z, masstrack_id, sample_index
+                )
+        
 
         self.MassGrid = pd.DataFrame(
             np.full((len(reference_mzlist), 1+self._number_of_samples_), None),
@@ -58,7 +65,8 @@ class MassGrid:
 
     def _initiate_mass_grid(self):
         '''
-        Initiate MassGrid using reference sample
+        Initiate MassGrid using reference sample. 
+        This sets 1st instance into self.experiment.all_samples.
         '''
         reference_sample = self.reference_sample_instance
         _d = dict(zip(reference_sample.rt_numbers, reference_sample.rt_numbers))
@@ -84,15 +92,16 @@ class MassGrid:
         '''
         Add Sample instance to and update MassGrid; 
         add Sample to self.experiment.samples.
-
-        recalculate_ref is not done here, because it's easier to include unmatched features from Sample.
-        If needed, the reference m/z values should be updated by revisiting DB samples.
-        But the recalculation should be based on calibrated m/z values so that they are consistent across samples.
-
+        recalculate_ref is not done here, because 
+        1) it's easier to include unmatched features from Sample; and 
+        2) this sample wise method is applied to small studies only, not expecting much shift.
         '''
         print("Adding sample to MassGrid,", sample.name)
         list_mass_tracks = sample.get_masstracks_and_anchors()
+
+
         mzlist = [x['mz'] for x in list_mass_tracks]
+
         new_reference_mzlist, new_reference_map2, updated_REF_landmarks, _r = landmark_guided_mapping(
                                     list(self.MassGrid['mz']), self._mz_landmarks_, mzlist, sample._mz_landmarks_)
         # print("_r = %f, new_reference_mzlist = %d" %(_r, len(new_reference_mzlist)))
@@ -119,7 +128,6 @@ class MassGrid:
         Using a common reference, which should be the 1st sample in both clusters.
         Return the merged MassGridCluster.
         '''
-
         pass
 
 
@@ -176,7 +184,8 @@ class CompositeMap:
 
     def get_reference_sample_instance(self, reference_sample_id):
         SM = SimpleSample(self.experiment.sample_registry[reference_sample_id],
-                experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode)
+                experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode,
+                is_reference=True)
         SM.list_mass_tracks = SM.get_masstracks_and_anchors()
         return SM
 
@@ -248,7 +257,9 @@ class CompositeMap:
                                 cal_min_peak_height=100000,
                                 MIN_PEAK_NUM=15):
         '''
-        Calibrate retention time per sample.
+        Calibrate retention time per sample, and set sample.rt_cal_dict, sample.reverse_rt_cal_dict.
+        These are dictionaries to map RT scan numbers btw sample and self.reference_sample.
+        Only numbers different btw two samples are kept in these dictionaries for computing efficiency.
         This is based on a set of unambiguous peaks: quich peak detection on anchor mass trakcs, 
         and peaks that are unique to each track are used for RT alignment.
 
@@ -322,11 +333,7 @@ class CompositeMap:
         '''
         Using peaks.deep_detect_elution_peaks on composite mass tracks.
         Results are deemed as features, because it's at Experiment level.
-        Peak area and height are cumulated from all samples. 
-        Not trying to average because some peaks are in only few samples.
-
-        Performance can be improved further - quick filter to ROI will help long LC runs.
-
+        Peak area and height are cumulated from all samples, not average because some peaks are in only few samples.
         '''
         self.composite_mass_tracks = self.make_composite_mass_tracks()
         print("Peak detection on %d composite mass tracks, ...\n" %len(self.composite_mass_tracks))
