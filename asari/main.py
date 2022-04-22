@@ -18,7 +18,21 @@ def main(parameters=PARAMETERS):
         join: merge multiple processed projects (possibly split a large dataset)
         viz: start interactive data visualization and exploration.
     '''
+    def __run_process__(parameters, args):
+        # main process function
+        list_input_files = read_project_dir(args.input)
+        if args.autoheight:
+            from .analyze import estimate_min_peak_height
+            try:
+                parameters['min_peak_height'] = estimate_min_peak_height(list_input_files)
+            except ValueError as err:
+                print("Problems with input files: {0}. Back to default min_peak_height.".format(err))
+
+        parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
+        process_project( list_input_files,  parameters )
+
     print("\n\n~~~~~~~ Hello from Asari (%s) ~~~~~~~~~\n" %__version__)
+
     parser = argparse.ArgumentParser(description='asari, LC-MS metabolomics data preprocessing')
     parser.add_argument('-v', '--version', action='version', version=__version__, 
             help='print version and exit')
@@ -27,7 +41,7 @@ def main(parameters=PARAMETERS):
     parser.add_argument('-m', '--mode', default='pos', 
             help='mode of ionization, pos or neg')
     parser.add_argument('--ppm', default=5, type=int, 
-            help='mass precision in ppm (part per million)')
+            help='mass precision in ppm (part per million), same as mz_tolerance_ppm')
     parser.add_argument('-i', '--input', 
             help='input directory of mzML files to process, or a single file to analyze')
     parser.add_argument('-o', '--output', 
@@ -69,17 +83,7 @@ def main(parameters=PARAMETERS):
         parameters['reference'] = args.reference
 
     if args.run == 'process':
-        list_input_files = read_project_dir(args.input)
-        if args.autoheight:
-            from .analyze import estimate_min_peak_height
-            try:
-                parameters['min_peak_height'] = estimate_min_peak_height(list_input_files)
-            except ValueError as err:
-                print("Problems with input files: {0}. Back to default min_peak_height.".format(err))
-
-        parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
-
-        process_project( list_input_files,  parameters )
+        __run_process__(parameters, args)
 
     elif args.run == 'analyze':
         # analyze a single sample file to get descriptions
@@ -93,13 +97,10 @@ def main(parameters=PARAMETERS):
 
     elif args.run == 'extract':
         # targeted extraction from a file designated by --target
-        # 
-        # This needs distance threshold base RT assembly
-        # 
-
-        
-        pass
-
+        mzlist = get_mz_list(args.target)
+        print("Retrieved %d target mz values from %s.\n" %(len(mzlist), args.target))
+        parameters['target'] = mzlist
+        __run_process__(parameters, args)
 
     elif args.run == 'annotate':
         # Annotate a user supplied feature table
@@ -117,6 +118,11 @@ def main(parameters=PARAMETERS):
 
     else:
         print("Expecting one of the subcommands: analyze, process, xic, annotate, join, viz.")
+
+
+
+
+
 
 
 #

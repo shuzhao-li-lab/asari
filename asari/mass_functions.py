@@ -170,6 +170,8 @@ def complete_mass_paired_mapping(list1, list2, std_ppm=5):
     complete_mass_paired_mapping(list1, list2) >>>
     [(0, 2), (3, 6), (6, 8), (10, 23), (12, 24), (14, 28), (16, 32), (23, 43), (25, 49), (26, 60), (29, 65), (31, 66), (36, 70), (38, 71), (41, 72), (44, 77), (46, 81), (51, 85), 
     (52, 89), (53, 91), (1, None), (2, None), (4, None), (5, None), (7, None), ...]
+
+    Update docstring??
     '''
     all = [(list1[ii], 1, ii) for ii in range(len(list1))] + [(list2[jj], 2, jj) for jj in range(len(list2))]
     # [(mz, list_origin, index_origin), ...]

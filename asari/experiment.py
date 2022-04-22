@@ -7,7 +7,8 @@ from mass2chem.search import *
 # jms-metabolite-services
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
-from .samples import SimpleSample
+# from .samples import SimpleSample
+from .mass_functions import complete_mass_paired_mapping
 from .constructors import CompositeMap
 from .json_encoder import NpEncoder
 
@@ -82,8 +83,6 @@ class ext_Experiment:
         '''
         This is default asari workflow, whereas samples are aligned via LOWESS regression,
         and peak detection is performed on composite mass tracks.
-
-
         '''
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
@@ -92,7 +91,6 @@ class ext_Experiment:
 
         self.CMAP.build_composite_tracks()
         self.CMAP.global_peak_detection()
-  
 
     def export_all(self):
         '''
@@ -229,10 +227,26 @@ class ext_Experiment:
         print("\nFeature table (%d x %d) was written to %s." %(
                                 filtered_FeatureTable.shape[0], self.number_of_samples, outfile))
 
+        # extract targeted m/z features
+        if 'target' in self.parameters and self.parameters['target']:  
+            matched_list, _, target_unmapped = complete_mass_paired_mapping(
+                filtered_FeatureTable['mz'].to_list(), self.parameters['target'], self.parameters['mz_tolerance_ppm']
+            )
+            print("\nIn targeted extraction, %d target mz values are not found in this dataset: " %len(target_unmapped))
+            print('    ', [self.parameters['target'][ii] for ii in target_unmapped])
+            matched_targets = [self.parameters['target'][ii[1]] for ii in matched_list]
+            targeted_table = filtered_FeatureTable.iloc[[x[0] for x in matched_list], :]
+            targeted_table.insert(0, "query_target", matched_targets)
+            outfile = os.path.join(self.parameters['outdir'], 'targeted_extraction__'+self.parameters['output_feature_table'])
+            targeted_table.to_csv(outfile, index=False, sep="\t")
+            print("Targeted extraction Feature table (%d x %d) was written to %s.\n" %(
+                                targeted_table.shape[0], self.number_of_samples, outfile))
+
         outfile = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
         # hard coded cutoff here for now
         filtered_FeatureTable = filtered_FeatureTable[ filtered_FeatureTable['snr']>10][
-                        filtered_FeatureTable['goodness_fitting']>0.7][filtered_FeatureTable['cSelectivity']>0.7 ]
+                                    filtered_FeatureTable['goodness_fitting']>0.7][
+                                    filtered_FeatureTable['cSelectivity']>0.7 ]
         filtered_FeatureTable.to_csv(outfile, index=False, sep="\t")
         print("Filtered Feature table (%d x %d) was written to %s.\n" %(
                                 filtered_FeatureTable.shape[0], self.number_of_samples, outfile))

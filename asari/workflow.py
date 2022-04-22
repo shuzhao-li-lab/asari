@@ -30,7 +30,7 @@ def process_project(list_input_files, parameters):
         if len(list_input_files) <= parameters['project_sample_number_small']:
             parameters['database_mode'] = 'memory'
         else:
-            parameters['database_mode'] = 'ondisk'       # yet to implement mongo etc
+            parameters['database_mode'] = 'ondisk'        # yet to implement mongo etc
 
     # time_stamp is `month daay hour minute second``
     time_stamp = [str(x) for x in time.localtime()[1:6]]
@@ -53,6 +53,7 @@ def process_project(list_input_files, parameters):
     EE = ext_Experiment(sample_registry, parameters)
     EE.process_all()
     EE.export_all()
+
 
 def read_project_dir(directory, file_pattern='.mzML'):
     '''
@@ -212,9 +213,8 @@ def process_xics(list_input_files, parameters):
 def get_mz_list(infile):
     '''
     Get a list of m/z valuies from infile, which is tab or comma delimited and has m/z in the first column.
+    Assuming first line as header and skip it.
     '''
-    lines = open(infile).read().splitlines()
+    lines = open(infile).read().splitlines()[1:]
     return [float(x.split('\t')[0].split(",")[0]) for x in lines]
-
-
 

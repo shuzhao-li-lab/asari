@@ -40,6 +40,12 @@ To do automatic esitmation of min peak height, add this argument:
 
 `--autoheight True`
 
+To output additional extraction table on a targeted list of m/z values from target_mzs.txt:
+
+`asari extract --input mydir/projectx_dir --target target_mzs.txt`
+
+This is useful to add QC check during data processing, e.g. the target_mzs.txt file can be spike-in controls.
+
 Alternative to a standalone command, to run as a module via Python interpreter, one needs to point to module location, e.g.:
 
 `python3 -m asari.main process --mode pos --input mydir/projectx_dir`
@@ -56,7 +62,7 @@ A template YAML file can be found at `doc/parameters.yaml`.
 
 When the above methods overlap, command line arguments take priority.
 That is, commandline overwrites `xyz.yaml`, which overwrites default asari parameters in `defaul_parameters.py`. 
-
+ 
 
 Algorithms
 ==========
@@ -99,7 +105,8 @@ This package uses `mass2chem` and `JMS` for mass search and annotation functions
 Large studies
 =============
 Asari is designed to run > 1000 samples on a laptop computer. 
-If the individual files are large or the sample number is very high, it is easy to split the data and run asari separately. One can then use `asari join` to merge the results.
+If the individual files are large or the sample number is very high, it is easy to split the data and run asari separately. 
+One can then use `asari join` to merge the results [in progress].
 
 When a study has 10 or fewer samples, the MassGrid assembly uses a slower algorithm to compensate statistical distribution.
 
