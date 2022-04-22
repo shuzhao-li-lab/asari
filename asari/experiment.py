@@ -60,10 +60,9 @@ class ext_Experiment:
                 if os.path.basename(self.parameters['reference']) == os.path.basename(v['input_file']):
                     return k
         elif self.sample_registry:
-            L = [(v['number_anchor_mz_pairs'], v) for v in self.sample_registry.values()][:100
-                    ]      # no need to look beyond 100 samples
+            L = [(v['number_anchor_mz_pairs'], v['sample_id']) for v in self.sample_registry.values()]
             L.sort(reverse=True)
-            ref = L[0][1]
+            ref = self.sample_registry[L[0][1]]
             print("\n    The reference sample is:\n    ||* %s *||\n" %ref['name'])
             print("Max reference retention time is %4.2f at scan number %d.\n" %(
                 max(ref['list_retention_time']), ref['max_scan_number']))

@@ -371,7 +371,7 @@ class CompositeMap:
                                             good_landmark_peaks, selected_reference_landmark_peaks, 
                                             sample.rt_numbers, self.reference_sample.rt_numbers, )
                 _CALIBRATED = True
-            except ValueError:
+            except:         # ValueError:
                 pass
         if not _CALIBRATED:
                 sample.rt_cal_dict, sample.reverse_rt_cal_dict =  {}, {}
