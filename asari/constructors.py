@@ -324,6 +324,12 @@ class CompositeMap:
 
         self.composite_mass_tracks = result
 
+    def calibrate_sample_RT_by_standards(self, sample, ):
+        '''
+        Placeholder, to add RT calibration based on spikie-in compound standards.
+        '''
+        pass
+
 
     def calibrate_sample_RT(self, 
                                 sample, 

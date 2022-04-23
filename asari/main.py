@@ -119,12 +119,6 @@ def main(parameters=PARAMETERS):
     else:
         print("Expecting one of the subcommands: analyze, process, xic, annotate, join, viz.")
 
-
-
-
-
-
-
 #
 # -----------------------------------------------------------------------------
 #

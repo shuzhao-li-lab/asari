@@ -101,8 +101,8 @@ class ext_Experiment:
         '''
         self.CMAP.MassGrid.to_csv(
             os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
-        self.export_feature_tables()
         self.annotate()
+        self.export_feature_tables()
         self.export_log()
 
     def annotate(self
@@ -118,7 +118,6 @@ class ext_Experiment:
         EED.build_from_list_peaks(self.CMAP.FeatureList)
         EED.extend_empCpd_annotation(self.KCD)
         EED.annotate_singletons(self.KCD)
-
         self.export_peak_annotation(EED.dict_empCpds, self.KCD, 'Feature_annotation')
         
         # also exporting JSON
@@ -179,9 +178,24 @@ class ext_Experiment:
             'list_matches': [('C6H14N_100.112624', 'M[1+]', 2),
             ('C6H13N_99.104799', 'M+H[1+]', 2)]},...
         '''
+        self.selected_unique_features = {}
         s = "[peak]id_number\tmz\trtime\tapex(scan number)\t[EmpCpd]interim_id\t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\
         \tname_1st_guess\tmatched_DB_shorts\tmatched_DB_records\n"
-        for ii, V in dict_empCpds.items():
+        for interim_id, V in dict_empCpds.items():
+            if len(V['MS1_pseudo_Spectra']) == 1:
+                self.selected_unique_features[V['MS1_pseudo_Spectra'][0]['id_number']] = (
+                        # empCpd id, neutral_formula, ion_relation
+                        interim_id, V['neutral_formula'], 'singleton'
+                )
+            else:
+                all_peaks = sorted([(peak['peak_area'], peak['goodness_fitting'], peak) for peak in V['MS1_pseudo_Spectra']],
+                                    reverse=True)
+                best_peak = all_peaks[0][2]
+                self.selected_unique_features[best_peak['id_number']] = (
+                    # empCpd id, neutral_formula, ion_relation (will change not always anchor)
+                    interim_id, V['neutral_formula'], best_peak.get('ion_relation', '')
+                )
+
             name_1st_guess, matched_DB_shorts, matched_DB_records = '', '', ''
             if 'list_matches' in V:
                 list_matches = V['list_matches']
@@ -205,10 +219,15 @@ class ext_Experiment:
 
     def export_feature_tables(self, outfile='cmap_feature_table.tsv'):
         '''
-        To export two tables, one is full table under `outdir/export/`, the other filtered/preferred table under `outdir`.
+        To export features tables:
+        1) preferred table under `outdir`, after quality filtering by SNR, peak shape and chromatographic selectivity.
+        2) full table under `outdir/export/`
+        3) unique compound table under `outdir/export/`
+        4) dependent on `target` extract option, a targeted_extraction table under `outdir`.
         '''
         good_samples = [sample.name for sample in self.all_samples] 
-        filtered_FeatureTable = self.CMAP.FeatureTable[good_samples]                       # non zero counts
+        filtered_FeatureTable = self.CMAP.FeatureTable[good_samples]                       
+        # non zero counts
         count = filtered_FeatureTable[filtered_FeatureTable>1].count(axis='columns')
         self.CMAP.FeatureTable['detection_counts'] = count
 
@@ -251,6 +270,19 @@ class ext_Experiment:
         print("Filtered Feature table (%d x %d) was written to %s.\n" %(
                                 filtered_FeatureTable.shape[0], self.number_of_samples, outfile))
         
+        # in self.selected_unique_features: (empCpd id, neutral_formula, ion_relation)
+        sel = [ii for ii in filtered_FeatureTable.index if filtered_FeatureTable['id_number'][ii] in
+                                    self.selected_unique_features.keys()]
+        unique_compound_table = filtered_FeatureTable.loc[sel, :]
+        unique_compound_table.insert(3, "empCpd", [self.selected_unique_features[ii][0] for ii in unique_compound_table['id_number']])
+        unique_compound_table.insert(4, "neutral_formula", [self.selected_unique_features[ii][1] for ii in unique_compound_table['id_number']])
+        unique_compound_table.insert(5, "ion_relation", [self.selected_unique_features[ii][2] for ii in unique_compound_table['id_number']])
+        
+        outfile = os.path.join(self.parameters['outdir'], 'export', 'unique_compound__'+self.parameters['output_feature_table'])
+        unique_compound_table.to_csv(outfile, index=False, sep="\t")
+        print("Unique compound table (%d x %d) was written to %s.\n" %(
+                            unique_compound_table.shape[0], self.number_of_samples, outfile))
+
         
     def export_log(self):
         '''
