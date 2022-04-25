@@ -122,6 +122,8 @@ class ext_Experiment:
         EED.extend_empCpd_annotation(self.KCD)
         EED.annotate_singletons(self.KCD)
         self.export_peak_annotation(EED.dict_empCpds, self.KCD, 'Feature_annotation')
+        if self.sample_registry:                    # check because some subcommands may not have sample_registry
+            self.select_uqnue_compound_features(EED.dict_empCpds)
         
         # also exporting JSON
         outfile = os.path.join(self.parameters['outdir'], 'Annotated_empricalCompounds.json')
@@ -181,24 +183,10 @@ class ext_Experiment:
             'list_matches': [('C6H14N_100.112624', 'M[1+]', 2),
             ('C6H13N_99.104799', 'M+H[1+]', 2)]},...
         '''
-        self.selected_unique_features = {}
+        
         s = "[peak]id_number\tmz\trtime\tapex(scan number)\t[EmpCpd]interim_id\t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\
         \tname_1st_guess\tmatched_DB_shorts\tmatched_DB_records\n"
         for interim_id, V in dict_empCpds.items():
-            if len(V['MS1_pseudo_Spectra']) == 1:
-                self.selected_unique_features[V['MS1_pseudo_Spectra'][0]['id_number']] = (
-                        # empCpd id, neutral_formula, ion_relation
-                        interim_id, V['neutral_formula'], 'singleton'
-                )
-            else:
-                all_peaks = sorted([(peak['peak_area'], peak['goodness_fitting'], peak) for peak in V['MS1_pseudo_Spectra']],
-                                    reverse=True)
-                best_peak = all_peaks[0][2]
-                self.selected_unique_features[best_peak['id_number']] = (
-                    # empCpd id, neutral_formula, ion_relation (will change not always anchor)
-                    interim_id, V['neutral_formula'], best_peak.get('ion_relation', '')
-                )
-
             name_1st_guess, matched_DB_shorts, matched_DB_records = '', '', ''
             if 'list_matches' in V:
                 list_matches = V['list_matches']
@@ -218,6 +206,23 @@ class ext_Experiment:
             O.write(s)
 
         print("\nAnnotation of %d Empirical compounds was written to %s.\n\n" %(len(dict_empCpds), outfile))
+
+    def select_uqnue_compound_features(self, dict_empCpds):
+        self.selected_unique_features = {}
+        for interim_id, V in dict_empCpds.items():
+            if len(V['MS1_pseudo_Spectra']) == 1:
+                self.selected_unique_features[V['MS1_pseudo_Spectra'][0]['id_number']] = (
+                        # empCpd id, neutral_formula, ion_relation
+                        interim_id, V['neutral_formula'], 'singleton'
+                )
+            else:
+                all_peaks = sorted([(peak['peak_area'], peak['goodness_fitting'], peak) for peak in V['MS1_pseudo_Spectra']],
+                                    reverse=True)
+                best_peak = all_peaks[0][2]
+                self.selected_unique_features[best_peak['id_number']] = (
+                    # empCpd id, neutral_formula, ion_relation (will change not always anchor)
+                    interim_id, V['neutral_formula'], best_peak.get('ion_relation', '')
+                )
 
 
     def export_feature_tables(self, outfile='cmap_feature_table.tsv'):
