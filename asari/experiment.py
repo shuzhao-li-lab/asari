@@ -75,9 +75,12 @@ class ext_Experiment:
         return [k for k,v in self.sample_registry.items() if v['status:eic'] == 'passed']
 
     def get_max_scan_number(self, sample_registry):
-        return max(
-            [sample_registry[k]['max_scan_number'] for k in self.valid_sample_ids]
-        )
+        if sample_registry:
+            return max(
+                [sample_registry[k]['max_scan_number'] for k in self.valid_sample_ids]
+            )
+        else:
+            return None
 
     def process_all(self):
         '''
