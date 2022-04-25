@@ -104,6 +104,7 @@ class ext_Experiment:
         '''
         self.CMAP.MassGrid.to_csv(
             os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
+        self.export_CMAP_pickle()
         self.annotate()
         self.export_feature_tables()
         self.export_log()
@@ -129,6 +130,17 @@ class ext_Experiment:
         outfile = os.path.join(self.parameters['outdir'], 'Annotated_empricalCompounds.json')
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(EED.dict_empCpds, f, cls=NpEncoder, ensure_ascii=False, indent=2)
+
+    def export_CMAP_pickle(self):
+        '''
+        
+        will also add MassGrid to this pickle
+        '''
+        massTrakcs = self.CMAP.composite_mass_tracks
+        outfile = os.path.join(self.parameters['outdir'], 'export', 'cmap.pickle')
+
+        with open(outfile, 'wb') as f:
+            pickle.dump(massTrakcs, f, pickle.HIGHEST_PROTOCOL)
 
 
     def load_annotation_db(self, src='hmdb4'):
@@ -186,7 +198,7 @@ class ext_Experiment:
         
         s = "[peak]id_number\tmz\trtime\tapex(scan number)\t[EmpCpd]interim_id\t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\
         \tname_1st_guess\tmatched_DB_shorts\tmatched_DB_records\n"
-        for interim_id, V in dict_empCpds.items():
+        for _, V in dict_empCpds.items():
             name_1st_guess, matched_DB_shorts, matched_DB_records = '', '', ''
             if 'list_matches' in V:
                 list_matches = V['list_matches']
