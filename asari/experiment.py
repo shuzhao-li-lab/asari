@@ -282,7 +282,7 @@ class ext_Experiment:
                                 targeted_table.shape[0], self.number_of_samples, outfile))
 
         outfile = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
-        # hard coded cutoff here for now
+        # hard coded cutoff here for now, but full table is available anyway
         filtered_FeatureTable = filtered_FeatureTable[ filtered_FeatureTable['snr']>10][
                                     filtered_FeatureTable['goodness_fitting']>0.7][
                                     filtered_FeatureTable['cSelectivity']>0.7 ]

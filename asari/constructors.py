@@ -349,12 +349,12 @@ class CompositeMap:
         and the sample will be attached later without adjusting retention time.
         One can also use alternative workflow if so desired, 
         to do peak detection in all samples and correspond the peaks after.
+
+        To-do: enforce good_landmark_peaks to cover RT range evenly.
         '''
         candidate_landmarks = [self.MassGrid[sample.name].values[
                                 p['ref_id_num']] for p in self.good_reference_landmark_peaks] # contains NaN
         good_landmark_peaks, selected_reference_landmark_peaks = [], []
-
-        # list_mass_tracks = sample.get_masstracks_and_anchors()
 
         for jj in range(len(self.good_reference_landmark_peaks)):
             ii = candidate_landmarks[jj]
@@ -485,7 +485,9 @@ class SampleAssembly(CompositeMap):
     
     
     Alternative workflow:
-    peak detection in each sample, then align by distance threshold.
+    1) construct MassGrid
+    2) peak detection in each sample, 
+    3) RT align by distance threshold.
 
 
 

@@ -30,7 +30,6 @@ PARAMETERS = {
     'min_intensity_threshold': 1000,    # minimal intensity for mass track extraction, filtering baseline
     'min_peak_height': 10000,           # minimal peak height.
     'autoheight': False,                # min_peak_height can be estimated automatically by setting autoheight on in CLI  
-    'prominence_window': 30,            # no need to modify  
     'gaussian_shape': 0.3,              # min cutoff
     
     # retention time alignment
@@ -43,9 +42,8 @@ PARAMETERS = {
                                         # Samples with fewer selected peaks are dropped out.
 
     # Number of samples dictate workflow 
-    'project_sample_number_small': 7,   # 10
-    'project_sample_number_large': 1000, # not used now
-
+    'project_sample_number_small': 10,  # 10
+    
     # default output names
     'output_feature_table': 'Feature_table.tsv',
     'mass_grid_mapping': "_mass_grid_mapping.csv",
@@ -55,10 +53,11 @@ PARAMETERS = {
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # 'max_rtime': 300,                   # retention time range (chromatography) in seconds, to auto populate
+    # 'prominence_window': 101,           # not used now; no need to modify  
     # 'cache_mass_traces': False,         # to save memory if not using DB; turn on if need to plot and diagnose
     # 'init_samples_number': 3,           # initiation samples,
     # 'initiation_samples': [],           # if user to specify N samples to initiate data processing, 
                                           # otherwise they are chosen automatically
-
+    # 'project_sample_number_large': 1000, # not used now
     }
     

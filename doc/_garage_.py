@@ -1403,3 +1403,46 @@ class CompositeMap_:
 
 
 
+# -----------------------------------------------------------------------------
+
+def quick_detect_unique_elution_peak_old(rt_numbers, list_intensity, 
+                            min_peak_height=100000, min_fwhm=3, min_prominence_threshold_ratio=0.2):
+    '''Quick peak detection, only looking for highest peak with high prominence.
+    This is used for quick check on good peaks, or selecting landmarks for alignment purposes.
+    rt_numbers, list_intensity are matched vectors from a mass trace/track.
+    '''
+    max_intensity = max(list_intensity)
+    prominence = min_prominence_threshold_ratio * max_intensity
+    unique_peak = None
+    if max_intensity > min_peak_height:
+        peaks, properties = find_peaks(list_intensity, height=min_peak_height, width=min_fwhm, 
+                                                        prominence=prominence) 
+        if peaks.size == 1:
+            unique_peak = {
+                'apex': rt_numbers[peaks[0]], 
+                'height': properties['peak_heights'][0], # not used now
+            }
+    return unique_peak
+
+
+# check the presence of min consecutive RT in small traces, to filter out more noises
+#  used in chromatograms.get_thousandth_bins
+# e.g. in an example datafile, 5958 reduced to 4511 traces
+def __rough_check_consecutive_scans__(datatuples, check_max_len=20, gap_allowed=2, min_timepoints=min_timepoints):
+    # check if the mass trace has at least min_timepoints consecutive scans
+    # datatuples are a list of data points in format of (mz_int, scan_num, intensity_int)
+    _checked = True
+    if len(datatuples) < check_max_len:
+        min_check_val = gap_allowed + min_timepoints -1 # step is 4 in five consecutive values without gap
+        rts = sorted([x[1] for x in datatuples])
+        steps = [rts[ii]-rts[ii-min_timepoints+1] for ii in range(min_timepoints-1, len(rts))]
+        if min(steps) > min_check_val:
+            _checked = False
+    return _checked
+
+
+
+
+
+
+

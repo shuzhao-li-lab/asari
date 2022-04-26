@@ -22,7 +22,6 @@ def process_project(list_input_files, parameters):
     '''
     list_input_files: mzML files.
     parameters: dictionary of parameters.
-
     Will adjust disk writing according to database_mode
     '''
     sample_registry = register_samples(list_input_files)

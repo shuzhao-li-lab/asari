@@ -161,9 +161,11 @@ def get_thousandth_bins(mzTree, mz_tolerance_ppm=5, min_timepoints=5, min_peak_h
     ======
     a list of flexible bins, [ [(mz, scan_num, intensity_int), ...], ... ]
     '''
-    def __rough_check_consecutive_scans__(datatuples, check_max_len=20, gap_allowed=2, min_timepoints=min_timepoints):
-        # a list of data points in format of (mz_int, scan_num, intensity_int)
+    def __rough_check_consecutive_scans__(datatuples, gap_allowed=2, min_timepoints=min_timepoints):
+        # check if the mass trace has at least min_timepoints consecutive scans
+        # datatuples are a list of data points in format of (mz_int, scan_num, intensity_int)
         _checked = True
+        check_max_len = 4 * min_timepoints                  # give longer traces a pass for now
         if len(datatuples) < check_max_len:
             min_check_val = gap_allowed + min_timepoints -1 # step is 4 in five consecutive values without gap
             rts = sorted([x[1] for x in datatuples])
@@ -291,9 +293,8 @@ def dwt_rt_calibrate(good_landmark_peaks, selected_reference_landmark_peaks, sam
 
 def remap_intensity_track(intensity_track, new, rt_cal_dict):
     '''
-    new = basetrack.copy(), possible longer than intensity_track
     Remap intensity_track based on rt_cal_dict. 
-    Can we make this faster?
+    new = basetrack.copy(), possible longer than intensity_track
     '''
     for k,v in rt_cal_dict.items():
         new[v] = intensity_track[k]
@@ -301,7 +302,7 @@ def remap_intensity_track(intensity_track, new, rt_cal_dict):
 
 
 # -----------------------------------------------------------------------------
-# smoothing function
+# smoothing functions
 # -----------------------------------------------------------------------------
 
 def smooth_moving_average(list_intensity, size=9):
@@ -313,7 +314,7 @@ def smooth_moving_average(list_intensity, size=9):
 
 def smooth_rt_intensity_remap(L_rt_scan_numbers, L_intensity):
     '''
-    After remapping/calibratoing RT, smooth intensity curve.
+    After remapping/calibrating RT, smooth intensity curve.
     '''
     _d = dict(zip( L_rt_scan_numbers, L_intensity )) # this overwrites repeated scan numbers by using last intensity value
     newx = range(min(L_rt_scan_numbers), max(L_rt_scan_numbers))
@@ -328,8 +329,7 @@ def smooth_rt_intensity_remap(L_rt_scan_numbers, L_intensity):
 
 def smooth_lowess(list_intensity, frac=0.02):
     '''
-    Smooth data for very noisy mass tracks.
-    Using simple moving average here; LOWESS does not look good for this.
+    Smooth data for very noisy mass tracks via LOWESS regression.
     '''
     lxy = lowess(list_intensity, range(len(list_intensity)), frac=frac, it=1)
     _, newy = list(zip(*lxy))

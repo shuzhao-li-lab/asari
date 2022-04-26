@@ -15,13 +15,8 @@ class SimpleSample:
         '''
         experiment: mostly required pointer to ext_Experiment instance, in order to get parameters.
         database_mode: 'ondisk', 'mongo', or 'memory' (run in memory, only small studies).
-                This is not necessary to be same as experiment wide setting, to have flexibility in handling individual samples.
-                E.g. two samples can be one in memory and the other on disk.
-        mode: ionization mode, 'pos' or 'neg'
-
-        self.sample_data = registry['sample_data']
+        mode: ionization mode, 'pos' or 'neg'. This should be consistent with experiment and registry if given.
         '''
-        # self.registry = registry
         self.experiment = experiment
         self.mode = mode
         self.database_mode = database_mode 
@@ -44,10 +39,15 @@ class SimpleSample:
             
         self._mz_landmarks_ = flatten_tuplelist(self.anchor_mz_pairs)
 
-        # These calibration functions are critical, though mz_calibration is not required if m/z accuracy is good.
-        self.mz_calibration_ratio = None
-        self.rt_cal_dict = None                             # index mapping to the reference sample
+        # These are critical RT calibration functions, index mapping with the reference sample
+        self.rt_cal_dict = None
         self.reverse_rt_cal_dict = None
+
+        # function mz_calibration is not used yet, but will be.
+        # For "small studies", mass tracks are assembled to MassGrid via landmark peaks with m/z calibration
+        # For larger studies, m/z accuracy is not checked during MassGrid construction. Thus,
+        # m/z calibration can be supplied to this function by checking spike-ins etc.
+        self.mz_calibration_function = None
                                    
 
     def get_masstracks_and_anchors(self):
