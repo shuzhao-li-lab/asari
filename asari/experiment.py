@@ -228,9 +228,12 @@ class ext_Experiment:
                         interim_id, V['neutral_formula'], 'singleton'
                 )
             else:
-                all_peaks = sorted([(peak['peak_area'], peak['goodness_fitting'], peak) for peak in V['MS1_pseudo_Spectra']],
-                                    reverse=True)
-                best_peak = all_peaks[0][2]
+                try:
+                    all_peaks = sorted([(peak['peak_area'], peak['goodness_fitting'], peak) for peak in V['MS1_pseudo_Spectra']],
+                                        reverse=True)
+                    best_peak = all_peaks[0][2]
+                except TypeError:
+                    best_peak = V['MS1_pseudo_Spectra'][0]
                 self.selected_unique_features[best_peak['id_number']] = (
                     # empCpd id, neutral_formula, ion_relation (will change not always anchor)
                     interim_id, V['neutral_formula'], best_peak.get('ion_relation', '')
