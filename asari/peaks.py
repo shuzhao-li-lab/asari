@@ -218,7 +218,7 @@ def deep_detect_elution_peaks(mass_track, max_rt_number,
 
     Input
     =====
-    mass_track: {'id_number': k, 'mz': mz, 'rt_scan_numbers': [..], 'intensity': [..]}
+    mass_track: {'id_number': k, 'mz': mz, 'intensity': [..]}
                 Mass tracks are expected to be continuous per m/z value, with 0s for gaps.
     iteration:  Second iteration of peak detection; done on remaining data points.
                 The 2nd iteration may catch small peaks overshadowed by big ones. No clear need to go over 2.

@@ -1,10 +1,9 @@
-Technical details
-=================
+# Technical details
 
 This is more for Developers. Please see README at upper directory for general information of asari.
 
-Algorithms and work flows
-=========================
+## Algorithms and work flows
+
 - From each mzML data file, mass tracks of unique m/z values are extracted, then aligned into a MassGrid.
 - Retention time is calibrated for each sample to a common reference sample.
 - For each m/z value, corresponding mass tracks from all sample files are summarized into one composite mass track.
@@ -20,98 +19,21 @@ Major difference to proteomics is that a feature in LC-MS metabolomics is define
 We use `empirical compound` to group degenerate features into a tentative compound/metabolite.
 Mass track is used in asari, to cover full range of retention time, because alignment of m/z values is fixed in an early step.
 
+## Data formats
+Basic data concepts follow https://github.com/shuzhao-li/metDataModel.
 
-Data formats
-============
 In the asari/mummichog packages, the data entities are presented in any of the four types: 
 class, namedtuple, JSON style dictionary or implicit list. 
 The implicit lists are used sparely as they have reduced clarity. 
 Namedtuple is immutable, then limited applications. 
 In-memory searches are conducted using indexed dictionaries or dataframes.
-JSON is used more common in asari for transparency.
-
+JSON is used more common in asari for transparency. E.g.
 ```
-mass tracks as [( mz, rtlist, intensities ), ...].
-Peak format: 
-{
-    'id_number': 0, 'mz', 'apex', 'left_base', 'right_base', 'height', 'parent_masstrace_id', 
-    'rtime', 'peak_area', 'goodness_fitting'
-}
 isotopic_patterns = [(1.003355, 'M(13C)', 0, 0.2), ...]
 ```
 
-Mass Tracks
-===========
-They are used for full RT ranges, thus each mass track has a unique m/z. 
-Some chromatogram builders in the field separate the mass traces if there are gaps in RT scans, 
-but that creates complexity in m/z alignment and searches, and we avoid that in asari.
-
-Peak detection
-==============
-The main function is peaks.stats_detect_elution_peaks, whereas a mass_track is separated to RIOs 
-(region of interests) based on background noise level. 
-The peak detection is based on scipy.signal.find_peaks, a local maxima method with prominence control.
-Prominence is important, and it is determined per RIO (e.g. 10% of max intensity). 
-For tracks of lower intensity or high noise level, smoothing is applied. 
-
-Retention time calibration
-==========================
-Calibration or alignment is needed as slight chromatographic shift is common.
-A set of set of unambiguous peaks are used for calibration, via LOESS regression to a reference sample.
-If a sample fails to align (common for blank controls), the method falls back to distance threshold based alignment.
-
-RT is using scan numbers and they can overlap after calibration, e.g. rt_cal:
-        (55, 55), (56, 56), (56, 57), (56, 59), (57, 55), (57, 59), (58, 60), (60, 61), (61, 59), (61, 61), (62, 62), 
-        (63, 63), (67, 67), (69, 69), (69, 70), (70, 70), (71, 71), (72, 72), (73, 72), (73, 74), (74, 75), (76, 75), (76, 78), (77, 75), (77, 77), ...,
-        (190, 190), (190, 191), (190, 192), (191, 189), (191, 191), (191, 192), (192, 192), (192, 193),...
-
-The default is a LOWESS algorithm.
-        Also used in the field include dynamic time warp (DTW) and univariate spline.
-        We saw no reason to use them, but people are welcome to implement alternative functions.
-
-        Do alignment function using high-selectivity mass tracks.
-        Step 1. get high-selectivity mass tracks among landmarks.
-        2. for tracks of highest intensities, do quick peak detection to identify RT apexes.
-        Only masstracks with single peaks will be used for RT alignment.
-        3. use RT from 2, do LOWESS fit to reference RT values. 
-        The fitted function will be recorded for each sample, 
-        and applied to all RT scan numbers in the samples when used for CMAP construction.
-        Important:
-        sample.rt_cal_dict, sample.reverse_rt_cal_dict are kept for changed values only and set within sample RT boundaries.
-        This is efficient by ignoring unnecessary tracking, and {} is consistent with samples without RT alignment.
-        When samples fail in RT alignment,they are logged in warning and treated at the end as if no alignment is required.
-
-
-
-Empirical Compound, list and tree
-=================================
-Constructing trees of emperical compounds (epdTree) from a list of peaks or features,
-which follow a format:
-list_peaks: [{'parent_masstrace_id': 1670, 'mz': 133.09702315984987, 'apex': 654, 'height': 14388.0, 
-                    'left_base': 648, 'right_base': 655, 'id_number': 555}, ...]
-
-Steps:
-1. find isotopic signatures from list_peaks
-2. initiate epdTree classes using the above isotopic signatures; extend by searching common adducts
-3. In remaining peaks (isotopes not seen due to low intensity etc), search pairs for primary adducts. 
-   Initiate epdTree classes using those.
-4. Extend to other adducts for empCpds from the above steps.
-5. Reconsolidate overlap epdTrees. E.g. combinations of isotopes and adducts are found separately.
-
-Notes:
-a. Common anchor peaks are M+H or M-H etc, but will calculate at later round. M* may not show.
-b. Adducts and isotopes are combinatorial, under restriction of chemical formulae.
-c. We curated isotopic/adduct patterns in this package.
-d. epdTree can be improved in future based on real data statistics and more structured cheminformatics.
-
-
-Sample
-======
-Python classes are not easy for parallal computing. 
-JSON and individual functions are used in multiprocessing.
-A SimpleSample class is later used to faciliate tracking.
-Registry example format:
-
+### Sample
+Sample Registry example format:
 ```
     {
     input_file: '',
@@ -136,35 +58,123 @@ Registry example format:
     number_anchor_mz_pairs: int,
     }
 ```
+A SimpleSample class is later used to faciliate tracking.
+
+### Mass Tracks
+They are used for full RT ranges, thus each mass track has a unique m/z. 
+Some chromatogram builders in the field separate the mass traces if there are gaps in RT scans, 
+but that creates complexity in m/z alignment and searches, and we avoid that in asari.
+
+**MassTrack using full RT range np.array**
+In version 1.5, the massTrack format was changed from ( mz, rtlist, intensities ) to ( mz, intensity_track ).
+intensity_track is np.array(full RT length).
+This increases storage for processed samples, but simplifies
+i) CMAP construction, and
+ii) RT index switching btw peak detection functions and others.
+
+### Peaks
+Example peak format:
+```
+{
+"apex": 500,
+"peak_area": 418918,
+"height": 19686,
+"left_base": 480,
+"right_base": 509,
+"cSelectivity": 0.7652027027027027,
+"parent_masstrack_id": 3738,
+"mz": 332.3312801863069,
+"snr": 3,
+"goodness_fitting": 0.048468150246283814,
+"id_number": "F5474",
+"rtime": 192.6176975050002,
+"rtime_left_base": 185.00743377799978,
+"rtime_right_base": 196.091130897
+}
+```
+Peaks are organized as features.
+A peak is specific to a sample, but a feature is defined at experiment level.
+
+### Empirical Compound
+Organizing features into empirical compounds is done in the JMS package (https://github.com/shuzhao-li/JMS).
+
+Briefly:
+1. find isotopic signatures from list_peaks
+2. initiate epdTree classes using the above isotopic signatures; extend by searching common adducts
+3. In remaining peaks (isotopes not seen due to low intensity etc), search pairs for primary adducts. 
+   Initiate epdTree classes using those.
+4. Extend to other adducts for empCpds from the above steps.
+5. Reconsolidate overlap epdTrees. E.g. combinations of isotopes and adducts are found separately.
+
+Notes:
+1. Common anchor peaks are M+H or M-H etc, but will calculate at later round. M* may not show.
+2. Adducts and isotopes are combinatorial, under restriction of chemical formulae.
+3. We curated isotopic/adduct patterns in this package.
+4. epdTree can be improved in future based on real data statistics and more structured cheminformatics.
 
 
-CenturionTree
-=============
-a dictionary, indexing mzList by 100*mz bins.
-Because most high-resolution mass spectrometers measure well under 0.01 amu, 
-one only needs to search the corresponding 0.01 bin and two adjacent bins (to capture bordering values).
+## Algorithms
 
-Use scan numbers 
-================
+### Use scan numbers whereas possible
 Because scan numbers are integers, they are efficient as indices and should be used for most low-level operations.
 When real retention time is used, they are float numbers and not good for indices, 
 requiring many more comparison operations and decreasing performance.
 
+### Chromatogram building
+This is in the chromatogram module. The default method uses `pymzml` to parse mzML files. 
+All data points are processed as [(m/z, scan_number, intensity), ...].
+The m/z values are binned to 0.001 amu, and assembled to mass tracks based on the expected mass resolution.
+The bins can be merged or split in this process.
+If multiple data points exist in the same scan on the same mass track, the highest intensity is used.
+Mass tracks are input to later peak detection.
 
-MassTrack as full RT range np.array
-===================================
-In version 1.5, the massTrack format was changed from
-( mz, rtlist, intensities ) to ( mz, intensity_track ).
-intensity_track is np.array(full RT length).
-This increases storage for processed samples, but simplifies
-i) CMAP construction
-ii) RT index switching btw peak detection functions and others.
+### Retention time calibration
+Calibration or alignment is needed as slight chromatographic shift is common.
+A set of set of unambiguous peaks are used for calibration, via LOWESS regression to a reference sample.
+Also used in the field include dynamic time warp (DTW) and univariate spline.
+We saw no reason to use them, but people are welcome to implement alternative functions.
+
+1. get high-selectivity mass tracks among landmark mass tracks.
+2. do quick peak detection in these tracks to identify RT apexes. Only mass tracks with single peaks are used for RT alignment.
+3. do LOWESS fit of peaks from step 2 to reference sample. The RT alignment is recorded in two dictionaries: sample.rt_cal_dict, sample.reverse_rt_cal_dict.
+
+Notes:
+
+    The RT alignment dictionaries only keep differing values and set within sample RT boundaries. This is efficient by ignoring unnecessary tracking, and {} is consistent with samples without RT alignment. When samples fail in RT alignment (common for blank controls,they are logged in warning and treated at the end as if no alignment is required. 
+    Example mapped values in rt_cal could look like:
+
+        (55, 55), (56, 56), (56, 57), (56, 59), (57, 55), (57, 59), (58, 60), (60, 61), (61, 59), (61, 61), (62, 62), 
+        (63, 63), (67, 67), (69, 69), (69, 70), (70, 70), (71, 71), (72, 72), (73, 72), (73, 74), (74, 75), (76, 75), (76, 78), (77, 75), (77, 77), ...,
+        (190, 190), (190, 191), (190, 192), (191, 189), (191, 191), (191, 192), (192, 192), (192, 193),...
+
+### Composite mass tracks
+A feature is expected to correspond to peaks in multiple samples on the same mass track and similar elution time.
+The conventional approach detects elution peaks in each sample, then match them across samples via correspondence.
+Asari assembles composite mass tracks by summing up the signals from each sample on the same mass track.
+Then peak detection is only performed on the composite mass tracks, and peaks are mapped back to individual samples based on the result in the composite mass tracks.
+This approach offers
+1) significant improvement in computational efficiency, as the expensive peak detection is only run once on the composite data not N times in N samples.
+2) Peak profiles are often enhanced after combining signals from multiple samples.
+3) The composite mass tracks facilitate data tracking and exploration.
+
+### Elution peak detection
+The main function is peaks.stats_detect_elution_peaks, whereas a mass_track is separated to RIOs 
+(region of interests) based on background noise level. 
+The peak detection is based on scipy.signal.find_peaks, a local maxima method with prominence control.
+Prominence is important, and it is determined per RIO (e.g. 10% of max intensity). 
+For tracks of lower intensity or high noise level, smoothing is applied. 
+
+### Search functions
+They are mostly in the JMS package. It uses many indexed dictionaries to facilitate fast search of m/z values.
+
+### Multi-core processing
+Python classes are not easy for parallal computing. Therefore, we use JSON and individual functions to facilitate multiprocessing.
+Currently (version 1.7), two steps are parallel computed: extraction of mass tracks and peak detection.
+The m/z alignment (in MassGrid) and RT alignment are using single CPU core.
 
 
-Notebooks (wishlist) 
-====================
-
-notebooks explaining the algorithms, and examples of how to use the library for advanced functions.
+## Notebooks (wishlist) 
+Planned notebooks explaining the algorithms, and examples of how to use the library for advanced functions.
 
 - Single sample processing, inspection, and determine ppm precision.
     Quick peak detection; plot m/z peaks and LC peaks; Figure 1 in paper.
@@ -185,5 +195,4 @@ notebooks explaining the algorithms, and examples of how to use the library for 
 - targeted extraction of ROI; allowing lowering m/z boundaries under ppm tolerance
 
 - alternative workflow as XCMS, peak detection first followed by correspondence
-
 
