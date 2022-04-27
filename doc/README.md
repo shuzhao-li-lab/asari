@@ -1,4 +1,7 @@
-Notes for Developers
+Technical details
+=================
+
+This is more for Developers. Please see README at upper directory for general information of asari.
 
 Algorithms and work flows
 =========================
