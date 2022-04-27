@@ -312,21 +312,6 @@ def smooth_moving_average(list_intensity, size=9):
     '''
     return uniform_filter1d(list_intensity, size, mode='nearest')
 
-def smooth_rt_intensity_remap(L_rt_scan_numbers, L_intensity):
-    '''
-    After remapping/calibrating RT, smooth intensity curve.
-    '''
-    _d = dict(zip( L_rt_scan_numbers, L_intensity )) # this overwrites repeated scan numbers by using last intensity value
-    newx = range(min(L_rt_scan_numbers), max(L_rt_scan_numbers))
-    for ii in newx:
-        if ii not in _d:
-            _d[ii] = _d[ii-1]
-    newy = [_d[ii] for ii in newx]
-    # smoothing by averaging 3 consecutive values
-    for ii in newx[1: -1]:
-        _d[ii] = (_d[ii-1]+_d[ii]+_d[ii+1])/3.0
-    return _d
-
 def smooth_lowess(list_intensity, frac=0.02):
     '''
     Smooth data for very noisy mass tracks via LOWESS regression.

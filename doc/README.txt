@@ -40,13 +40,16 @@ isotopic_patterns = [(1.003355, 'M(13C)', 0, 0.2), ...]
 Mass Tracks
 ===========
 They are used for full RT ranges, thus each mass track has a unique m/z. 
-Some chromatogram builders separate the mass traces if there are gaps in RT scans, 
-but that creates complexity in m/z alignment and searches. 
+Some chromatogram builders in the field separate the mass traces if there are gaps in RT scans, 
+but that creates complexity in m/z alignment and searches, and we avoid that in asari.
 
 Peak detection
 ==============
-The main step uses scipy.signal.find_peaks, a local maxima method with prominence control.
-Prominence is important, but it should be more tailored to individual peaks. 
+The main function is peaks.stats_detect_elution_peaks, whereas a mass_track is separated to RIOs 
+(region of interests) based on background noise level. 
+The peak detection is based on scipy.signal.find_peaks, a local maxima method with prominence control.
+Prominence is important, and it is determined per RIO (e.g. 10% of max intensity). 
+For tracks of lower intensity or high noise level, smoothing is applied. 
 
 Retention time calibration
 ==========================
@@ -180,14 +183,4 @@ notebooks explaining the algorithms, and examples of how to use the library for 
 
 - alternative workflow as XCMS, peak detection first followed by correspondence
 
-
-
-To-dos 
-======
-    
-Possible to improve performance in next version:
-
-Use C to rewrite chromatogram constructor.
-After initial samples, the peak detection of most features can start from building EIC in C, 
-to reduce workload in scipy.signal.find_peak.
 

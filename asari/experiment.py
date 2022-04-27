@@ -237,13 +237,16 @@ class ext_Experiment:
                 )
 
 
-    def export_feature_tables(self, outfile='cmap_feature_table.tsv'):
+    def export_feature_tables(self, outfile='cmap_feature_table.tsv',
+                                    _snr=5, _peak_shape=0.7, _cSelectivity=0.7):
         '''
         To export features tables:
         1) preferred table under `outdir`, after quality filtering by SNR, peak shape and chromatographic selectivity.
         2) full table under `outdir/export/`
         3) unique compound table under `outdir/export/`
         4) dependent on `target` extract option, a targeted_extraction table under `outdir`.
+        Filtering parameters (_snr, _peak_shape, _cSelectivity) only apply to preferred table and unique_compound_table.
+        Full table is filtered by initial peak detection parameters of lower snr and gaussian_shape.
         '''
         good_samples = [sample.name for sample in self.all_samples] 
         filtered_FeatureTable = self.CMAP.FeatureTable[good_samples]                       
@@ -283,9 +286,9 @@ class ext_Experiment:
 
         outfile = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
         # hard coded cutoff here for now, but full table is available anyway
-        filtered_FeatureTable = filtered_FeatureTable[ filtered_FeatureTable['snr']>10][
-                                    filtered_FeatureTable['goodness_fitting']>0.7][
-                                    filtered_FeatureTable['cSelectivity']>0.7 ]
+        filtered_FeatureTable = filtered_FeatureTable[ filtered_FeatureTable['snr']>_snr][
+                                    filtered_FeatureTable['goodness_fitting']>_peak_shape][
+                                    filtered_FeatureTable['cSelectivity']>_cSelectivity ]
         filtered_FeatureTable.to_csv(outfile, index=False, sep="\t")
         print("Filtered Feature table (%d x %d) was written to %s.\n" %(
                                 filtered_FeatureTable.shape[0], self.number_of_samples, outfile))

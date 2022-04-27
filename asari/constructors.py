@@ -197,7 +197,7 @@ class MassGrid:
 
     def join(self, M2):
         '''
-        Join with another MassGridCluster.
+        Join with another MassGridCluster. Placeholder.
         Using a common reference, which should be the 1st sample in both clusters.
         Return the merged MassGridCluster.
         '''

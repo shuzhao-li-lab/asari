@@ -102,13 +102,22 @@ Selectivity is tracked for
 This package uses `mass2chem` and `JMS` for mass search and annotation functions.
 
 
-Large studies
-=============
-Asari is designed to run > 1000 samples on a laptop computer. 
+Performance
+===========
+Asari is designed to run > 1000 samples on a laptop computer. The performance is achieved via
+- Implementation of basic functions using discrete mathematics and avoiding continuous curves.
+- Main intensity values of each sample are not kept in memory.
+- Simple (and transparent) peak detection based on local maxima (no curve fitting until evaluation)
+- Composite mass tracks greatly reduce the run cycles on peak detection
+- Using Python numerical libraries and vector operations
+- Alignment of mass tracks uses clustering in larger sample size
+
+When a study has 10 or fewer samples, the MassGrid assembly uses a slower algorithm to compensate statistical distribution.
+
 If the individual files are large or the sample number is very high, it is easy to split the data and run asari separately. 
 One can then use `asari join` to merge the results [in progress].
 
-When a study has 10 or fewer samples, the MassGrid assembly uses a slower algorithm to compensate statistical distribution.
+Future improvement can be made by implementing some functions, e.g. chromatogram building, in C.
 
 
 Links
