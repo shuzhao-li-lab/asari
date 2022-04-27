@@ -7,8 +7,12 @@ Trackable and scalable Python program for high-resolution LC-MS metabolomics dat
 - Statistics guided peak dection, based on local maxima and prominence, selective use of smoothing
 - Reproducible, track and backtrack between features and EICs
 - Tracking peak quality, selectiviy metrics on m/z, chromatography and annotation databases
-- Performance conscious, memory and CPU uses scalable
-- Fast assembly and annotation of metabolomes using chainable databases
+- Scalable, performance conscious, disciplined use of memory and CPU 
+- Transparent, JSON centric data structures, easy to chain other tools
+
+Input data are centroied mzML files.
+We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
+Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats.
 
 Install
 =======
