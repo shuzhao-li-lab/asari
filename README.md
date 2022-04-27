@@ -50,6 +50,36 @@ Alternative to a standalone command, to run as a module via Python interpreter, 
 
 `python3 -m asari.main process --mode pos --input mydir/projectx_dir`
 
+Output
+======
+A typical run on disk generataes a directory like this
+
+    asari_project_t17_427105156
+    ├── Annotated_empricalCompounds.json
+    ├── Feature_annotation.tsv
+    ├── export
+    │   ├── _mass_grid_mapping.csv
+    │   ├── cmap.pickle
+    │   ├── full_Feature_table.tsv
+    │   └── unique_compound__Feature_table.tsv
+    ├── pickle
+    │   ├── Blank_20210803_003.pickle
+    │   ├── ...
+    ├── preferred_Feature_table.tsv
+    └── project.json
+
+The recommended feature table is `preferred_Feature_table.tsv`. 
+All peaks are kept in `export/full_Feature_table.tsv` if they meet signal (snr) and shape standards 
+(part of input parameters but default values are fine for most people). 
+That is, if a feature is only present in one sample, it will be reported, 
+as we think this is important for applications like exposome and personalized medicine. 
+The filtering decisions are left to end users.
+
+The `pickle` folder keeps intermediate files during processing,
+but one can remove it afterward to save disk space.
+
+This may change as development continues.
+
 Parameters
 ==========
 Only one parameter in asari requires real attention, i.e., m/z precision is set at 5 ppm by default. 
@@ -62,7 +92,6 @@ A template YAML file can be found at `doc/parameters.yaml`.
 
 When the above methods overlap, command line arguments take priority.
 That is, commandline overwrites `xyz.yaml`, which overwrites default asari parameters in `defaul_parameters.py`. 
- 
 
 Algorithms
 ==========
