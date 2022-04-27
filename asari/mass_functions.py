@@ -1,7 +1,7 @@
 '''
-Functions related to mass operations.
+Functions related to mass operations, inlcuding mapping and clustering.
 
-Functions here can be sped up by JIT, but the code is currently weakly typed.
+Functions here could potentially be sped up by JIT, but the code is currently weakly typed. 
 In order to use Numba for JIT, they need to be rewritten with clear typing and likely compartmentalized.
 Alternatively, some of the mass functions can be implemented in C and compiled to interface Python.
 '''
@@ -304,16 +304,13 @@ def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks,
     return new_reference_mzlist, new_reference_map2, REF_landmarks, _r
 
 
-
-# -----------------------------------------------------------------------------
-
-
 def seed_nn_mz_cluster(bin_data_tuples, seed_indices):
     '''
-    complete NN clustering
+    complete NN clustering, by assigning each data tuple to its closest seed.
     '''
-    seeds = [bin_data_tuples[ii] for ii in seed_indices]
-    _NN = len(seed_indices)
+    seeds = [bin_data_tuples[ii] for ii in set(seed_indices)]
+    # do set(seed_indices) to avoid repetittive seed_indices in case find_peaks does so
+    _NN = len(seeds)
     clusters = [[]] * _NN
     # assing cluster number by nearest distance to a seed
     for x in bin_data_tuples:
@@ -341,7 +338,6 @@ def gap_divide_mz_cluster(bin_data_tuples, mz_tolerance):
                     good.append(C)
                 else:
                     tmp.append(C)
-
         return good, tmp
 
     good, bad = [], [bin_data_tuples]

@@ -172,9 +172,8 @@ class MassGrid:
             mz_tolerance = bin_data_tuples[0][0] * tol_
             if mz_range < mz_tolerance:
                 good_bins.append( __get_bin__(bin_data_tuples) )
-
             else:
-                clusters, remaining = [], []                     # need complete asignment form MassGrid
+                clusters, remaining = [], []                     # need complete asignment for MassGrid
                 num_steps = int( 5* mz_range/ mz_tolerance )     # step in 1/5 mz_tolerance
                 hist, bin_edges = np.histogram([x[0] for x in bin_data_tuples], num_steps)
                 # example hist: array([  8,   33,  11,  24,  31,  50,  81, 164, 269,  28,   7])
@@ -183,6 +182,7 @@ class MassGrid:
                 peaks, _ = find_peaks( hist, distance = 5 )
                 if peaks.any():
                     clusters = seed_nn_mz_cluster(bin_data_tuples, [hist_starts[ii] for ii in peaks])
+                    
                     for clu in clusters:
                         if clu[-1][0] - clu[0][0] < mz_tolerance:
                             good_bins.append( __get_bin__(clu) )
