@@ -316,8 +316,9 @@ class CompositeMap:
             for k in mzlist:
                 ref_index = self.MassGrid[SM.name][k]
                 if not pd.isna(ref_index): # ref_index can be NA 
-                    _comp_dict[k] += remap_intensity_track(
-                        list_mass_tracks[int(ref_index)]['intensity'], basetrack.copy(), SM.rt_cal_dict)
+                    _comp_dict[k] += remap_intensity_track( list_mass_tracks[int(ref_index)]['intensity'],  
+                                                            basetrack.copy(), SM.rt_cal_dict )
+
         result = {}
         for k,v in _comp_dict.items():
             result[k] = { 'id_number': k, 'mz': mzDict[k], 'intensity': v }
@@ -477,18 +478,13 @@ class CompositeMap:
 
 
 
-
-
-
 class SampleAssembly(CompositeMap):
     '''
-    
     
     Alternative workflow:
     1) construct MassGrid
     2) peak detection in each sample, 
     3) RT align by distance threshold.
-
 
 
     '''

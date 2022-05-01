@@ -73,6 +73,7 @@ A typical run on disk generataes a directory like this
     └── project.json
 
 The recommended feature table is `preferred_Feature_table.tsv`. 
+
 All peaks are kept in `export/full_Feature_table.tsv` if they meet signal (snr) and shape standards 
 (part of input parameters but default values are fine for most people). 
 That is, if a feature is only present in one sample, it will be reported, 
@@ -120,10 +121,11 @@ Therefore, a MassTrack may include multiple mass traces, or EICs/XICs, as referr
 Peak (an elution peak at specific m/z) is specific to a sample, but a feature is defined at the level of an experiment after correspondence.
 
 Additional details:
-- Use of MassTracks simplifies m/z correspondence
+- Use of MassTracks simplifies m/z correspondence, which results in a MassGrid
+- Two modes of m/z correspondence: a clustering method for studies >= N (default 10) samples; 
+    and a slower method based on landmark peaks and verifying mass precision.
 - Chromatogram construction is based on m/z values via flexible bins and frequency counts (in lieu histograms). 
-- Each sample is checked for mass precision, computational calibrations recorded for mass and retention time
-- Elution peak alignment is based on LOWESS 
+- Elution peak alignment is based on LOWESS
 - Use integers for RT scan numbers and intensities for computing efficiency
 - Avoid mathematical curves whereas possible for computing efficiency
 
@@ -145,7 +147,7 @@ Asari is designed to run > 1000 samples on a laptop computer. The performance is
 - Using Python numerical libraries and vector operations
 - Alignment of mass tracks uses clustering in larger sample size
 
-When a study has 10 or fewer samples, the MassGrid assembly uses a slower algorithm to compensate statistical distribution.
+When a study has N (default 10) or fewer samples, the MassGrid assembly uses a slower algorithm to compensate statistical distribution.
 
 If the individual files are large or the sample number is very high, it is easy to split the data and run asari separately. 
 One can then use `asari join` to merge the results [in progress].

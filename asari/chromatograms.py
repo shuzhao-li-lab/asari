@@ -296,6 +296,7 @@ def remap_intensity_track(intensity_track, new, rt_cal_dict):
     Remap intensity_track based on rt_cal_dict. 
     new = basetrack.copy(), possible longer than intensity_track
     '''
+    new[ :intensity_track.shape[0]] = intensity_track.copy()
     for k,v in rt_cal_dict.items():
         new[v] = intensity_track[k]
     return new

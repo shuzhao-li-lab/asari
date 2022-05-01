@@ -41,7 +41,7 @@ class ext_Experiment:
         self.sample_registry = sample_registry
         self.valid_sample_ids = self.get_valid_sample_ids()
         self.number_of_samples = len(self.valid_sample_ids)
-        self.number_scans = self.get_max_scan_number(sample_registry)
+        self.number_scans = self.get_max_scan_number(sample_registry) + 1
         self.all_samples = self.all_sample_instances = []
 
         self.parameters = parameters
