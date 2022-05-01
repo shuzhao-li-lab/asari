@@ -7,10 +7,10 @@ This is more for Developers. Please see README at upper directory for general in
 - From each mzML data file, mass tracks of unique m/z values are extracted, then aligned into a MassGrid.
 - Retention time is calibrated for each sample to a common reference sample.
 - For each m/z value, corresponding mass tracks from all sample files are summarized into one composite mass track.
-- Peak detection is performed on the composite mass trackes to generate a feature list for the experiment.
+- Peak detection is performed on the composite mass tracks to generate a feature list for the experiment.
 - The features and mapped back to each sample to extract peak area as intensity values.
 
-The approach of MassGrid and composite mass trackes is highly scalable.
+The approach of MassGrid and composite mass tracks is highly scalable.
 Should one wish to take the traditional way, an alternative workflow allows peak detection upfront, 
 followed by retention time alignment and correspondence.
 
@@ -158,7 +158,7 @@ This approach offers
 3) The composite mass tracks facilitate data tracking and exploration.
 
 ### Elution peak detection
-The main function is peaks.stats_detect_elution_peaks, whereas a mass_track is separated to RIOs 
+The main function is peaks.stats_detect_elution_peaks, whereas a mass_track is separated to ROIs 
 (region of interests) based on background noise level. 
 The peak detection is based on scipy.signal.find_peaks, a local maxima method with prominence control.
 Prominence is important, and it is determined per RIO (e.g. 10% of max intensity). 
