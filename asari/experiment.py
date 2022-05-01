@@ -133,14 +133,19 @@ class ext_Experiment:
 
     def export_CMAP_pickle(self):
         '''
-        
-        will also add MassGrid to this pickle
+        Export main CMAP data and MassGrid to pickle, which can be used for visual data exploration.
         '''
-        massTrakcs = self.CMAP.composite_mass_tracks
+        _export = {
+            '_number_of_samples_': self.CMAP._number_of_samples_,
+            'rt_length': self.CMAP.rt_length,
+            'dict_scan_rtime': self.CMAP.dict_scan_rtime,
+            'list_mass_tracks': self.CMAP.composite_mass_tracks,
+            'MassGrid': dict(self.CMAP.MassGrid),
+        }
         outfile = os.path.join(self.parameters['outdir'], 'export', 'cmap.pickle')
 
         with open(outfile, 'wb') as f:
-            pickle.dump(massTrakcs, f, pickle.HIGHEST_PROTOCOL)
+            pickle.dump(_export, f, pickle.HIGHEST_PROTOCOL)
 
 
     def load_annotation_db(self, src='hmdb4'):
