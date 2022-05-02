@@ -210,19 +210,6 @@ class CompositeMap:
     i) MassGrid: a matrix (DataFrame) for correspondence of mass tracks to each sample 
     ii) FeatureList: list of feature definitions, i.e. peaks defined on composite mass tracks.
     iii) FeatureTable: a matrix for feature intensities per sample
-
-    Steps:
-    1. Build MassGrid. Choose one reference from all samples for the largest number of landmark m/z tracks.
-    2. Add each of remaining samples to MassGrid, 
-    m/z alignment iguided by matched isotope/adduct pairs. Reference m/z is updated every time.
-    RT alignment function is determined per sample, using selective landmark peaks.
-    Default is a LOWESS function, but open to others to plugin.
-    3. Build composite elution profile (composite_mass_tracks)
-    by cumulative sum of mass tracks from all samples after RT correction.
-    4. Global peak detection is performed on each composite massTrack.
-    5. Mapping global peaks (i.e. features) back to all samples and extract sample specific peak areas.
-    This completes the FeatureTable.
-    6. Grouping features to empirical compounds (defined in metDataModel package).
     '''
     def __init__(self, experiment):
         '''

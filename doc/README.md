@@ -112,6 +112,28 @@ Notes:
 3. We curated isotopic/adduct patterns in this package.
 4. epdTree can be improved in future based on real data statistics and more structured cheminformatics.
 
+Empirical Compound example:
+```
+    {'interim_id': 15,
+        'neutral_formula_mass': 100.112624453,
+        'neutral_formula': 'C6H14N',
+        'Database_referred': [],
+        'identity': [],
+        'MS1_pseudo_Spectra': [{'id_number': 'F117',
+                'mz': 100.11207049661286,
+                'apex': 221.0,
+                'ion_relation': 'anchor',
+                'parent_epd_id': 15},
+            {'id_number': 'F132',
+                'mz': 101.11543204162328,
+                'apex': 221.0,
+                'ion_relation': '13C/12C',
+                'parent_epd_id': 15}],
+        'MS2_Spectra': [],
+        'list_matches': [('C6H14N_100.112624', 'M[1+]', 2),
+        ('C6H13N_99.104799', 'M+H[1+]', 2)]},...
+```
+
 
 ## Algorithms
 

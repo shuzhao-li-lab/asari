@@ -84,8 +84,15 @@ class ext_Experiment:
 
     def process_all(self):
         '''
-        This is default asari workflow, whereas samples are aligned via LOWESS regression,
-        and peak detection is performed on composite mass tracks.
+        This is default asari workflow.
+        1. Build MassGrid, using either pairwise (small study) or clustering method. 
+            Choose one reference from all samples for the largest number of landmark m/z tracks.
+        2. RT alignment via a LOWESS function, using selective landmark peaks.
+        3. Build composite elution profile (composite_mass_tracks),
+            by cumulative sum of mass tracks from all samples after RT correction.
+        4. Global peak detection is performed on each composite massTrack.
+        5. Mapping global peaks (i.e. features) back to all samples and extract sample specific peak areas.
+            This completes the FeatureTable.
         '''
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
@@ -97,10 +104,8 @@ class ext_Experiment:
 
     def export_all(self):
         '''
-        initiation_Samples are used to select one most representative sample to seed MassGrid and RT alignment.
-
-        If refDB is used, it's better to be used after all samples are processed, 
-        because the m/z values of samples are closer to other samples than refDB.
+        Export all files.
+        Annotation of features to empirical compounds is done here.
         '''
         self.CMAP.MassGrid.to_csv(
             os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
@@ -109,8 +114,7 @@ class ext_Experiment:
         self.export_feature_tables()
         self.export_log()
 
-    def annotate(self
-                                    ):
+    def annotate(self):
         '''
         Reference databases can be pre-loaded.
         Will verify ppm
@@ -122,6 +126,7 @@ class ext_Experiment:
         EED.build_from_list_peaks(self.CMAP.FeatureList)
         EED.extend_empCpd_annotation(self.KCD)
         EED.annotate_singletons(self.KCD)
+
         self.export_peak_annotation(EED.dict_empCpds, self.KCD, 'Feature_annotation')
         if self.sample_registry:                    # check because some subcommands may not have sample_registry
             self.select_uqnue_compound_features(EED.dict_empCpds)
@@ -180,27 +185,8 @@ class ext_Experiment:
 
     def export_peak_annotation(self, dict_empCpds, KCD, export_file_name_prefix):
         '''
-        interim_id is empCpd id. dict_empCpds example:
-        {'interim_id': 15,
-            'neutral_formula_mass': 100.112624453,
-            'neutral_formula': 'C6H14N',
-            'Database_referred': [],
-            'identity': [],
-            'MS1_pseudo_Spectra': [{'id_number': 'F117',
-            'mz': 100.11207049661286,
-            'apex': 221.0,
-            'ion_relation': 'anchor',
-            'parent_epd_id': 15},
-            {'id_number': 'F132',
-            'mz': 101.11543204162328,
-            'apex': 221.0,
-            'ion_relation': '13C/12C',
-            'parent_epd_id': 15}],
-            'MS2_Spectra': [],
-            'list_matches': [('C6H14N_100.112624', 'M[1+]', 2),
-            ('C6H13N_99.104799', 'M+H[1+]', 2)]},...
+        interim_id is empCpd id. dict_empCpds as seen in JMS.
         '''
-        
         s = "[peak]id_number\tmz\trtime\tapex(scan number)\t[EmpCpd]interim_id\t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\
         \tname_1st_guess\tmatched_DB_shorts\tmatched_DB_records\n"
         for _, V in dict_empCpds.items():
