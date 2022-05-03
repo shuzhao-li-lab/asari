@@ -235,7 +235,7 @@ def rt_lowess_calibration(good_landmark_peaks, selected_reference_landmark_peaks
     reference_rt_bound = max(reference_rt_numbers)
     sample_rt_bound = max(sample_rt_numbers)
     rt_rightend_ = 1.1 * sample_rt_bound
-    xx, yy = [0, 0, 0, ], [0, 0, 0, ]
+    xx, yy = [-0.1 * sample_rt_bound,]*3, [-0.1 * sample_rt_bound,]*3
     rt_cal = sorted([(x[0]['apex'], x[1]['apex']) for x in zip(good_landmark_peaks, selected_reference_landmark_peaks)])
 
     xx += [L[0] for L in rt_cal] + [rt_rightend_]*3

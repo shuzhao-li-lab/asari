@@ -26,24 +26,29 @@ def check_close_mzs(mzlist, ppm_tol=5):
 
     return warning
 
-# @jit(nopython=True)
 def calculate_selectivity(sorted_mz_list, std_ppm=5):
     '''
-    To calculate selectivity for all valid mass traces (thus specific m/z values).
+    To calculate m or d-selectivity for a list of m/z values, which can be all features in an experiment or a database.
 
-    The mass selectivity between two m/z values, between (0, 1), is defined as: 
+    The mass selectivity between two m/z values is defined as: 
     (1 - Probability(confusing two peaks)), further formalized as an exponential model:
-
     P = exp( -x/std_ppm ),
     whereas x is ppm distance between two peaks, 
     std_ppm standard deviation of ppm between true peaks and theoretical values, default at 5 pmm.
 
-    Close to 1 means high selectivity.
+    The selectivity value is between (0, 1), close to 1 meaning high selectivity.
     If multiple adjacent peaks are present, we multiply the selectivity scores.
-    Considering 2 lower and 2 higher neighbors approximately here.
+    It is good approximation by considering 2 lower and 2 higher neighbors here.
+    Note: ppm is actually dependent on m/z, not an ideal method. But it's in common practice and good enough.
 
-    Future direction: std_ppm can be dependent on m/z. 
-    This can be taken into account by a higher order model.
+    Input
+    =====
+    sorted_mz_list: a list of m/z values, sorted from low to high.
+    std_ppm: mass resolution in ppm (part per million).
+
+    Return
+    ======
+    A list of selectivity values, in matched order as the input m/z list.
     '''
     def __sel__(x, std_ppm=std_ppm): 
         if x > 100:         # too high, not bother
@@ -152,7 +157,7 @@ def mass_paired_mapping(list1, list2, std_ppm=5):
 
     return mapped, ratio_deltas
 
-# @jit(nopython=True)
+
 def complete_mass_paired_mapping(list1, list2, std_ppm=5):
     '''
     Similar to mass_paired_mapping, but not enforcing unique matching within std_ppm, 

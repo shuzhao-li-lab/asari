@@ -1,28 +1,14 @@
 '''
-
-In [211]: plt.plot(Y, '.')                                                                                            
-Out[211]: [<matplotlib.lines.Line2D at 0x7f30b8c33d30>]
-
-In [212]: plt.plot(peaks, Y[peaks], 'x')                                                                              
-Out[212]: [<matplotlib.lines.Line2D at 0x7f30b8c29bb0>]
-
-In [213]: plt.vlines(x=peaks, ymin=Y[peaks] - properties["prominences"], ymax = Y[peaks], color = "C1")               
-Out[213]: <matplotlib.collections.LineCollection at 0x7f30b8fb8df0>
-
-In [214]: plt.hlines(y=properties["width_heights"], xmin=properties["left_ips"],xmax=properties["right_ips"], color = 
-     ...: "C1")                                                                                                       
-Out[214]: <matplotlib.collections.LineCollection at 0x7f30b8f0bb80>
-
-In [215]: plt.show()                                                                                                  
-
-color='green', marker='o', linestyle='dashed',
-...      linewidth=2, markersize=12
-
+Misc plot functions.
 '''
 
 import numpy as np
 from matplotlib import pyplot as plt
 import pymzml
+
+# -----------------------------------------------------------------------------
+# Plot mass tracks and raw data points
+# -----------------------------------------------------------------------------
 
 def get_plot_region_from_file(infile, min_scan_number, max_scan_number, min_mz, max_mz, ms_level=1):
     '''
@@ -85,10 +71,58 @@ def with_line_scatter_map_region(datapoints, figsize=(8,10), cmap=plt.cm.coolwar
     ax2.set(ylabel='intensity')
 
 
+def plot_masstrack(track, color='m', start=100, end=400, yticks=[0, 5e7, 1e8]):
+    plt.figure(figsize=(8, 4))
+    X = range(start, end)
+    Y = track['intensity'][start: end]
+    plt.plot(X, Y, color=color, marker='o', markersize=4, linestyle='dashed')
+    plt.yticks(yticks)
 
 
 # -----------------------------------------------------------------------------
-# in progress
+# Selectivity plots for m, c, d-selectivities
+# -----------------------------------------------------------------------------
+
+def plot_mSelectivity(mzList, selectivities, figsize=(10,3), save_pdf=True, 
+                            outfile="Figure_mSelectivity"):
+    '''
+    mSelectivity plot, showing m/z as pink vertical lines, and selectivity as blue curve.
+    Used same way for dSelectivity.
+    '''
+    plt.figure(figsize=figsize)
+    plt.plot(mzList, selectivities, '-o', markersize=7)
+    plt.vlines(mzList, 0, 1, color='r',linewidth=0.2)
+    plt.xlabel("m/z")
+    plt.ylabel("Selectivity")
+    plt.title("m/z selectivity (zoom in)")
+    if save_pdf:
+        plt.savefig(outfile + ".pdf")
+
+
+def plot_cSelectivity(mass_track, list_ranges=[(0, 800), (100, 150)], 
+                            save_pdf=True, outfile="Figure_cSelectivity"):
+    '''
+    Plot chromatographic selectivity (cSelectivity).
+    list_ranges: list of tuples. 1st tuple indicates the full data points, 
+    each following tuples a highlighted region.
+    '''
+    a, b = list_ranges[0]
+    X = range(a, b)
+    Y = mass_track['intensity'][X]
+    plt.figure(figsize=(10, 4))
+    plt.plot(X, Y, color='k', marker='o', markersize=3, linestyle='None')
+    for pair in list_ranges[1:]:
+        a, b = pair
+        X2 = range(a, b)
+        plt.fill_between(X2, mass_track['intensity'][X2], color='R0', alpha=0.2,)
+    if save_pdf:
+        plt.savefig(outfile + ".pdf")
+
+
+# -----------------------------------------------------------------------------
+# in progress. Do not use.
+# -----------------------------------------------------------------------------
+
 
 def plot_peaks_masstrace(sample, mzstr, outfile='masstrace_plot.pdf'):
     '''
@@ -115,7 +149,25 @@ def plot_peaks_masstrace(sample, mzstr, outfile='masstrace_plot.pdf'):
 def plot_peaks():
 
     '''
-    
+    visualizing peaks:
+
+        In [211]: plt.plot(Y, '.')                                                                                            
+        Out[211]: [<matplotlib.lines.Line2D at 0x7f30b8c33d30>]
+
+        In [212]: plt.plot(peaks, Y[peaks], 'x')                                                                              
+        Out[212]: [<matplotlib.lines.Line2D at 0x7f30b8c29bb0>]
+
+        In [213]: plt.vlines(x=peaks, ymin=Y[peaks] - properties["prominences"], ymax = Y[peaks], color = "C1")               
+        Out[213]: <matplotlib.collections.LineCollection at 0x7f30b8fb8df0>
+
+        In [214]: plt.hlines(y=properties["width_heights"], xmin=properties["left_ips"],xmax=properties["right_ips"], color = 
+            ...: "C1")                                                                                                       
+        Out[214]: <matplotlib.collections.LineCollection at 0x7f30b8f0bb80>
+
+        In [215]: plt.show()                                                                                                  
+
+        color='green', marker='o', linestyle='dashed',
+        ...      linewidth=2, markersize=12
         # extend model xrange, as the initial peak definition may not be complete
         _extended = self.right_base - self.left_base
         self.rt_extended = self.parent_mass_trace.list_retention_time[self.apex-_extended: self.apex+_extended]
@@ -130,7 +182,3 @@ def plot_sample_rt_calibration(sample, outfile='rt_calibration.pdf'):
     plt.title("rt_calibration")
     plt.savefig(sample.name+outfile)
     plt.close()
-
-
-
-
