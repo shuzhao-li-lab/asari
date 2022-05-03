@@ -251,6 +251,7 @@ class ext_Experiment:
         use_cols = [ 'id_number', 'mz', 'rtime', 'rtime_left_base', 'rtime_right_base', 'parent_masstrack_id', 
                     'peak_area', 'cSelectivity', 'goodness_fitting', 'snr', 'detection_counts' ] + good_samples
         filtered_FeatureTable = self.CMAP.FeatureTable[use_cols]
+        filtered_FeatureTable = filtered_FeatureTable[filtered_FeatureTable['detection_counts']>0 ]
         filtered_FeatureTable['mz'] = filtered_FeatureTable['mz'].round(4)
         filtered_FeatureTable['rtime'] = filtered_FeatureTable['rtime'].round(2)
         filtered_FeatureTable['rtime_left_base'] = filtered_FeatureTable['rtime_left_base'].round(2)
