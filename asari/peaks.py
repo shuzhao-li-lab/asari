@@ -461,6 +461,7 @@ def check_overlap_peaks(list_peaks):
     '''
     Check overlap btw a list of JSON peaks. 
     list_peaks are already order by RT from find_peaks. Overlap usually from splitting.
+
     Return unique peaks.
     '''
     if len(list_peaks) < 2:
@@ -496,6 +497,9 @@ def _check_overlap(peak1, peak2):
 
 def _merge_peak_cluster(cluster_peaks):
     '''
+
+    to-add: reevaluation of peak number, not to merge blindly -
+
     Return: merged peaks by extending bases, inheritting other attributes from largest peak.
     '''
     if len(cluster_peaks) == 1:

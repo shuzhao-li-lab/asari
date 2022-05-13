@@ -114,6 +114,7 @@ class ext_Experiment:
 
     def annotate(self):
         '''
+        Export Feature_annotation as tsv, Annotated_empricalCompounds in both JSON and pickle.
         Reference databases can be pre-loaded.
         Will verify ppm
         '''
@@ -129,10 +130,16 @@ class ext_Experiment:
         if self.sample_registry:                    # check because some subcommands may not have sample_registry
             self.select_uqnue_compound_features(EED.dict_empCpds)
         
-        # also exporting JSON
+        # export JSON
         outfile = os.path.join(self.parameters['outdir'], 'Annotated_empricalCompounds.json')
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(EED.dict_empCpds, f, cls=NpEncoder, ensure_ascii=False, indent=2)
+
+        # export pickle
+        outfile = os.path.join(self.parameters['outdir'], 'export', 'epd.pickle')
+        with open(outfile, 'wb') as f:
+            pickle.dump(EED.dict_empCpds, f, pickle.HIGHEST_PROTOCOL)
+
 
     def export_CMAP_pickle(self):
         '''
@@ -146,7 +153,6 @@ class ext_Experiment:
             'MassGrid': dict(self.CMAP.MassGrid),
         }
         outfile = os.path.join(self.parameters['outdir'], 'export', 'cmap.pickle')
-
         with open(outfile, 'wb') as f:
             pickle.dump(_export, f, pickle.HIGHEST_PROTOCOL)
 
@@ -249,7 +255,6 @@ class ext_Experiment:
         use_cols = [ 'id_number', 'mz', 'rtime', 'rtime_left_base', 'rtime_right_base', 'parent_masstrack_id', 
                     'peak_area', 'cSelectivity', 'goodness_fitting', 'snr', 'detection_counts' ] + good_samples
         filtered_FeatureTable = self.CMAP.FeatureTable[use_cols]
-        filtered_FeatureTable = filtered_FeatureTable[filtered_FeatureTable['detection_counts']>0 ]
         filtered_FeatureTable['mz'] = filtered_FeatureTable['mz'].round(4)
         filtered_FeatureTable['rtime'] = filtered_FeatureTable['rtime'].round(2)
         filtered_FeatureTable['rtime_left_base'] = filtered_FeatureTable['rtime_left_base'].round(2)
@@ -278,10 +283,11 @@ class ext_Experiment:
                                 targeted_table.shape[0], self.number_of_samples, outfile))
 
         outfile = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
-        # hard coded cutoff here for now, but full table is available anyway
-        filtered_FeatureTable = filtered_FeatureTable[ filtered_FeatureTable['snr']>_snr][
-                                    filtered_FeatureTable['goodness_fitting']>_peak_shape][
-                                    filtered_FeatureTable['cSelectivity']>_cSelectivity ]
+        # Some features can have all 0s, filtered here
+        filtered_FeatureTable = filtered_FeatureTable[  filtered_FeatureTable['detection_counts'] > 0 ]
+        filtered_FeatureTable = filtered_FeatureTable[  filtered_FeatureTable['snr']>_snr][
+                                                        filtered_FeatureTable['goodness_fitting']>_peak_shape][
+                                                        filtered_FeatureTable['cSelectivity']>_cSelectivity ]
         filtered_FeatureTable.to_csv(outfile, index=False, sep="\t")
         print("Filtered Feature table (%d x %d) was written to %s.\n" %(
                                 filtered_FeatureTable.shape[0], self.number_of_samples, outfile))
