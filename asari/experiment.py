@@ -128,7 +128,7 @@ class ext_Experiment:
 
         self.export_peak_annotation(EED.dict_empCpds, self.KCD, 'Feature_annotation')
         if self.sample_registry:                    # check because some subcommands may not have sample_registry
-            self.select_uqnue_compound_features(EED.dict_empCpds)
+            self.select_unique_compound_features(EED.dict_empCpds)
         
         # export JSON
         outfile = os.path.join(self.parameters['outdir'], 'Annotated_empricalCompounds.json')
@@ -189,6 +189,7 @@ class ext_Experiment:
 
     def export_peak_annotation(self, dict_empCpds, KCD, export_file_name_prefix):
         '''
+        Export feature annotation.
         interim_id is empCpd id. dict_empCpds as seen in JMS.
         '''
         s = "[peak]id_number\tmz\trtime\tapex(scan number)\t[EmpCpd]interim_id\t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\
@@ -214,7 +215,10 @@ class ext_Experiment:
 
         print("\nAnnotation of %d Empirical compounds was written to %s.\n\n" %(len(dict_empCpds), outfile))
 
-    def select_uqnue_compound_features(self, dict_empCpds):
+    def select_unique_compound_features(self, dict_empCpds):
+        '''
+        Get unique feature by highest composite peak area per empirical compound. 
+        '''
         self.selected_unique_features = {}
         for interim_id, V in dict_empCpds.items():
             if len(V['MS1_pseudo_Spectra']) == 1:
@@ -308,10 +312,11 @@ class ext_Experiment:
         
     def export_log(self):
         '''
-        Export project parameters to project.json.
-        Should asari viz can look for project.json when launched standalone?
-
+        Export project parameters to project.json,
+        which is also used by asari viz.
         '''
+        self.parameters['number_of_samples'] = self.number_of_samples
+        self.parameters['number_scans'] = self.number_scans
         outfile = os.path.join(self.parameters['outdir'], 'project.json')
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(self.parameters, f, cls=NpEncoder, ensure_ascii=False, indent=2)

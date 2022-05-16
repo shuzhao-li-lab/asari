@@ -1457,6 +1457,32 @@ def smooth_rt_intensity_remap(L_rt_scan_numbers, L_intensity):
     return _d
 
 
+def reformat_cmap(cmap):
+    '''
+    Get an intensity/rt DataFrame from cmap for mass tracks.
+    This is slow due to building a large DataFrame, hence not used by default.
+    Not keeping cmap in memorry.
 
+    return
+    ======
+    xics: pd.DataFrame of rtime ('rt') and intensities for each mass track (id_number).
+            Intensity is normalized by division by cmap['_number_of_samples_'].
+    mz_dict: dict of mass_track id_number to m/z value.
+    massgrid: pd.DataFrame of how mass_tracks in each sample are linked to mass_tracks in CMAP.
+    '''
+    print("\n//*Asari dashboard*//   taking a minute to prepare data......\n")
+    N = cmap['_number_of_samples_']
+    rt_list = [cmap['dict_scan_rtime'][ii] for ii in range(cmap['rt_length'])]
+    mz_dict = {}
+    xics = { 'rt': rt_list }
+    for k,v in cmap['list_mass_tracks'].items():
+        k = str(k)
+        xics[k] = v['intensity']/N
+        mz_dict[k] = v['mz']
+    xics = pd.DataFrame(xics)
+    massgrid = cmap['MassGrid']
+
+    return xics, mz_dict, massgrid
+    
 
 
