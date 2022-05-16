@@ -113,8 +113,10 @@ def main(parameters=PARAMETERS):
 
     elif args.run == 'viz':
         # launch data dashboard
-
-        pass
+        datadir = args.input
+        from .dashboard import read_project, dashboard
+        project_desc, cmap, epd, Ftable = read_project(datadir)
+        dashboard(project_desc, cmap, epd, Ftable)
 
     else:
         print("Expecting one of the subcommands: analyze, process, xic, annotate, join, viz.")

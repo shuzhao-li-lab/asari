@@ -50,6 +50,11 @@ To output additional extraction table on a targeted list of m/z values from targ
 
 This is useful to add QC check during data processing, e.g. the target_mzs.txt file can be spike-in controls.
 
+To launch a dashboard in your web browser after the project is processed into directory process_result_dir:
+
+`asari viz --input process_result_dir`
+
+
 Alternative to a standalone command, to run as a module via Python interpreter, one needs to point to module location, e.g.:
 
 `python3 -m asari.main process --mode pos --input mydir/projectx_dir`
