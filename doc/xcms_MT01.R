@@ -18,7 +18,7 @@ xdata <- refineChromPeaks(xdata, mpp)
 #' RT alignment
 xdata <- adjustRtime(xdata, param = ObiwarpParam())
 
-pdp <- PeakDensityParam(sampleGroups = rep(1,length(files)), minSamples=3, minFraction = 0.1, bw = 3, binSize=0.001)
+pdp <- PeakDensityParam(sampleGroups = rep(1,length(files)), minFraction = 0.1, bw = 3, binSize=0.001)
 xdata <- groupChromPeaks(xdata, param = pdp)
 
 ftDef <- featureDefinitions(xdata)
