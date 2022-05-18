@@ -90,6 +90,12 @@ but one can remove it afterward to save disk space.
 
 This may change as development continues.
 
+Dashboard
+=========
+After data are processed, users can use `asari viz` to launch a dashboard to inspect data. 
+![viz_screen_shot](docs/viz_screen_shot20220518.png)
+
+
 Parameters
 ==========
 Only one parameter in asari requires real attention, i.e., m/z precision is set at 5 ppm by default. 
