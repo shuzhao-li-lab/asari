@@ -124,9 +124,12 @@ class ext_Experiment:
         EED = ExperimentalEcpdDatabase(mode=self.mode)
         EED.build_from_list_peaks(self.CMAP.FeatureList)
         EED.extend_empCpd_annotation(self.KCD)
-        EED.annotate_singletons(self.KCD)
+        EED.annotate_singletons(self.KCD)       
+        # EED.dict_empCpds misses some features 
+        EED.dict_empCpds = self.append_orphans_to_epmCpds(EED.dict_empCpds)
 
         self.export_peak_annotation(EED.dict_empCpds, self.KCD, 'Feature_annotation')
+
         if self.sample_registry:                    # check because some subcommands may not have sample_registry
             self.select_unique_compound_features(EED.dict_empCpds)
         
@@ -187,13 +190,34 @@ class ext_Experiment:
             print("Mass accuracy check is skipped, too few mz_landmarks (%d) matched." %len(mz_landmarks))
 
 
+    def append_orphans_to_epmCpds(self, dict_empCpds):
+        '''
+        # EED.dict_empCpds does not include features without formula match, and we add them there.
+        '''
+        all_feature_ids = []
+        for _, V in dict_empCpds.items():
+            all_feature_ids += [peak['id_number'] for peak in V['MS1_pseudo_Spectra']]
+
+        orphans = [peak for peak in self.CMAP.FeatureList if peak['id_number'] not in all_feature_ids]
+        new_id_start = len(dict_empCpds)
+        for peak in orphans:
+            dict_empCpds[new_id_start] = {'interim_id': new_id_start,
+                    'neutral_formula_mass': '', 'neutral_formula': '',
+                    'MS1_pseudo_Spectra': [peak] }
+            new_id_start += 1
+
+        return dict_empCpds
+
+
     def export_peak_annotation(self, dict_empCpds, KCD, export_file_name_prefix):
         '''
         Export feature annotation.
         interim_id is empCpd id. dict_empCpds as seen in JMS.
+        
         '''
         s = "[peak]id_number\tmz\trtime\tapex(scan number)\t[EmpCpd]interim_id\t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\
         \tname_1st_guess\tmatched_DB_shorts\tmatched_DB_records\n"
+        
         for _, V in dict_empCpds.items():
             name_1st_guess, matched_DB_shorts, matched_DB_records = '', '', ''
             if 'list_matches' in V:
