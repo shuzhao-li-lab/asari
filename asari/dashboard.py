@@ -81,10 +81,12 @@ def convert_dict_html(d, title=''):
     May need to improve error handling since KeyError is potential problem.
     '''
     s = title
-    info = [ ('mz: ', round(d['mz'],4), ' - ', 'rtime: ', (round(d['rtime_left_base'],2), round(d['rtime'],2), round(d['rtime_right_base'],2))),
+    color = ''
+    
+    info = [ ('id_number: ', d['id_number'], ' - ', 'parent_masstrack_id: ', d['parent_masstrack_id'], ' - ', 'parent_epd_id: ', d.get('parent_epd_id', '')),
              ('snr: ', d['snr'], ' - ', 'peak shape: ', round(d['goodness_fitting'],2), ' - ', 'cSelectivity: ', round(d['cSelectivity'],2),),
-             ('id_number: ', d['id_number'], ' - ', 'parent_masstrack_id: ', d['parent_masstrack_id'], ' - ', 'parent_epd_id: ', d.get('parent_epd_id', '')),
              ('height: ', d['height'], ' - ', 'peak_area: ', d['peak_area']),
+             ('mz: ', round(d['mz'],4), ' - ', 'rtime: ', (round(d['rtime_left_base'],2), round(d['rtime'],2), round(d['rtime_right_base'],2))),
     ]
     for x in info:
         s += "<ul>" + ' '.join([str(ii) for ii in x]) + "</ul>"

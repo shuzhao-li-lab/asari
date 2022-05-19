@@ -38,6 +38,7 @@ def iter_peak_detection_parameters(list_mass_tracks, max_rt_number, parameters, 
     min_prominence_threshold = parameters['min_prominence_threshold']
     min_fwhm = round( 0.5 * parameters['min_timepoints'] )
     snr = parameters['signal_noise_ratio']
+    peakshape = parameters['gaussian_shape']
     wlen = 101                          # if used, this limits peak evaluation 50 scans to the left and 50 to right
     min_prominence_ratio = 0.1
     iteration = True                    # a 2nd round of peak detection if enough remaining datapoints
@@ -45,7 +46,7 @@ def iter_peak_detection_parameters(list_mass_tracks, max_rt_number, parameters, 
         if mass_track['intensity'].max() > min_peak_height:
             iters.append(
                 (mass_track, max_rt_number, min_peak_height, min_fwhm, min_prominence_threshold,
-                wlen, snr, min_prominence_ratio, iteration, shared_list)
+                wlen, snr, peakshape, min_prominence_ratio, iteration, shared_list)
             )
     return iters
 
@@ -56,7 +57,7 @@ def iter_peak_detection_parameters(list_mass_tracks, max_rt_number, parameters, 
 
 def stats_detect_elution_peaks(mass_track, max_rt_number, 
                 min_peak_height, min_fwhm, min_prominence_threshold,
-                wlen, snr, min_prominence_ratio, iteration,
+                wlen, snr, peakshape, min_prominence_ratio, iteration,
                 shared_list):
     '''
     Stats guided peak detection. Use statistical summary (stdev) to get ROI (region of interest), 
@@ -65,8 +66,8 @@ def stats_detect_elution_peaks(mass_track, max_rt_number,
     2) big peaks are less likely to shallow over small peaks. 
     iteration: if True, a 2nd round of peak detection if enough remaining datapoints.
 
-    No more gap allowed in peaks, since asari is using 
-    composite mass track - gaps should not exist after combining many samples.
+    Gap allowed for 1 scan. 
+    Actually in composite mass track - gaps should not exist after combining many samples.
     Now position indices have to be converted internally in this function.
 
     Input
@@ -89,10 +90,9 @@ def stats_detect_elution_peaks(mass_track, max_rt_number,
     # This baseline method down weight the peak data points
     __baseline__ = 10**(np.log10(list_intensity+1).mean())
     __number_zeros__ = len(list_scans[list_intensity < 1])
+    _do_smoothing = True                # noisy mass track
     if list_intensity.max() > 100*min_peak_height and __number_zeros__ > 0.5*max_rt_number:
-        _do_smoothing = False           # clean mass track
-    else:
-        _do_smoothing = True            # noisy mass track
+        _do_smoothing = False           # clean mass track 
 
     ROIs = []                       # get ROIs by separation/filtering with __baseline__
     __selected_scans__ = list_scans[list_intensity > __baseline__]
@@ -106,9 +106,10 @@ def stats_detect_elution_peaks(mass_track, max_rt_number,
             ROIs.append(tmp)
             tmp = [ii]
         
-    ROIs = [r for r in ROIs if len(r) > min_fwhm]
+    ROIs = [r for r in ROIs if len(r) > min_fwhm] 
     # min_prominence_ratio * list_intensity_roi.max() is not good because high noise will suppress peaks
     prominence = max(min_prominence_threshold, snr*__baseline__)
+
     for R in ROIs:
         list_json_peaks += _detect_regional_peaks( list_intensity[R], R, 
                     min_peak_height, min_fwhm, prominence, min_prominence_ratio, 
@@ -122,14 +123,19 @@ def stats_detect_elution_peaks(mass_track, max_rt_number,
         list_json_peaks[ii]['cSelectivity'] = list_cSelectivity[ii]
         _peak_datapoints += list(range(list_json_peaks[ii]['left_base'], list_json_peaks[ii]['right_base']+1))
 
-    _noise_datapoints = [ii for ii in range(max_rt_number) if ii not in _peak_datapoints]
-    __noise_level__ = list_intensity[_noise_datapoints].mean()
+    __noise__ = list_intensity[ [ii for ii in range(max_rt_number) if ii not in _peak_datapoints] ]
+    __noise__ = __noise__[__noise__>1]
+    if len(__noise__) > 1:
+        __noise_level__ = np.quantile( __noise__, 0.9 )
+    else:
+        __noise_level__ = 1
+
     for peak in list_json_peaks:
         peak['parent_masstrack_id'] = mass_track['id_number']
         peak['mz'] = mass_track['mz']
-        peak['snr'] = int( min(peak['height'], 99999999) / __noise_level__)         # cap upper limit and avoid INF
+        peak['snr'] = int( min(peak['height'], 99999999) / __noise_level__+1)         # cap upper limit and avoid INF
         peak['goodness_fitting'] = evaluate_gaussian_peak(mass_track, peak)
-        if peak['snr'] > snr:
+        if peak['snr'] > snr and peak['goodness_fitting'] > peakshape:
             list_peaks.append(peak)
 
     shared_list += list_peaks
@@ -203,7 +209,7 @@ def __peaks_cSelectivity_stats_(__list_intensity, _jpeaks):
 
 def deep_detect_elution_peaks(mass_track, max_rt_number, 
                 min_peak_height, min_fwhm, min_prominence_threshold,
-                wlen, snr, min_prominence_ratio, iteration,
+                wlen, snr, peakshape, min_prominence_ratio, iteration,
                 shared_list):
     '''
     Optimized peak detection on a mass track. 
