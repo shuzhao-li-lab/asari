@@ -31,7 +31,7 @@ def iter_peak_detection_parameters(list_mass_tracks, max_rt_number, parameters, 
     '''
     Prominence requirement is critical to peak detection. 
     This is dynamically determined based on parameters['min_prominence_threshold'] 
-    and intensity level in a region (min_prominence_ratio * __max_intensity).
+    and baseline level in a region.
     '''
     iters = []
     min_peak_height = parameters['min_peak_height']
@@ -86,29 +86,32 @@ def stats_detect_elution_peaks(mass_track, max_rt_number,
     list_json_peaks, list_peaks = [], []
     list_intensity = __list_intensity = mass_track['intensity']
     list_scans = np.arange(max_rt_number)
-
+    # This baseline method down weight the peak data points
+    __baseline__ = 10**(np.log10(list_intensity+1).mean())
     __number_zeros__ = len(list_scans[list_intensity < 1])
     if list_intensity.max() > 100*min_peak_height and __number_zeros__ > 0.5*max_rt_number:
         _do_smoothing = False           # clean mass track
-        __noise_level__ = 1
     else:
         _do_smoothing = True            # noisy mass track
-        __noise_level__ = min(list_intensity.std(), min_peak_height * min_prominence_ratio)     
 
-    ROIs = []                       # get ROIs by separation/filtering with __noise_level__
-    __selected_scans__ = list_scans[list_intensity > __noise_level__]
+    ROIs = []                       # get ROIs by separation/filtering with __baseline__
+    __selected_scans__ = list_scans[list_intensity > __baseline__]
     tmp = [__selected_scans__[0]]
-    for ii in __selected_scans__[1:]: # get continuous strips
-        if ii == tmp[-1] + 1:
+    for ii in __selected_scans__[1:]:
+        if ii - tmp[-1] == 1:
             tmp.append(ii)
+        elif ii - tmp[-1] == 2: # allowing 1 gap
+            tmp += [ii-1, ii]
         else:
             ROIs.append(tmp)
             tmp = [ii]
         
     ROIs = [r for r in ROIs if len(r) > min_fwhm]
+    # min_prominence_ratio * list_intensity_roi.max() is not good because high noise will suppress peaks
+    prominence = max(min_prominence_threshold, snr*__baseline__)
     for R in ROIs:
         list_json_peaks += _detect_regional_peaks( list_intensity[R], R, 
-                    min_peak_height, min_fwhm, min_prominence_threshold, min_prominence_ratio, 
+                    min_peak_height, min_fwhm, prominence, min_prominence_ratio, 
                     _do_smoothing
         )
 
@@ -139,20 +142,21 @@ def _detect_regional_peaks(list_intensity_roi, rt_numbers_roi,
     smooth_moving_average is applied before peak detection.
     Smoothing will reduce the height of narrow peaks in CMAP, but not on the reported values,  
     because peak area is extracted from each sample after. 
-    The likely slight expansion of peak bases adds to robustness.
+    The likely slight expansion of peak bases can add to robustness.
     '''
     list_peaks = []
     if smoothing:
         list_intensity_roi = smooth_moving_average(list_intensity_roi, size=9)
-    prominence = max(min_prominence_threshold, min_prominence_ratio * list_intensity_roi.max())
+    
     peaks, properties = find_peaks(list_intensity_roi, 
-                                    height=min_peak_height, width=min_fwhm, prominence=prominence) 
+                                    height=min_peak_height, width=min_fwhm, prominence=min_prominence_threshold) 
 
     for ii in range(peaks.size):
         _jpeak = convert_roi_peak_json_(ii, list_intensity_roi, rt_numbers_roi, peaks, properties, )
         list_peaks.append(_jpeak)
 
     return check_overlap_peaks(list_peaks)
+    
 
 def convert_roi_peak_json_( ii, list_intensity_roi, rt_numbers_roi, peaks, properties):
     '''
@@ -460,7 +464,7 @@ def quick_detect_unique_elution_peak(intensity_track,
 def check_overlap_peaks(list_peaks):
     '''
     Check overlap btw a list of JSON peaks. 
-    list_peaks are already order by RT from find_peaks. Overlap usually from splitting.
+    list_peaks are already ordered by RT from find_peaks. Overlap usually from splitting.
 
     Return unique peaks.
     '''
@@ -497,8 +501,10 @@ def _check_overlap(peak1, peak2):
 
 def _merge_peak_cluster(cluster_peaks):
     '''
-
-    to-add: reevaluation of peak number, not to merge blindly -
+    Merge overlap reported peaks that stem from unclear separation.
+    If two true peaks overlap, find_peak should estabish their boundary at the valley,
+    and the reported peak bases should not overlap by N scans.
+    But good to have reevaluation of ROI if future developement desires so.
 
     Return: merged peaks by extending bases, inheritting other attributes from largest peak.
     '''
