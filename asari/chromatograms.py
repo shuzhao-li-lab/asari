@@ -6,6 +6,8 @@ Use mz tol (default 5 pmm) in XIC construction.
 XICs without neighbors within x ppm are considered specific (i.e. high selectivity). 
 Low selectivity regions will be still inspected to determine the true number of XICs.
 '''
+from operator import itemgetter
+
 import numpy as np
 from scipy.signal import find_peaks 
 from scipy import interpolate
@@ -91,7 +93,7 @@ def extract_single_track_fullrt_length(bin, rt_length):
     input bins in format of [(mz_int, scan_num, intensity_int), ...].
     return a massTrack as ( mz, np.array(intensities at full rt range) ).
     '''
-    mz = np.mean([x[0] for x in bin])
+    mz = np.median([x[0] for x in bin])
     intensity_track = np.zeros(rt_length, dtype=np.int64)
     for r in bin:                       # this gets max intensity on the same RT scan
         intensity_track[r[1]] = max(r[2], intensity_track[r[1]])
@@ -102,8 +104,7 @@ def bin_to_mass_tracks(bin_data_tuples, rt_length, mz_tolerance_ppm=5):
     '''
     input a flexible bin by units of 0.001 amu, in format of 
                                     [(mz, scan_num, intensity_int), ...].
-    A mass track is an EIC for full RT range, without separating the mass traces. 
-    An optimization step is carried out in CMAP.MassGrid, to verify m/z separation.
+    A mass track is an EIC for full RT range, possibly containing multiple extracted ion chromatograms in traditional definition. 
 
     return massTracks as ( mz, np.array(intensities at full rt range) )
     '''
@@ -113,26 +114,40 @@ def bin_to_mass_tracks(bin_data_tuples, rt_length, mz_tolerance_ppm=5):
     if mz_range < mz_tolerance:
         return [extract_single_track_fullrt_length(bin_data_tuples, rt_length)]
     else:
-        num_steps = int( 5* mz_range/ mz_tolerance )     # step in 1/5 mz_tolerance
-        hist, bin_edges = np.histogram([x[0] for x in bin_data_tuples], num_steps)
-        # example hist: array([  8,   33,  11,  24,  31,  50,  81, 164, 269,  28,   7])
-        hist_starts = [0] + [hist[:ii].sum() for ii in range(1,num_steps+1)]
-        # find_peaks returns e.g. array([ 1, 8]), {}. distance=5 because it's edge of tolerance
-        peaks, _ = find_peaks( hist, distance = 5 )
-        if peaks.any():
-            tracks = []
-            for p in peaks:
-                left = max(0, p-2)
-                right = min(p+3, num_steps)
-                tracks.append( extract_single_track_fullrt_length(
-                            bin_data_tuples[hist_starts[left]: hist_starts[right]], rt_length) )
-            return tracks
-        # possible improvement to make
-        else:
-            peak = np.argmax(hist)  # if find_peaks fails, get position of max value
-            left = max(0, peak-2)
-            right = min(peak+3, num_steps)
-            return [extract_single_track_fullrt_length(bin_data_tuples[hist_starts[left]: hist_starts[right]], rt_length)]
+        ROIs = build_chromatogram_intensity_aware(bin_data_tuples, rt_length, mz_tolerance)
+        # imperfect ROIs will be examined in extract_massTracks_ and merged if needed
+        return [extract_single_track_fullrt_length(R, rt_length) for R in ROIs]
+
+
+def build_chromatogram_intensity_aware(bin_data_tuples, rt_length, mz_tolerance):
+    '''
+    Multiple m/z tracks in the same region are resolved to ROIs.
+    Start with highest intensity, going down by intensity and include data points within mz_tolerance.
+    Repeat until no track is detected. Without requiring continuous RT, which is handled in extract_single_track_fullrt_length.
+
+    Input
+    =====
+    bin_data_tuples: a flexible bin in format of [(mz, scan_num, intensity_int), ...].
+    mz_tolerance_ppm: m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
+
+    return 
+    ======
+    assigned: separated bins of [(mz, scan_num, intensity_int), ...], prototype of extracted ion chromatograms 
+        to be used by extract_single_track_fullrt_length.
+    '''
+    bin_data_tuples.sort(key=itemgetter(2), reverse=True)
+    assigned, remaining = [], bin_data_tuples
+    while remaining:
+        seed, tmp_remaining = [remaining[0]], []
+        for T in remaining[1:]:
+            if abs(T[0] - seed[0][0]) < mz_tolerance:
+                seed.append(T)
+            else:
+                tmp_remaining.append(T)
+        assigned.append( seed )
+        remaining = tmp_remaining
+
+    return assigned
 
 
 def merge_two_mass_tracks(T1, T2):
