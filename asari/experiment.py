@@ -47,6 +47,8 @@ class ext_Experiment:
         self.parameters = parameters
         self.output_dir = parameters['outdir']
         self.mode = parameters['mode']
+        self.mz_tolerance_ppm = self.parameters['mz_tolerance_ppm']
+        self.check_isotope_ratio = self.parameters['check_isotope_ratio']
         self.database_mode = parameters['database_mode']
         self.reference_sample_id = self.get_reference_sample_id()
         
@@ -116,13 +118,13 @@ class ext_Experiment:
         '''
         Export Feature_annotation as tsv, Annotated_empricalCompounds in both JSON and pickle.
         Reference databases can be pre-loaded.
-        Will verify ppm
+        With db_mass_calibrate to theoretical values, 
         '''
         self.load_annotation_db()
         self.db_mass_calibrate()
 
-        EED = ExperimentalEcpdDatabase(mode=self.mode)
-        EED.build_from_list_peaks(self.CMAP.FeatureList)
+        EED = ExperimentalEcpdDatabase(mode=self.mode, mz_tolerance_ppm=self.mz_tolerance_ppm)
+        EED.build_from_list_peaks(self.CMAP.FeatureList, mz_tolerance_ppm=self.mz_tolerance_ppm, check_isotope_ratio=self.check_isotope_ratio)
         EED.extend_empCpd_annotation(self.KCD)
         EED.annotate_singletons(self.KCD)       
         # EED.dict_empCpds misses some features 
@@ -161,7 +163,8 @@ class ext_Experiment:
 
 
     def load_annotation_db(self, src='hmdb4'):
-        '''Database of known compound using JMS
+        '''
+        Database of known compound using JMS. Will add more options later.
         '''
         self.KCD = knownCompoundDatabase()
         self.KCD.mass_indexed_compounds = pickle.load( pkg_resources.open_binary(db, 'mass_indexed_compounds.pickle') )

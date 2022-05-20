@@ -127,7 +127,6 @@ def find_a_good_peak(peakDict):
     return good[0]
 
 
-
 #
 # Summary panel
 #
@@ -253,7 +252,8 @@ def dashboard(project_desc, cmap, epd, Ftable):
                 except KeyError:
                     info += "<p>Feature info not found - %s.</p>" %F
         except KeyError:
-            info += "<p>Track info not found - %s.</p>" %tid_number
+            info += "<p>No qualified feature found on this mass track - %s.</p>" %tid_number
+
         return pn.pane.HTML(info)
 
     def cmapplot_track_by_mz(mz):
