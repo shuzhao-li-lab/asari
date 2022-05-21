@@ -7,15 +7,13 @@ XICs without neighbors within x ppm are considered specific (i.e. high selectivi
 Low selectivity regions will be still inspected to determine the true number of XICs.
 '''
 from operator import itemgetter
-
 import numpy as np
 
 from scipy import interpolate
 from scipy.ndimage import uniform_filter1d
-
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
-from .mass_functions import check_close_mzs
+from .mass_functions import check_close_mzs, nn_cluster_by_mz_seeds
 
 # -----------------------------------------------------------------------------
 # mass Tracks
@@ -118,7 +116,9 @@ def bin_to_mass_tracks(bin_data_tuples, rt_length, mz_tolerance_ppm=5):
     if mz_range < mz_tolerance * 2:
         return [extract_single_track_fullrt_length(bin_data_tuples, rt_length)]
     else:
-        ROIs = build_chromatogram_intensity_aware(bin_data_tuples, rt_length, mz_tolerance)
+        # ROIs = build_chromatogram_intensity_aware(bin_data_tuples, rt_length, mz_tolerance)
+        ROIs = build_chromatogram_by_mz_clustering(bin_data_tuples, rt_length, mz_tolerance)
+        
         # imperfect ROIs will be examined in extract_massTracks_ and merged if needed
         return [extract_single_track_fullrt_length(R, rt_length) for R in ROIs]
 
@@ -154,8 +154,16 @@ def build_chromatogram_intensity_aware(bin_data_tuples, rt_length, mz_tolerance)
     return assigned
 
 
-
-
+def build_chromatogram_by_mz_clustering(bin_data_tuples, rt_length, mz_tolerance):
+    '''
+    Return clusters as separated bins of [(mz, scan_num, intensity_int), ...], prototype of extracted ion chromatograms 
+        to be used by extract_single_track_fullrt_length.
+    Input
+    =====
+    bin_data_tuples: a flexible bin in format of [(mz, scan_num, intensity_int), ...].
+    mz_tolerance_ppm: m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
+    '''
+    return nn_cluster_by_mz_seeds(bin_data_tuples, mz_tolerance, presorted=False)
 
 
 def merge_two_mass_tracks(T1, T2):
