@@ -1486,3 +1486,58 @@ def reformat_cmap(cmap):
     
 
 
+def gap_divide_mz_cluster__old(bin_data_tuples, mz_tolerance):
+    '''
+    return all clusters and each must be within mz_tolerance
+
+    ?? producing duplicates?
+
+                clusters, remaining = [], []                     # need complete asignment for MassGrid
+
+                num_steps = int( 5* mz_range/ mz_tolerance )     # step in 1/5 mz_tolerance
+                hist, bin_edges = np.histogram([x[0] for x in bin_data_tuples], num_steps)
+                # example hist: array([  8,   33,  11,  24,  31,  50,  81, 164, 269,  28,   7])
+                hist_starts = [0] + [hist[:ii].sum() for ii in range(1,num_steps+1)]
+                # find_peaks returns e.g. array([ 1, 8]), {}. distance=5 because it's edge of tolerance
+                peaks, _ = find_peaks( hist, distance = 5 )
+                if peaks.any():
+                    clusters = seed_nn_mz_cluster(bin_data_tuples, [hist_starts[ii] for ii in peaks])
+                    
+                    for clu in clusters:
+                        if clu[-1][0] - clu[0][0] < mz_tolerance:
+                            good_bins.append( __get_bin__(clu) )
+                        else:
+                            remaining += clu
+                    good_bins += [__get_bin__(C) for C in gap_divide_mz_cluster(remaining, mz_tolerance)]
+
+                else:
+                    good_bins += [__get_bin__(C) for C in gap_divide_mz_cluster(bin_data_tuples, mz_tolerance)]
+
+    except IndexError:
+        print(bin_data_tuples)
+        import sys
+        sys.exit()
+
+    '''
+    def __divide_by_largest_gap__(L):
+        gaps = [L[ii][0]-L[ii-1][0] for ii in range(1, len(L))]
+        largest = np.argmax(gaps) + 1
+        return L[:largest], L[largest:]
+
+    def __group_by_tolcheck__(good, bad, mz_tolerance):
+        tmp = []
+        for TT in bad:
+            for C in __divide_by_largest_gap__(TT):
+                # 
+                if C[-1][0] - C[0][0] < mz_tolerance:
+                    good.append(C)
+                else:
+                    tmp.append(C)
+        return good, tmp
+
+    good, bad = [], [bin_data_tuples]
+    while bad:
+        good, bad = __group_by_tolcheck__(good, bad, mz_tolerance)
+    
+    return good
+

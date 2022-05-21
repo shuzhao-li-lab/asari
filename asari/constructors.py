@@ -52,6 +52,7 @@ class MassGrid:
                     (jj[0], jj[1], ii)      # m/z, masstrack_id, sample_index
                 )
         all.sort()
+
         all_bins = self.bin_track_mzs(all, self.experiment.reference_sample_id)
 
         self.MassGrid = pd.DataFrame(
@@ -135,7 +136,7 @@ class MassGrid:
 
     def bin_track_mzs(self, tl, reference_id):
         '''
-        Bin all track m/z values into centroids, to be used to build massGrid.
+        Bin all track m/z values into centroids via clustering, to be used to build massGrid.
         Because the range of each bin cannot be larger than mz_tolerance, 
         and mass tracks in each sample cannot overlap within mz_tolerance,
         multiple entries from the same sample in same bin will not happen.
@@ -150,10 +151,9 @@ class MassGrid:
         list of bins: [ (mean_mz, [(), (), ...]), (mean_mz, [(), (), ...]), ... ]
         '''
         def __get_bin__(bin_data_tuples):
-            return (np.mean([x[0] for x in bin_data_tuples]), bin_data_tuples)
+            return (np.median([x[0] for x in bin_data_tuples]), bin_data_tuples)
 
         tol_ = 0.000001 * self.experiment.parameters['mz_tolerance_ppm']
-
         bins_of_bins = []
         tmp = [tl[0]]
         for ii in range(1, len(tl)):
@@ -165,35 +165,19 @@ class MassGrid:
                 bins_of_bins.append(tmp)
                 tmp = [tl[ii]]
         bins_of_bins.append(tmp)
-
         good_bins = []
         for bin_data_tuples in bins_of_bins:
             mz_range = bin_data_tuples[-1][0] - bin_data_tuples[0][0]
             mz_tolerance = bin_data_tuples[0][0] * tol_
-            if mz_range < mz_tolerance:
+            # important: double tol_ range here as mean_mz falls in single tol_
+            if mz_range < mz_tolerance * 2:
                 good_bins.append( __get_bin__(bin_data_tuples) )
-            else:
-                clusters, remaining = [], []                     # need complete asignment for MassGrid
-                num_steps = int( 5* mz_range/ mz_tolerance )     # step in 1/5 mz_tolerance
-                hist, bin_edges = np.histogram([x[0] for x in bin_data_tuples], num_steps)
-                # example hist: array([  8,   33,  11,  24,  31,  50,  81, 164, 269,  28,   7])
-                hist_starts = [0] + [hist[:ii].sum() for ii in range(1,num_steps+1)]
-                # find_peaks returns e.g. array([ 1, 8]), {}. distance=5 because it's edge of tolerance
-                peaks, _ = find_peaks( hist, distance = 5 )
-                if peaks.any():
-                    clusters = seed_nn_mz_cluster(bin_data_tuples, [hist_starts[ii] for ii in peaks])
-                    
-                    for clu in clusters:
-                        if clu[-1][0] - clu[0][0] < mz_tolerance:
-                            good_bins.append( __get_bin__(clu) )
-                        else:
-                            remaining += clu
-                    good_bins += [__get_bin__(C) for C in gap_divide_mz_cluster(remaining, mz_tolerance)]
 
-                else:
-                    good_bins += [__get_bin__(C) for C in gap_divide_mz_cluster(bin_data_tuples, mz_tolerance)]
+            else:
+                good_bins += [__get_bin__(C) for C in nn_cluster_by_mz_seeds(bin_data_tuples, mz_tolerance)]
 
         return good_bins
+
 
     def join(self, M2):
         '''

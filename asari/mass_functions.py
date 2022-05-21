@@ -8,6 +8,9 @@ Alternatively, some of the mass functions can be implemented in C and compiled t
 # from numba import jit
 
 import numpy as np
+from scipy.signal import find_peaks 
+from scipy.ndimage import uniform_filter1d
+
 from mass2chem.search import *
 
 
@@ -313,10 +316,10 @@ def seed_nn_mz_cluster(bin_data_tuples, seed_indices):
     '''
     complete NN clustering, by assigning each data tuple to its closest seed.
     '''
-    seeds = [bin_data_tuples[ii] for ii in set(seed_indices)]
+    seeds = [bin_data_tuples[ii] for ii in set( seed_indices) ]
     # do set(seed_indices) to avoid repetittive seed_indices in case find_peaks does so
     _NN = len(seeds)
-    clusters = [[]] * _NN
+    clusters = [[]] * _NN           # see nn_cluster_by_mz_seeds for bug
     # assing cluster number by nearest distance to a seed
     for x in bin_data_tuples:
         deltas = sorted([(abs(x[0]-seeds[ii][0]), ii) for ii in range(_NN)])
@@ -326,27 +329,57 @@ def seed_nn_mz_cluster(bin_data_tuples, seed_indices):
 
 
 def gap_divide_mz_cluster(bin_data_tuples, mz_tolerance):
-    '''
-    return all clusters and each must be within mz_tolerance
-    '''
     def __divide_by_largest_gap__(L):
         gaps = [L[ii][0]-L[ii-1][0] for ii in range(1, len(L))]
         largest = np.argmax(gaps) + 1
         return L[:largest], L[largest:]
+    return __divide_by_largest_gap__(bin_data_tuples)
 
-    def __group_by_tolcheck__(good, bad, mz_tolerance):
-        tmp = []
-        for TT in bad:
-            for C in __divide_by_largest_gap__(TT):
-                # 
-                if C[-1][0] - C[0][0] < mz_tolerance:
-                    good.append(C)
-                else:
-                    tmp.append(C)
-        return good, tmp
 
-    good, bad = [], [bin_data_tuples]
-    while bad:
-        good, bad = __group_by_tolcheck__(good, bad, mz_tolerance)
-    
-    return good
+def identify_mass_peaks(bin_data_tuples, mz_tolerance, presorted=True):
+    '''
+    Get most centroid m/z values as peaks in m/z values distribution, at least mz_tolerance apart.
+    bin_data_tuples is [(mz, scan_num, intensity_int), ...] or [(m/z, track_id, sample_id), ...].
+    mz_tolerance is precomputed based on m/z and ppm, e.g. 5 ppm of 80 = 0.0004;  5 ppm of 800 = 0.0040.
+    '''
+    tol4 = int(mz_tolerance * 10000)
+    size = max(2, int(0.5 * tol4))
+    mz4 = [int(x[0]*10000) for x in bin_data_tuples]
+    if not presorted:
+        mz4.sort()
+    dict_count = {}
+    positioned = range(mz4[0], mz4[-1]+1)
+    for ii in positioned:
+        dict_count[ii] = 0
+    for x in mz4:
+        dict_count[x] += 1
+    values = uniform_filter1d([dict_count[ii] for ii in positioned], size=size, mode='nearest')
+    peaks, _ = find_peaks( values, distance = tol4 )
+
+    return [0.0001*positioned[ii] for ii in peaks]
+
+
+def nn_cluster_by_mz_seeds(bin_data_tuples, mz_tolerance, presorted=True):
+    '''
+    complete NN clustering, by assigning each data tuple to its closest m/z seed.
+    bin_data_tuples is [(mz, scan_num, intensity_int), ...] or [(m/z, track_id, sample_id), ...].
+    Note to future: np.argmin will be faster than sorted here.
+
+    Bug in Python compiler: when clusters = [[]] * _NN is used, it causes occassional duplication of entries. 2022-05-21
+
+    '''
+    mz_seeds = identify_mass_peaks(bin_data_tuples, mz_tolerance, presorted)
+    if mz_seeds:
+        _NN = len(mz_seeds)
+        # clusters = [[]] * _NN
+        clusters = []
+        for x in mz_seeds:
+            clusters.append([])
+        # assign cluster number by nearest distance to a seed
+        for x in bin_data_tuples:
+            deltas = sorted([(abs(x[0] - mz_seeds[ii]), ii) for ii in range(_NN)])
+            clusters[deltas[0][1]].append(x)
+    else:
+        clusters = [C for C in gap_divide_mz_cluster(bin_data_tuples, mz_tolerance)]
+
+    return clusters

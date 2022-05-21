@@ -9,7 +9,7 @@ Low selectivity regions will be still inspected to determine the true number of 
 from operator import itemgetter
 
 import numpy as np
-from scipy.signal import find_peaks 
+
 from scipy import interpolate
 from scipy.ndimage import uniform_filter1d
 
@@ -79,6 +79,7 @@ def extract_massTracks_(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_time
         to_remove += [a, b]
 
     updated_tracks = [tracks[ii] for ii in range(len(tracks)) if ii not in to_remove] + merged
+
     return {
         'rt_numbers': rt_numbers,
         'rt_times': rt_times,
@@ -88,12 +89,14 @@ def extract_massTracks_(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_time
 
 def extract_single_track_fullrt_length(bin, rt_length):
     '''
-    New format after v1.5.
     A mass track is an EIC for full RT range, without separating the mass traces. 
     input bins in format of [(mz_int, scan_num, intensity_int), ...].
     return a massTrack as ( mz, np.array(intensities at full rt range) ).
+    New format after v1.5.
     '''
-    mz = np.median([x[0] for x in bin])
+    mzs = [x[0] for x in bin]
+    ints = [x[2] for x in bin]
+    mz = 0.5 * (np.median(mzs) + mzs[np.argmax(ints)])
     intensity_track = np.zeros(rt_length, dtype=np.int64)
     for r in bin:                       # this gets max intensity on the same RT scan
         intensity_track[r[1]] = max(r[2], intensity_track[r[1]])
@@ -111,7 +114,8 @@ def bin_to_mass_tracks(bin_data_tuples, rt_length, mz_tolerance_ppm=5):
     bin_data_tuples.sort()   # by m/z, ascending
     mz_range = bin_data_tuples[-1][0] - bin_data_tuples[0][0]
     mz_tolerance = bin_data_tuples[0][0] * 0.000001 * mz_tolerance_ppm   
-    if mz_range < mz_tolerance:
+    # important: double tol_ range here as mean_mz falls in single tol_
+    if mz_range < mz_tolerance * 2:
         return [extract_single_track_fullrt_length(bin_data_tuples, rt_length)]
     else:
         ROIs = build_chromatogram_intensity_aware(bin_data_tuples, rt_length, mz_tolerance)
@@ -148,6 +152,10 @@ def build_chromatogram_intensity_aware(bin_data_tuples, rt_length, mz_tolerance)
         remaining = tmp_remaining
 
     return assigned
+
+
+
+
 
 
 def merge_two_mass_tracks(T1, T2):
