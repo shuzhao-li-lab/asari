@@ -83,30 +83,48 @@ def stats_detect_elution_peaks(mass_track, max_rt_number,
     Update
     ======
     shared_list: list of peaks in JSON format, to pool with batch_deep_detect_elution_peaks.
-    '''
-    list_json_peaks, list_peaks = [], []
-    list_intensity = __list_intensity = mass_track['intensity']
-    list_scans = np.arange(max_rt_number)
-    # This baseline method down weight the peak data points
-    __baseline__ = 10**(np.log10(list_intensity+1).mean())
-    __number_zeros__ = len(list_scans[list_intensity < 1])
-    _do_smoothing = True                # noisy mass track
-    if list_intensity.max() > 100*min_peak_height and __number_zeros__ > 0.5*max_rt_number:
-        _do_smoothing = False           # clean mass track 
 
-    ROIs = []                       # get ROIs by separation/filtering with __baseline__
-    __selected_scans__ = list_scans[list_intensity > __baseline__]
-    tmp = [__selected_scans__[0]]
-    for ii in __selected_scans__[1:]:
         if ii - tmp[-1] == 1:
             tmp.append(ii)
         elif ii - tmp[-1] == 2: # allowing 1 gap
             tmp += [ii-1, ii]
+    # list_intensity = np.array(  smooth_lowess(mass_track['intensity'], frac=0.02) )
+    list_intensity = smooth_moving_average(mass_track['intensity'], size=9)
+
+    _peak_datapoints = []
+
+        _peak_datapoints += list(range(list_json_peaks[ii]['left_base'], list_json_peaks[ii]['right_base']+1))
+
+    __noise__ = list_intensity[ [ii for ii in range(max_rt_number) if ii not in _peak_datapoints] ]
+    __noise__ = __noise__[__noise__>1]
+    if len(__noise__) > 1:
+        __noise_level__ = np.quantile( __noise__, 0.5 )
+    else:
+        __noise_level__ = 1
+    '''
+    list_json_peaks, list_peaks = [], []
+    list_intensity = mass_track['intensity']
+    list_scans = np.arange(max_rt_number)
+    # This baseline method down weight the peak data points
+    __baseline__ = 10**(np.log10(list_intensity+1).mean())
+    __selected_scans__ = list_scans[list_intensity > __baseline__]
+    __noise_level__ = max(__baseline__,
+                            np.quantile( list_intensity[__selected_scans__], 0.1 ))
+
+    ROIs = []                           # get ROIs by separation/filtering with __baseline__, allowing 2 gap
+    tmp = [__selected_scans__[0]]
+    for ii in __selected_scans__[1:]:
+        if ii - tmp[-1] < 3:
+            tmp += range(tmp[-1]+1, ii+1)
         else:
             ROIs.append(tmp)
             tmp = [ii]
         
     ROIs = [r for r in ROIs if len(r) > min_fwhm] 
+    _do_smoothing = True                # noisy mass track
+    if list_intensity.max() > 100*min_peak_height and len(__selected_scans__) < 0.5*max_rt_number:
+        _do_smoothing = False           # clean mass track 
+
     # min_prominence_ratio * list_intensity_roi.max() is not good because high noise will suppress peaks
     prominence = max(min_prominence_threshold, snr*__baseline__)
 
@@ -117,19 +135,10 @@ def stats_detect_elution_peaks(mass_track, max_rt_number,
         )
 
     # evaluate and format peaks
-    _peak_datapoints = []
-    list_cSelectivity = __peaks_cSelectivity_stats_(__list_intensity, list_json_peaks)
+    list_cSelectivity = __peaks_cSelectivity_stats_(list_intensity, list_json_peaks)
     for ii in range(len(list_json_peaks)):
         list_json_peaks[ii]['cSelectivity'] = list_cSelectivity[ii]
-        _peak_datapoints += list(range(list_json_peaks[ii]['left_base'], list_json_peaks[ii]['right_base']+1))
-
-    __noise__ = list_intensity[ [ii for ii in range(max_rt_number) if ii not in _peak_datapoints] ]
-    __noise__ = __noise__[__noise__>1]
-    if len(__noise__) > 1:
-        __noise_level__ = np.quantile( __noise__, 0.9 )
-    else:
-        __noise_level__ = 1
-
+    #__noise_level__ = __baseline__
     for peak in list_json_peaks:
         peak['parent_masstrack_id'] = mass_track['id_number']
         peak['mz'] = mass_track['mz']
@@ -140,6 +149,7 @@ def stats_detect_elution_peaks(mass_track, max_rt_number,
 
     shared_list += list_peaks
 
+
 def _detect_regional_peaks(list_intensity_roi, rt_numbers_roi, 
                     min_peak_height, min_fwhm, min_prominence_threshold, min_prominence_ratio,
                     smoothing=True):
@@ -149,11 +159,12 @@ def _detect_regional_peaks(list_intensity_roi, rt_numbers_roi,
     Smoothing will reduce the height of narrow peaks in CMAP, but not on the reported values,  
     because peak area is extracted from each sample after. 
     The likely slight expansion of peak bases can add to robustness.
+
     '''
     list_peaks = []
     if smoothing:
         list_intensity_roi = smooth_moving_average(list_intensity_roi, size=9)
-    
+
     peaks, properties = find_peaks(list_intensity_roi, 
                                     height=min_peak_height, width=min_fwhm, prominence=min_prominence_threshold) 
 
@@ -161,7 +172,7 @@ def _detect_regional_peaks(list_intensity_roi, rt_numbers_roi,
         _jpeak = convert_roi_peak_json_(ii, list_intensity_roi, rt_numbers_roi, peaks, properties, )
         list_peaks.append(_jpeak)
 
-    return check_overlap_peaks(list_peaks)
+    return list_peaks   #check_overlap_peaks(list_peaks)
     
 
 def convert_roi_peak_json_( ii, list_intensity_roi, rt_numbers_roi, peaks, properties):

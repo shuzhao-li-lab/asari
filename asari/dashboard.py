@@ -11,6 +11,7 @@ import hvplot.pandas
 import panel as pn
 import holoviews as hv
 
+hv.extension('bokeh')
 pn.extension(sizing_mode="stretch_width")
 
 
@@ -81,8 +82,6 @@ def convert_dict_html(d, title=''):
     May need to improve error handling since KeyError is potential problem.
     '''
     s = title
-    color = ''
-    
     info = [ ('id_number: ', d['id_number'], ' - ', 'parent_masstrack_id: ', d['parent_masstrack_id'], ' - ', 'parent_epd_id: ', d.get('parent_epd_id', '')),
              ('snr: ', d['snr'], ' - ', 'peak shape: ', round(d['goodness_fitting'],2), ' - ', 'cSelectivity: ', round(d['cSelectivity'],2),),
              ('height: ', d['height'], ' - ', 'peak_area: ', d['peak_area']),
@@ -211,9 +210,17 @@ def dashboard(project_desc, cmap, epd, Ftable):
         return pn.pane.HTML(info)
 
     def cmapplot_track_by_feature_id(feature_number):
-        color = 'blue'
-        track_id_number = peakDict['F' + str(feature_number)]['parent_masstrack_id']
-        return cmapplot_mass_tracks(cmap, rt_list, color, track_id_number)
+        id_number = 'F' + str(feature_number)
+        _p = { 'height': 1000000, 'rtime_left_base': 0, 'rtime_right_base': 10, }
+        p = peakDict.get(id_number, _p)
+        height = max(1.3 * p['height'], 1000000)
+        track_id_number = peakDict[id_number]['parent_masstrack_id']
+        peak_Area = hv.Area(
+            ([p['rtime_left_base'], p['rtime_right_base']], [height, height])).opts(
+                color='red', alpha=0.1,
+            )
+        return cmapplot_mass_tracks(cmap, rt_list, 'blue', track_id_number) * peak_Area
+
         
     display_feature_info = pn.bind(
         feature_info_by_feature_id, feature_number=feature_selector,
@@ -240,7 +247,6 @@ def dashboard(project_desc, cmap, epd, Ftable):
                         step=0.001, start=min_mz, end=max_mz,)
     mz_selector.link(mz_slider, value='value')
     mz_slider.link(mz_selector, value='value')
-
 
     def track_info_by_mz(mz):
         tid_number = str(find_track_by_mz(cmap, rt_list, mz))
