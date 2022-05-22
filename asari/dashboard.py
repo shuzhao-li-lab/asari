@@ -248,25 +248,34 @@ def dashboard(project_desc, cmap, epd, Ftable):
     mz_selector.link(mz_slider, value='value')
     mz_slider.link(mz_selector, value='value')
 
-    def track_info_by_mz(mz):
+    def get_features_by_mz(mz):
+        # return tid_number, list of dictionary of features associated with the mass track
         tid_number = str(find_track_by_mz(cmap, rt_list, mz))
-        info = ""
         try:
-            for F in track2peaks[tid_number]:
-                try:
-                    info += "<p>" + convert_dict_html(peakDict[F], F) + "</p>"
-                except KeyError:
-                    info += "<p>Feature info not found - %s.</p>" %F
+            return tid_number, [peakDict[F] for F in track2peaks[tid_number]]  
         except KeyError:
-            info += "<p>No qualified feature found on this mass track - %s.</p>" %tid_number
+            return tid_number, []
 
+    def track_info_by_mz(mz):
+        tid_number, list_features = get_features_by_mz(mz)
+        if list_features:
+            info = ""
+            for peak in list_features:
+                info += "<p>" + convert_dict_html(peak, peak['id_number']) + "</p>"
+        else:
+            info = "<p>No qualified feature found on this mass track - %s.</p>" %tid_number
         return pn.pane.HTML(info)
 
     def cmapplot_track_by_mz(mz):
-        color = 'green'
-        track_id_number = str(find_track_by_mz(cmap, rt_list, mz))
-        return cmapplot_mass_tracks(cmap, rt_list, color, track_id_number)
-        
+        tid_number, list_features = get_features_by_mz(mz)
+        trackplot = cmapplot_mass_tracks(cmap, rt_list, 'green', tid_number)
+        for p in list_features:
+            height = max(1.3 * p['height'], 1000000)
+            center = p['rtime']
+            peak_Area = hv.Area(([center-1, center+1], [height, height])).opts(color='red', alpha=0.1)
+            trackplot *= peak_Area
+        return trackplot
+
     display_track_info = pn.bind(
         track_info_by_mz, mz=mz_selector,
         )
@@ -275,7 +284,7 @@ def dashboard(project_desc, cmap, epd, Ftable):
         )
 
     mz_browser = pn.Column(
-        "## View mass track by m/z",
+        "## View composite mass track by m/z",
         pn.Row( pn.Column(mz_slider, mz_selector),
                 display_track_info ),
         plot_masstracks_mz,
