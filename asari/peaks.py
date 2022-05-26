@@ -86,9 +86,15 @@ def stats_detect_elution_peaks(mass_track, max_rt_number,
     '''
     list_json_peaks, list_peaks = [], []
     list_intensity = mass_track['intensity']
+    max_intensity = list_intensity.max()
+    NORMALIZATION_FACTOR, __TOP__ = 1, 1E8
+    if max_intensity > __TOP__:
+        NORMALIZATION_FACTOR = max_intensity/__TOP__
+        list_intensity = list_intensity/NORMALIZATION_FACTOR
+
     list_scans = np.arange(max_rt_number)
-    # This baseline method down weight the peak data points
-    __baseline__ = 2**(np.log2(list_intensity + min_peak_height*0.01).mean())
+    # This baseline method down weight the peak data points; 
+    __baseline__ = 2 ** (np.log2(list_intensity + min_peak_height*0.01).mean())
     __selected_scans__ = list_scans[list_intensity > __baseline__]
     __noise_level__ = max(__baseline__,
                             np.quantile( list_intensity[__selected_scans__], 0.05 ))
@@ -129,6 +135,7 @@ def stats_detect_elution_peaks(mass_track, max_rt_number,
         peak['snr'] = int( min(peak['height'], 99999999) / __noise_level__+1)         # cap upper limit and avoid INF
         peak['goodness_fitting'] = evaluate_gaussian_peak(mass_track, peak)
         if peak['snr'] >= snr and peak['goodness_fitting'] > peakshape:
+            peak['height'] = int(NORMALIZATION_FACTOR) * peak['height']
             list_peaks.append(peak)
 
     shared_list += list_peaks

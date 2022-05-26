@@ -15,6 +15,9 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 
 from .mass_functions import check_close_mzs, nn_cluster_by_mz_seeds
 
+INTENSITY_DATA_TYPE = np.int64
+# int32 uses less memory - for large data we can check if int32 is safe, i.e. under 2E9
+
 # -----------------------------------------------------------------------------
 # mass Tracks
 # -----------------------------------------------------------------------------
@@ -85,7 +88,7 @@ def extract_massTracks_(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_time
     }
 
 
-def extract_single_track_fullrt_length(bin, rt_length):
+def extract_single_track_fullrt_length(bin, rt_length, INTENSITY_DATA_TYPE=INTENSITY_DATA_TYPE):
     '''
     A mass track is an EIC for full RT range, without separating the mass traces. 
     input bins in format of [(mz_int, scan_num, intensity_int), ...].
@@ -95,7 +98,7 @@ def extract_single_track_fullrt_length(bin, rt_length):
     mzs = [x[0] for x in bin]
     ints = [x[2] for x in bin]
     mz = 0.5 * (np.median(mzs) + mzs[np.argmax(ints)])
-    intensity_track = np.zeros(rt_length, dtype=np.int64)
+    intensity_track = np.zeros(rt_length, dtype=INTENSITY_DATA_TYPE)
     for r in bin:                       # this gets max intensity on the same RT scan
         intensity_track[r[1]] = max(r[2], intensity_track[r[1]])
     return ( mz, intensity_track )
