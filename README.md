@@ -165,6 +165,24 @@ One can then use `asari join` to merge the results [in progress].
 
 Future improvement can be made by implementing some functions, e.g. chromatogram building, in C.
 
+Docker image
+============
+At https://hub.docker.com/r/shuzhao/asari.
+
+This image includes mono and ThermoRawFileParser, which converts Thermo .raw files to .mzML files.
+
+Example use
+To launch with volume mapping `$ docker run -v /Users/shuzhao/data:/home -ti asari`.
+
+In the container, ThermoRawFileParser is under `/usr/local/thermo/`.
+```
+# mono /usr/local/thermo/ThermoRawFileParser.exe -d my_data_dir
+
+# asari analyze --input tmp/file_008.mzML 
+
+# asari process --mode neg --input tmp --output test99
+```
+
 
 Links
 =====
