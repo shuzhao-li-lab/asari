@@ -53,6 +53,8 @@ def process_project(list_input_files, parameters):
     EE.process_all()
     EE.export_all()
 
+    if not parameters['pickle'] and parameters['database_mode'] != 'memory':
+        remove_intermediate_pickles(parameters)
 
 def read_project_dir(directory, file_pattern='.mzML'):
     '''
@@ -74,10 +76,18 @@ def register_samples(list_input_files):
 
 def create_export_folders(parameters, time_stamp):
     parameters['outdir'] = '_'.join([parameters['project_name'], parameters['outdir'], time_stamp]) 
+    parameters['tmp_pickle_dir'] = os.path.join(parameters['outdir'], 'pickle')
     os.mkdir(parameters['outdir'])
-    os.mkdir(os.path.join(parameters['outdir'], 'pickle'))
+    os.mkdir(parameters['tmp_pickle_dir'])
     os.mkdir(os.path.join(parameters['outdir'], 'export'))
 
+def remove_intermediate_pickles(parameters):
+    '''
+    Remove all temporary files under pickle/ to free up disk space. 
+    '''
+    print("Removing temporary pickle files...")
+    for f in os.listdir(parameters['tmp_pickle_dir']):
+        os.remove( os.path.join(parameters['tmp_pickle_dir'], f) )
 
 # -----------------------------------------------------------------------------
 # Mass track (EIC) extraction, multi-core parralization via multiprocessing

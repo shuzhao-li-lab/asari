@@ -13,6 +13,7 @@
 PARAMETERS = {
     'project_name': 'asari_project',
     'outdir': 'output',
+    'pickle': False,
     'database_mode': 'auto',            # `auto` determined on sample number 
                                         # 'ondisk', 'memory' (run in memory, only small studies), 
                                         # 'mongo' (MongoDB, requiring installation of DB server, to implement)
@@ -41,7 +42,7 @@ PARAMETERS = {
     'peak_number_rt_calibration': 15,   # minimal number of selected high-quality peaks required for RT calibration. 
                                         # Samples with fewer selected peaks are dropped out.
 
-    # Number of samples dictate workflow 
+    # Number of samples dictates workflow 
     'project_sample_number_small': 10,  # 10
     
     # default output names

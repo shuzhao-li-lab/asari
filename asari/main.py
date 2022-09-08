@@ -58,6 +58,8 @@ def main(parameters=PARAMETERS):
             help='file of m/z list for targeted extraction')
     parser.add_argument('--autoheight', default=False,
             help='automatic determining min peak height')
+    parser.add_argument('--pickle', default=False,
+            help='keep all intermediate pickle files')
 
     args = parser.parse_args()
 
@@ -79,6 +81,8 @@ def main(parameters=PARAMETERS):
         parameters['project_name'] = args.project
     if args.output:
         parameters['outdir'] = args.output
+    if args.pickle:
+        parameters['pickle'] = args.pickle
     if args.reference:
         parameters['reference'] = args.reference
 

@@ -66,6 +66,7 @@ class ext_Experiment:
             L = [(v['number_anchor_mz_pairs'], v['sample_id']) for v in self.sample_registry.values()]
             L.sort(reverse=True)
             ref = self.sample_registry[L[0][1]]
+            self.parameters['reference'] = ref['input_file']
             print("\n    The reference sample is:\n    ||* %s *||\n" %ref['name'])
             print("Max reference retention time is %4.2f at scan number %d.\n" %(
                 max(ref['list_retention_time']), ref['max_scan_number']))
