@@ -56,9 +56,9 @@ def main(parameters=PARAMETERS):
             help='designated reference file for alignments')
     parser.add_argument('--target', 
             help='file of m/z list for targeted extraction')
-    parser.add_argument('--autoheight', default=False,
+    parser.add_argument('--autoheight', default=False, type=bool,
             help='automatic determining min peak height')
-    parser.add_argument('--pickle', default=False,
+    parser.add_argument('--pickle', default=False, type=bool,
             help='keep all intermediate pickle files')
 
     args = parser.parse_args()

@@ -53,12 +53,14 @@ def get_file_masstrack_stats(infile,
     list_mass_tracks = []
     exp = pymzml.run.Reader(infile)
     jj = 0
+
     for spec in exp:
-        if spec["positive scan"]:
-            ionization_mode = 'pos'
-            jj += 1
-        else:
-            ionization_mode = 'neg'
+        if spec.ms_level == 1:                          # MS Level 1 only
+            if spec["positive scan"]:
+                ionization_mode = 'pos'
+                jj += 1
+            else:
+                ionization_mode = 'neg'
 
     xdict = extract_massTracks_(exp, 
                 mz_tolerance_ppm=mz_tolerance_ppm, 

@@ -75,7 +75,7 @@ def register_samples(list_input_files):
     return sample_registry
 
 def create_export_folders(parameters, time_stamp):
-    parameters['outdir'] = '_'.join([parameters['project_name'], parameters['outdir'], time_stamp]) 
+    parameters['outdir'] = '_'.join([parameters['outdir'], parameters['project_name'], time_stamp]) 
     parameters['tmp_pickle_dir'] = os.path.join(parameters['outdir'], 'pickle')
     os.mkdir(parameters['outdir'])
     os.mkdir(parameters['tmp_pickle_dir'])
@@ -88,6 +88,11 @@ def remove_intermediate_pickles(parameters):
     print("Removing temporary pickle files...")
     for f in os.listdir(parameters['tmp_pickle_dir']):
         os.remove( os.path.join(parameters['tmp_pickle_dir'], f) )
+    try:
+        os.rmdir(parameters['tmp_pickle_dir'])
+    except:
+        print("Failed to remove directory %s." %parameters['tmp_pickle_dir'])
+
 
 # -----------------------------------------------------------------------------
 # Mass track (EIC) extraction, multi-core parralization via multiprocessing
