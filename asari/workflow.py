@@ -51,7 +51,7 @@ def process_project(list_input_files, parameters):
     
     EE = ext_Experiment(sample_registry, parameters)
     EE.process_all()
-    EE.export_all()
+    EE.export_all(anno=parameters["anno"])
 
     if not parameters['pickle'] and parameters['database_mode'] != 'memory':
         remove_intermediate_pickles(parameters)

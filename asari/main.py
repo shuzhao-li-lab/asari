@@ -5,6 +5,9 @@ from asari import __version__
 from .workflow import *
 from .defaul_parameters import PARAMETERS
 
+booleandict = {'T': True, 'F': False, 1: True, 0: False, 
+                   'True': True, 'False': False, 'TRUE': True, 'FALSE': False, 'true': True, 'false': False,
+                    }
 
 def main(parameters=PARAMETERS):
     '''
@@ -34,6 +37,7 @@ def main(parameters=PARAMETERS):
     print("\n\n~~~~~~~ Hello from Asari (%s) ~~~~~~~~~\n" %__version__)
 
     parser = argparse.ArgumentParser(description='asari, LC-MS metabolomics data preprocessing')
+
     parser.add_argument('-v', '--version', action='version', version=__version__, 
             help='print version and exit')
     parser.add_argument('run', metavar='subcommand', 
@@ -48,6 +52,7 @@ def main(parameters=PARAMETERS):
             help='output directory')
     parser.add_argument('-j', '--project', 
             help='project name')
+
     parser.add_argument('-p', '--parameters', 
             help='Custom paramter file in YAML. Use parameters.yaml as template.')
     parser.add_argument('-c', '--cores', type=int, 
@@ -56,10 +61,13 @@ def main(parameters=PARAMETERS):
             help='designated reference file for alignments')
     parser.add_argument('--target', 
             help='file of m/z list for targeted extraction')
-    parser.add_argument('--autoheight', default=False, type=bool,
+
+    parser.add_argument('--autoheight', default=False,
             help='automatic determining min peak height')
-    parser.add_argument('--pickle', default=False, type=bool,
+    parser.add_argument('--pickle', default=False, 
             help='keep all intermediate pickle files')
+    parser.add_argument('--anno', default=True, 
+            help='perform default annotation after processing data')
 
     args = parser.parse_args()
 
@@ -82,7 +90,9 @@ def main(parameters=PARAMETERS):
     if args.output:
         parameters['outdir'] = args.output
     if args.pickle:
-        parameters['pickle'] = args.pickle
+        parameters['pickle'] = booleandict[args.pickle]
+    if args.anno:
+        parameters['anno'] = booleandict[args.anno]
     if args.reference:
         parameters['reference'] = args.reference
 

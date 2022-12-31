@@ -103,15 +103,16 @@ class ext_Experiment:
         self.CMAP.build_composite_tracks()
         self.CMAP.global_peak_detection()
 
-    def export_all(self):
+    def export_all(self, anno=True):
         '''
         Export all files.
         Annotation of features to empirical compounds is done here.
         '''
         self.CMAP.MassGrid.to_csv(
             os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
-        self.export_CMAP_pickle()
-        self.annotate()
+        if anno:
+            self.export_CMAP_pickle()
+            self.annotate()
         self.export_feature_tables()
         self.export_log()
 
@@ -146,7 +147,6 @@ class ext_Experiment:
         with open(outfile, 'wb') as f:
             pickle.dump(EED.dict_empCpds, f, pickle.HIGHEST_PROTOCOL)
 
-
     def export_CMAP_pickle(self):
         '''
         Export main CMAP data and MassGrid to pickle, which can be used for visual data exploration.
@@ -162,7 +162,6 @@ class ext_Experiment:
         with open(outfile, 'wb') as f:
             pickle.dump(_export, f, pickle.HIGHEST_PROTOCOL)
 
-
     def load_annotation_db(self, src='hmdb4'):
         '''
         Database of known compound using JMS. Will add more options later.
@@ -170,7 +169,6 @@ class ext_Experiment:
         self.KCD = knownCompoundDatabase()
         self.KCD.mass_indexed_compounds = pickle.load( pkg_resources.open_binary(db, 'mass_indexed_compounds.pickle') )
         self.KCD.emp_cpds_trees = pickle.load( pkg_resources.open_binary(db, 'emp_cpds_trees.pickle') )
-
 
     def db_mass_calibrate(self, required_calibrate_threshold=0.000002):
         '''
@@ -193,7 +191,6 @@ class ext_Experiment:
         else:
             print("Mass accuracy check is skipped, too few mz_landmarks (%d) matched." %len(mz_landmarks))
 
-
     def append_orphans_to_epmCpds(self, dict_empCpds):
         '''
         # EED.dict_empCpds does not include features without formula match, and we add them there.
@@ -211,7 +208,6 @@ class ext_Experiment:
             new_id_start += 1
 
         return dict_empCpds
-
 
     def export_peak_annotation(self, dict_empCpds, KCD, export_file_name_prefix):
         '''
@@ -265,7 +261,6 @@ class ext_Experiment:
                     # empCpd id, neutral_formula, ion_relation (will change not always anchor)
                     interim_id, V['neutral_formula'], best_peak.get('ion_relation', '')
                 )
-
 
     def export_feature_tables(self, outfile='cmap_feature_table.tsv',
                                     _snr=10, _peak_shape=0.7, _cSelectivity=0.7):
@@ -324,18 +319,19 @@ class ext_Experiment:
         print("Filtered Feature table (%d x %d) was written to %s.\n" %(
                                 filtered_FeatureTable.shape[0], self.number_of_samples, outfile))
         
-        # in self.selected_unique_features: (empCpd id, neutral_formula, ion_relation)
-        sel = [ii for ii in filtered_FeatureTable.index if filtered_FeatureTable['id_number'][ii] in
-                                    self.selected_unique_features.keys()]
-        unique_compound_table = filtered_FeatureTable.loc[sel, :]
-        unique_compound_table.insert(3, "empCpd", [self.selected_unique_features[ii][0] for ii in unique_compound_table['id_number']])
-        unique_compound_table.insert(4, "neutral_formula", [self.selected_unique_features[ii][1] for ii in unique_compound_table['id_number']])
-        unique_compound_table.insert(5, "ion_relation", [self.selected_unique_features[ii][2] for ii in unique_compound_table['id_number']])
-        
-        outfile = os.path.join(self.parameters['outdir'], 'export', 'unique_compound__'+self.parameters['output_feature_table'])
-        unique_compound_table.to_csv(outfile, index=False, sep="\t")
-        print("Unique compound table (%d x %d) was written to %s.\n" %(
-                            unique_compound_table.shape[0], self.number_of_samples, outfile))
+        if self.parameters['anno']:
+            # in self.selected_unique_features: (empCpd id, neutral_formula, ion_relation)
+            sel = [ii for ii in filtered_FeatureTable.index if filtered_FeatureTable['id_number'][ii] in
+                                        self.selected_unique_features.keys()]
+            unique_compound_table = filtered_FeatureTable.loc[sel, :]
+            unique_compound_table.insert(3, "empCpd", [self.selected_unique_features[ii][0] for ii in unique_compound_table['id_number']])
+            unique_compound_table.insert(4, "neutral_formula", [self.selected_unique_features[ii][1] for ii in unique_compound_table['id_number']])
+            unique_compound_table.insert(5, "ion_relation", [self.selected_unique_features[ii][2] for ii in unique_compound_table['id_number']])
+            
+            outfile = os.path.join(self.parameters['outdir'], 'export', 'unique_compound__'+self.parameters['output_feature_table'])
+            unique_compound_table.to_csv(outfile, index=False, sep="\t")
+            print("Unique compound table (%d x %d) was written to %s.\n" %(
+                                unique_compound_table.shape[0], self.number_of_samples, outfile))
 
         
     def export_log(self):
