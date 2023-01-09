@@ -99,7 +99,6 @@ class ext_Experiment:
         self.CMAP.construct_mass_grid()
         if not self.parameters['rt_align_on']:
             self.CMAP.mock_rentention_alignment()
-
         self.CMAP.build_composite_tracks()
         self.CMAP.global_peak_detection()
 

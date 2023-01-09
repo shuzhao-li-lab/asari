@@ -64,6 +64,8 @@ def main(parameters=PARAMETERS):
 
     parser.add_argument('--autoheight', default=False,
             help='automatic determining min peak height')
+    parser.add_argument('--reverse_detection', default=True,
+            help='use the reverse peak detection algorithm')
     parser.add_argument('--pickle', default=False, 
             help='keep all intermediate pickle files')
     parser.add_argument('--anno', default=True, 
@@ -89,6 +91,8 @@ def main(parameters=PARAMETERS):
         parameters['project_name'] = args.project
     if args.output:
         parameters['outdir'] = args.output
+    if args.reverse_detection:
+        parameters['reverse_detection'] = booleandict[args.reverse_detection]
     if args.pickle:
         parameters['pickle'] = booleandict[args.pickle]
     if args.anno:

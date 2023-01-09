@@ -60,9 +60,9 @@ Alternative to a standalone command, to run as a module via Python interpreter, 
 
 Output
 ======
-A typical run on disk generataes a directory like this
+A typical run on disk may generatae a directory like this
 
-    asari_project_t17_427105156
+    rsvstudy_asari_project_427105156
     ├── Annotated_empricalCompounds.json
     ├── Feature_annotation.tsv
     ├── export
@@ -84,10 +84,10 @@ That is, if a feature is only present in one sample, it will be reported,
 as we think this is important for applications like exposome and personalized medicine. 
 The filtering decisions are left to end users.
 
-The `pickle` folder keeps intermediate files during processing,
-but one can remove it afterward to save disk space.
+The `pickle` folder keeps intermediate files during processing.
+They are removed after the processing by default, to save disk space.
+Users can choose to keep them by specifying `--pickle True`.
 
-This may change as development continues.
 
 Dashboard
 =========
@@ -145,7 +145,7 @@ Selectivity is tracked for
 - cSelectivity, how distinct are chromatograhic elution peaks
 - dSelectivity, how distinct are database records 
 
-This package uses `mass2chem` and `JMS` for mass search and annotation functions.
+This package uses `mass2chem`, `khipu` and `JMS` for mass search and annotation functions.
 
 
 Performance
@@ -194,9 +194,11 @@ Related projects:
 
 Mummichog: metabolomics pathway/network analysis
 
-metDataModel: data models for metabolomics, used by mummichog and Azimuth DB
+metDataModel: data models for metabolomics
 
 mass2chem: common utilities in interpreting mass spectrometry data, annotation
+
+khipu: a Python library for generalized, low-level annotation of MS metabolomics
 
 JMS: Json's Metabolite Services
 

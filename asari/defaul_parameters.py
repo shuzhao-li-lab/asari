@@ -32,6 +32,7 @@ PARAMETERS = {
     'min_peak_height': 10000,           # minimal peak height.
     'autoheight': False,                # min_peak_height can be estimated automatically by setting autoheight on in CLI  
     'gaussian_shape': 0.3,              # min cutoff
+    'reverse_detection': False,         # use the reverse peak detection algorithm
     
     # retention time alignment
     'reference': None,
