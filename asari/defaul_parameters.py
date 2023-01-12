@@ -52,7 +52,7 @@ PARAMETERS = {
     'annotation_filename': "Annotation_table.tsv",
     'json_empricalCompounds': "_empCpd_json.json",
     # for annotation
-    'check_isotope_ratio': True,
+    'check_isotope_ratio': False,
 
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

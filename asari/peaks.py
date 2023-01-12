@@ -41,7 +41,7 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
     peakshape = parameters['gaussian_shape']
     reverse_detection = parameters['reverse_detection']
     wlen = 101                          # if used, this limits peak evaluation 50 scans to the left and 50 to right
-    min_prominence_ratio = 0.1
+    min_prominence_ratio = 0.05
     iteration = True                    # a 2nd round of peak detection if enough remaining datapoints
     for mass_track in list_mass_tracks:
         if mass_track['intensity'].max() > min_peak_height:
@@ -120,7 +120,9 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
     ROIs.append(tmp)
     ROIs = [r for r in ROIs if len(r) >= min_fwhm * 2]
     _do_smoothing = True                # noisy mass track
-    if list_intensity.max() > 100 * min_peak_height and len(__selected_scans__) < 0.5 * number_of_scans:
+    if __baseline__ < min_peak_height \
+        and list_intensity.max() > 100 * min_peak_height \
+            and len(__selected_scans__) < 0.5 * number_of_scans:
         _do_smoothing = False           # clean mass track 
 
     # min_prominence_ratio * list_intensity_roi.max() is not good because high noise will suppress peaks
