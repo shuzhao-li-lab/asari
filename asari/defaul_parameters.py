@@ -22,7 +22,7 @@ PARAMETERS = {
     # mass parameters
     'mode': 'pos',                      # ionization mode
     'mass_range': (50, 2000),
-    'mz_tolerance_ppm': 5,                  # ppm, high selectivity meaning no overlap neighbors to confuse; 
+    'mz_tolerance_ppm': 5,              # ppm, high selectivity meaning no overlap neighbors to confuse; 
                                         # Low selectivity regions will be still inspected to determine the true number of features
 
     # chromatogram and peak parameters
@@ -30,9 +30,10 @@ PARAMETERS = {
     'signal_noise_ratio': 10,           # peak height at least x fold over noise
     'min_intensity_threshold': 1000,    # minimal intensity for mass track extraction, filtering baseline
     'min_peak_height': 10000,           # minimal peak height.
-    'autoheight': False,                # min_peak_height can be estimated automatically by setting autoheight on in CLI  
-    'gaussian_shape': 0.3,              # min cutoff
     'reverse_detection': False,         # use the reverse peak detection algorithm
+    'autoheight': False,                # min_peak_height can be estimated automatically by setting autoheight on in CLI  
+    'gaussian_shape': 0.3,              # min cutoff of goodness of fitting to Gauss model
+    
     
     # retention time alignment
     'reference': None,
@@ -63,5 +64,6 @@ PARAMETERS = {
     # 'initiation_samples': [],           # if user to specify N samples to initiate data processing, 
                                           # otherwise they are chosen automatically
     # 'project_sample_number_large': 1000, # not used now
+    # 
     }
     

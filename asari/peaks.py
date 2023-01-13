@@ -8,6 +8,7 @@ import multiprocessing as mp
 import numpy as np
 from scipy.signal import find_peaks 
 from scipy.optimize import curve_fit 
+from scipy.stats import linregress
 
 from .chromatograms import *
 
@@ -57,7 +58,140 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
 # Statistics guided peak detection
 # -----------------------------------------------------------------------------
 
+
 def stats_detect_elution_peaks(mass_track, number_of_scans, 
+                min_peak_height, min_fwhm, min_prominence_threshold,
+                wlen, snr, peakshape, min_prominence_ratio, iteration, reverse_detection,
+                shared_list):
+    '''
+    Stats guided peak detection. 
+    Baseline is regressed on bottom quartile values (spread in 5 bins along RT),
+    and snr*__stdev__, min_prominence_threshold and min_prominence_ratio are used to determine a peak.
+    The mass track is cleaned up by substracting baseline and smoothed via LOWESS.
+    ROIs are then separated by min_prominence_threshold.
+    The advantages of separating ROI are 1) better performance of long LC runs, and
+    2) big peaks are less likely to shallow over small peaks. 
+    iteration: if True, a 2nd round of peak detection if enough remaining datapoints. Not used now.
+    Gap allowed for 2 scan in constructing ROIs. 
+    Actually in composite mass track - gaps should not exist after combining many samples.
+    Now position indices have to be converted internally in this function.
+
+    Input
+    =====
+    mass_track: {'id_number': k, 'mz': mz, 'rt_scan_numbers': [..], 'intensity': [..]}
+                Mass tracks are expected to be continuous per m/z value, with 0s for gaps.
+    snr: minimal signal to noise ratio required for a peak. 
+                Noise is defined by the mean of all non-peak data points in mass_track.
+    min_peak_height, min_fwhm, min_prominence_threshold as in main parameters.
+    min_prominence_ratio: require ratio of prominence relative to peak height.
+    reverse_detection: use reversed intensity array during peak detection. Not used now.
+    wlen, iteration, are not used in this function but kept for consistent format with others.
+
+    Update
+    ======
+    shared_list: list of peaks in JSON format, to pool with batch_deep_detect_elution_peaks.
+    '''
+    list_json_peaks, list_peaks = [], []
+    list_scans = np.arange(number_of_scans)
+    list_intensity = mass_track['intensity']
+    max_intensity = list_intensity.max()
+    NORMALIZATION_FACTOR, __TOP__ = 1, 1E8
+    if max_intensity > __TOP__:
+        NORMALIZATION_FACTOR = max_intensity/__TOP__
+        list_intensity = list_intensity/NORMALIZATION_FACTOR
+
+    __selected_scans__ = list_scans[list_intensity > 100]
+    if max_intensity > 100 * min_peak_height and len(__selected_scans__) < 0.2 * number_of_scans:
+        # clean track
+        __baseline__, __stdev__ = np.ones(number_of_scans) * 100, 100
+    else:
+        list_intensity, __baseline__, __stdev__ = clean_smooth_track(
+                            list_intensity, list_scans, number_of_scans, min_prominence_threshold
+                            )
+        __selected_scans__ = list_scans[list_intensity > min_prominence_threshold] # default min_peak_height/3
+
+    if __selected_scans__.any():
+        ROIs = []                           # get ROIs by separation/filtering with __baseline__, allowing 2 gap
+        tmp = [__selected_scans__[0]]
+        for ii in __selected_scans__[1:]:
+            if ii - tmp[-1] < 3:
+                tmp += range(tmp[-1]+1, ii+1)
+            else:
+                ROIs.append(tmp)
+                tmp = [ii]
+
+        ROIs.append(tmp)
+        ROIs = [r for r in ROIs if len(r) >= min_fwhm * 2]
+        if ROIs:
+            min_prominence_threshold = max(min_prominence_threshold, snr*__stdev__)
+            for R in ROIs:
+                if len(R) < 3 * min_fwhm:       # extend if too short - help narrow peaks
+                    R = extend_ROI(R, number_of_scans)
+                list_json_peaks += _detect_regional_peaks( list_intensity[R], R, 
+                            min_peak_height, min_fwhm, min_prominence_threshold, min_prominence_ratio, 
+                )
+
+            # evaluate and format peaks
+            list_cSelectivity = __peaks_cSelectivity_stats_(list_intensity, list_json_peaks)
+            for ii in range(len(list_json_peaks)):
+                list_json_peaks[ii]['cSelectivity'] = list_cSelectivity[ii]
+
+            for peak in list_json_peaks:
+                peak['parent_masstrack_id'] = mass_track['id_number']
+                peak['mz'] = mass_track['mz']
+                peak['snr'] = int( min(peak['height'], 99999999) / max(__baseline__[peak['apex']], 100) )
+                                            # cap upper limit and avoid INF
+                if peak['snr'] >= snr:
+                    peak['height'] = int(NORMALIZATION_FACTOR * peak['height'])
+                    goodness_fitting = evaluate_gaussian_peak(mass_track, peak)
+                    if goodness_fitting > peakshape:
+                        peak['goodness_fitting'] = goodness_fitting
+                        list_peaks.append(peak)
+
+    shared_list += list_peaks
+
+
+def fit_baseline(list_intensity, list_scans, number_of_scans):
+    '''Linear fit bottom quartile of intensity values as baseline.
+    list_intensity, list_scans are numpy arrays, not checking types in this function.
+    '''
+    XX, YY = [], []
+    _step = int(number_of_scans/5.0)
+    for ii in range(5):
+        _start, _end = _step*ii, _step*(ii+1)
+        a, b = list_scans[_start: _end], list_intensity[_start: _end]
+        mask = b < np.quantile( b, 0.1 ) + 1
+        XX.append(a[mask])
+        YY.append(b[mask])
+
+    slope, intercept, r, p, __stdev__ = linregress(np.concatenate(XX), np.concatenate(YY))
+    __baseline__ = slope*list_scans + intercept
+
+    return __baseline__, __stdev__
+
+
+def clean_smooth_track(list_intensity, list_scans, number_of_scans, min_prominence_threshold):
+    '''
+    If smoothing=True, smooth_lowess is applied before peak detection. 
+    The other method, smooth_moving_average, does not work well for very noisy data.
+    Smoothing will reduce the height of narrow peaks in CMAP, but not on the reported values,  
+    because peak area is extracted from each sample after. 
+    The likely slight expansion of peak bases can add to robustness.
+    Do baselien fitting always, because noisy data exist even for clean baseline.
+    '''
+    __baseline__, __stdev__ = fit_baseline(list_intensity, list_scans, number_of_scans)
+    if __stdev__ > min_prominence_threshold:
+        _frac_ = 0.05
+        if number_of_scans < 200:
+            _frac_ = min(10.0/number_of_scans, 0.8)
+        list_intensity = smooth_lowess(list_intensity, frac=_frac_) 
+
+    list_intensity = list_intensity - __baseline__
+    
+    return list_intensity, __baseline__, __stdev__
+
+
+def bk_stats_detect_elution_peaks(mass_track, number_of_scans, 
                 min_peak_height, min_fwhm, min_prominence_threshold,
                 wlen, snr, peakshape, min_prominence_ratio, iteration, reverse_detection,
                 shared_list):
@@ -104,6 +238,7 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
     list_scans = np.arange(number_of_scans)
     # This baseline method down weight the peak data points; 
     __baseline__ = 2 ** (np.log2(list_intensity + min_peak_height*0.01).mean())
+
     __selected_scans__ = list_scans[list_intensity > __baseline__]
     __noise_level__ = max(__baseline__,
                             np.quantile( list_intensity[__selected_scans__], 0.05 ))
@@ -160,18 +295,13 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
 
 def _detect_regional_peaks(list_intensity_roi, rt_numbers_roi, 
                     min_peak_height, min_fwhm, min_prominence_threshold, min_prominence_ratio,
-                    smoothing=True):
+                    ):
     '''
     Return list of peaks based on detection in ROI, defined by (list_intensity_roi, rt_numbers_roi).
-    If smoothing=True, smooth_moving_average is applied before peak detection.
-    Smoothing will reduce the height of narrow peaks in CMAP, but not on the reported values,  
-    because peak area is extracted from each sample after. 
-    The likely slight expansion of peak bases can add to robustness.
+    min_prominence_ratio : useful when top intensity is specific to each ROI. 
+        If ROI is not cleanly separated, this may overlook small peaks.
     '''
     list_peaks = []
-    if smoothing:
-        list_intensity_roi = smooth_moving_average(list_intensity_roi, size=min_fwhm)
-
     prominence = max(min_prominence_ratio * list_intensity_roi.max(), min_prominence_threshold)
     peaks, properties = find_peaks(list_intensity_roi, 
                                     height=min_peak_height, width=min_fwhm, prominence=prominence) 
@@ -200,6 +330,9 @@ def convert_roi_peak_json_( ii, list_intensity_roi, rt_numbers_roi, peaks, prope
 
 
 def reverse_reverse_peak_detection(list_json_peaks, max_rt_index):
+    '''
+    Recover json peaks when reverse_peak_detection is used.
+    '''
     LL = []
     for J in list_json_peaks:
         old_left, old_right = J['left_base'], J['right_base']
@@ -235,7 +368,7 @@ def __peaks_cSelectivity_stats_(__list_intensity, _jpeaks):
 
 
 # -----------------------------------------------------------------------------
-# Heuristics peak detection
+# Heuristic peak detection
 # -----------------------------------------------------------------------------
 
 def deep_detect_elution_peaks(mass_track, number_of_scans, 
@@ -243,9 +376,9 @@ def deep_detect_elution_peaks(mass_track, number_of_scans,
                 wlen, snr, peakshape, min_prominence_ratio, iteration, reverse_detection,
                 shared_list):
     '''
-    Optimized peak detection on a mass track. 
-    Local maxima is used in find_peak, but prominence and cSelectivity are used to control detection,
-    in step-wise optimization. 
+    Kept for research. The 1st choice is stats guided function stats_detect_elution_peaks().
+    Heuristic peak detection on a mass track, in step-wise optimization.  
+    Local maxima is used in find_peak, but prominence and cSelectivity are used to control detection.
     Peak shape (Gaussian fitting goodness > 0.8) is required for noisy data or iterated detection.
     Noisy tracks are smoothed using moving average of N data points.
     peak area is integrated by summing up intensities of included scans.
@@ -436,6 +569,9 @@ def gaussian_function__(x, a, mu, sigma):
 
 def goodness_fitting__(y_orignal, y_fitted):                  # R^2 as goodness of fitting
     return 1 - (np.sum((y_fitted-y_orignal)**2) / np.sum((y_orignal-np.mean(y_orignal))**2))
+
+def polynomial_2_function(x, a, b):
+    return a*x**2 + b
 
 def evaluate_gaussian_peak(mass_track, peak):
     '''

@@ -64,8 +64,8 @@ def main(parameters=PARAMETERS):
 
     parser.add_argument('--autoheight', default=False,
             help='automatic determining min peak height')
-    parser.add_argument('--reverse_detection', default=True,
-            help='use the reverse peak detection algorithm')
+    parser.add_argument('--reverse_detection', default=False,
+            help='the reverse peak detection algorithm; not used now')
     parser.add_argument('--pickle', default=False, 
             help='keep all intermediate pickle files')
     parser.add_argument('--anno', default=True, 
