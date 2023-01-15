@@ -263,8 +263,7 @@ class ext_Experiment:
                     interim_id, V['neutral_formula'], best_peak.get('ion_relation', '')
                 )
 
-    def export_feature_tables(self, outfile='cmap_feature_table.tsv',
-                                    _snr=5, _peak_shape=0.7, _cSelectivity=0.7):
+    def export_feature_tables(self, _snr=10, _peak_shape=0.7, _cSelectivity=0.7):
         '''
         To export features tables:
         1) preferred table under `outdir`, after quality filtering by SNR, peak shape and chromatographic selectivity.

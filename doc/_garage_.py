@@ -1567,20 +1567,6 @@ def fit_baseline(list_intensity, list_scans, number_of_scans):
     return __baseline__, __stdev__
 
 
-def lowess_smooth_track(list_intensity, number_of_scans):
-    '''
-    For noisy data, smooth_lowess is applied before peak detection. 
-    The other method, smooth_moving_average, does not work well for very noisy data.
-    Smoothing will reduce the height of narrow peaks in CMAP, but not on the reported values,  
-    because peak area is extracted from each sample after. 
-    The likely slight expansion of peak bases can add to robustness.
-    '''
-    _frac_ = 0.05
-    if number_of_scans < 200:
-        _frac_ = min(10.0/number_of_scans, 0.8)
-    return smooth_lowess(list_intensity, frac=_frac_) 
-
-
 def f1_stats_detect_elution_peaks(mass_track, number_of_scans, 
                 min_peak_height, min_fwhm, min_prominence_threshold,
                 wlen, snr, peakshape, min_prominence_ratio, iteration, reverse_detection,

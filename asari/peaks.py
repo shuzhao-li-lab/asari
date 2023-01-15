@@ -20,8 +20,7 @@ def batch_deep_detect_elution_peaks(list_mass_tracks, number_of_scans, parameter
         shared_list = manager.list()
         iters = iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters, shared_list)
         with mp.Pool( parameters['multicores'] ) as pool:
-            # switch peak detection algorithms
-            # pool.starmap( deep_detect_elution_peaks, iters )
+            # call peak detection function here
             pool.starmap( stats_detect_elution_peaks, iters )
 
         FeatureList = list(shared_list)
@@ -41,9 +40,9 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
     snr = parameters['signal_noise_ratio']
     peakshape = parameters['gaussian_shape']
     reverse_detection = parameters['reverse_detection']
-    wlen = 4 * parameters['min_timepoints'] + 1      # divided window to the left and to right
+    wlen = parameters['wlen']            # divided window to the left and to right
     min_prominence_ratio = 0.05
-    iteration = True                    # a 2nd round of peak detection if enough remaining datapoints
+    iteration = False                    # a 2nd round of peak detection if enough remaining datapoints
     for mass_track in list_mass_tracks:
         if mass_track['intensity'].max() > min_peak_height:
             iters.append(
@@ -88,7 +87,8 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
     
     min_prominence_ratio: require ratio of prominence relative to peak height. Not used now.
     reverse_detection: use reversed intensity array during peak detection. Not used now.
-    iteration, not used in this function but kept for consistent format with others.
+    iteration, not used in this function but possible to add iteration on high intensity ROIs 
+                if peaks are not detected 1st round.
 
     Update
     ======
@@ -96,11 +96,11 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
     '''
     list_json_peaks, list_peaks = [], []
     list_scans = np.arange(number_of_scans)
-    _baseline_, noise_level, scaling_factor, \
-        list_intensity = audit_mass_track(mass_track['intensity'], min_fwhm)
-
-    # # get ROIs by separation/filtering with noise_level * 2, allowing 2 gap
-    __selected_scans__ = list_scans[list_intensity > noise_level * 2]
+    _baseline_, noise_level, scaling_factor, list_intensity = audit_mass_track(
+                mass_track['intensity'], min_fwhm, min_peak_height
+                )       
+    # # get ROIs by separation/filtering with noise_level, allowing 2 gap
+    __selected_scans__ = list_scans[list_intensity > noise_level]
     if __selected_scans__.any():
         ROIs = []
         tmp = [__selected_scans__[0]]
@@ -117,58 +117,76 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
             for R in ROIs:
                 if len(R) < 3 * min_fwhm:       # extend if too short - help narrow peaks
                     R = extend_ROI(R, number_of_scans)
-                list_json_peaks += detect_evaluate_peaks_on_roi( 
-                            list_intensity[R], R, 
+                list_intensity_roi = list_intensity[R]
+                peaks = detect_evaluate_peaks_on_roi( 
+                            list_intensity_roi, R, 
                             min_peak_height, min_fwhm, min_prominence_threshold, wlen,
-                            snr, peakshape, min_prominence_ratio, 
-                            noise_level
+                            snr, peakshape, min_prominence_ratio, noise_level
                     )
+                list_json_peaks += peaks
 
             # evaluate and format peaks
-            list_cSelectivity = __peaks_cSelectivity_stats_(list_intensity, list_json_peaks)
+            list_cSelectivity, set_peak_datapoints = __peaks_cSelectivity_stats_(list_intensity, list_json_peaks)
+            noise_data_points = [x for x in list_scans if x not in set_peak_datapoints]
+            new_noise_level = max(100, np.quantile(mass_track['intensity'][noise_data_points], 0.25))
+
             for ii in range(len(list_json_peaks)):
                 list_json_peaks[ii]['cSelectivity'] = list_cSelectivity[ii]
 
             for peak in list_json_peaks:
                 peak['parent_masstrack_id'] = mass_track['id_number']
                 peak['mz'] = mass_track['mz']
-                peak['snr'] = int( min(peak['height'], 99999999) / (_baseline_+noise_level) )
-                                            # cap upper limit and avoid INF
+                peak['height'] = scaling_factor * peak['height'] + _baseline_
+                peak['snr'] = int( min(peak['height'], 99999999) / new_noise_level )
+                                            # cap upper limit and avoid INF (_baseline_+noise_level)
                 if peak['snr'] >= snr:
-                    peak['height'] = int(scaling_factor * peak['height'])
+                    peak['height'] = int(peak['height'])
                     list_peaks.append(peak)
 
     shared_list += list_peaks
 
 
-def audit_mass_track(list_intensity, min_fwhm):
-    '''Get stats on a mass track (list_intensity), rescale, detrend, smooth and subtract baseline if needed.
-    If noise_level is higher than 1% of max value in cleaned track, smooth_moving_average is applied.
-    noise_level : stdev of bottom 10% values (above min) or arbitrary min as 100.
-    returns    _baseline_, noise_level, scaling_factor, clean_list_intensity 
-
-    if median_intensity < LOW:                          # clean track
-        _baseline_, noise_level = LOW, LOW
+def compute_noise_by_flanks(peak, list_intensity, set_peak_datapoints, old_noise_level):
+    '''Compute SNR by the adjacent nonpeak data points. Not used now.
+    '''
+    max_N = len(list_intensity)
+    L = peak['right_base'] - peak['left_base']
+    N = min(30, 5*L, 0.05*max_N)
+    use_index = list(range(max(0, peak['left_base']-N), peak['left_base'], 1)) + list(
+                range(peak['right_base']+1, min(peak['right_base']+N, max_N), 1))
+    use_index = [x for x in use_index if x not in set_peak_datapoints]
+    if use_index:
+        return max(100, (list_intensity[use_index]+1).mean())
     else:
-        list_intensity = detrend(list_intensity)        # detrend
-        LL = list_intensity[list_intensity > LOW]
-        bottom_x_perc = LL[LL < np.quantile(LL, 0.25)]
-        _baseline_, noise_level = bottom_x_perc.mean(), bottom_x_perc.std()
+        return old_noise_level
 
+def audit_mass_track(list_intensity, min_fwhm, min_peak_height):
+    '''Get stats on a mass track (list_intensity), rescale, detrend, 
+    smooth 
+    and subtract baseline if needed.
+    If noise_level is higher than 1% of max value in cleaned track, smooth_moving_average is applied.
+    noise_level : modeled noise level, as stdev of bottom 25% values or arbitrary min as 100.
+    returns    _baseline_, noise_level, scaling_factor, clean_list_intensity 
     '''
     scaling_factor, LOW, HIGH = 1, 100, 1E8
+    _baseline_, noise_level = LOW, LOW                     # will not change on a clean track
     max_intensity, median_intensity = list_intensity.max(), np.median(list_intensity)
     if max_intensity > HIGH:
         scaling_factor = max_intensity/HIGH
         list_intensity = list_intensity/scaling_factor
 
-    _baseline_ = noise_level = 2 ** (np.log2(list_intensity + LOW).mean())
-    if median_intensity > LOW:
-        list_intensity = detrend(list_intensity)
-
-    list_intensity = list_intensity - _baseline_
+    if median_intensity > LOW: 
+        LL = list_intensity[list_intensity > LOW]
+        if len(LL) > len(list_intensity) * 0.5 and median_intensity > 10 * min_peak_height:
+            list_intensity = detrend(list_intensity)        # detrend
+        bottom_x_perc = list_intensity[list_intensity < LOW + np.quantile(list_intensity, 0.25)]
+        _baseline_, noise_level = bottom_x_perc.mean(), bottom_x_perc.std()
+        
+    _baseline_, noise_level = max(_baseline_, LOW), max(noise_level, LOW)
     if 100 * noise_level > list_intensity.max():        # decision on smoothing
         list_intensity = smooth_moving_average(list_intensity, size=min_fwhm + 2)
+
+    list_intensity = list_intensity - _baseline_
 
     return _baseline_, noise_level, scaling_factor, list_intensity 
 
@@ -258,12 +276,14 @@ def __peaks_cSelectivity_stats_(__list_intensity, _jpeaks):
     peaks, properties as from find_peaks; 
     __list_intensity is np.array of the mass_track.
     See also __peaks_cSelectivity__.
+    return list_cSelectivity, set_peak_datapoints
     '''
-    _peak_datapoints = []
+    set_peak_datapoints = []
     for peak in _jpeaks:
-            _peak_datapoints += list(range(peak['left_base'], peak['right_base']))
+            set_peak_datapoints += list(range(peak['left_base'], peak['right_base']+1))
 
-    _peak_datapoints = __list_intensity[list(set(_peak_datapoints))]    # peaks may overlap
+    set_peak_datapoints = set(set_peak_datapoints)
+    _peak_datapoints = __list_intensity[list(set_peak_datapoints)]    # peaks may overlap
     list_cSelectivity = []
     for ii in range(len(_jpeaks)):
         _threshold = 0.5 * _jpeaks[ii]['height']
@@ -274,7 +294,7 @@ def __peaks_cSelectivity_stats_(__list_intensity, _jpeaks):
         else:
             list_cSelectivity.append( 0 )
             
-    return list_cSelectivity
+    return list_cSelectivity, set_peak_datapoints
 
 
 # -----------------------------------------------------------------------------
@@ -312,6 +332,20 @@ def evaluate_gaussian_peak_on_intensity_list(intensity_list, height, apex, left,
         goodness_fitting = 0
 
     return goodness_fitting, sigma
+
+
+def lowess_smooth_track(list_intensity, number_of_scans):
+    '''
+    For noisy data, smooth_lowess is applied before peak detection. 
+    The other method, smooth_moving_average, does not work well for very noisy data.
+    Smoothing will reduce the height of narrow peaks in CMAP, but not on the reported values,  
+    because peak area is extracted from each sample after. 
+    The likely slight expansion of peak bases can add to robustness.
+    '''
+    _frac_ = 0.05
+    if number_of_scans < 200:
+        _frac_ = min(10.0/number_of_scans, 0.8)
+    return smooth_lowess(list_intensity, frac=_frac_) 
 
 
 def quick_detect_unique_elution_peak(intensity_track, 
