@@ -32,7 +32,7 @@ PARAMETERS = {
     'min_peak_height': 10000,           # minimal peak height.
     'reverse_detection': False,         # use the reverse peak detection algorithm
     'autoheight': False,                # min_peak_height can be estimated automatically by setting autoheight on in CLI  
-    'gaussian_shape': 0.3,              # min cutoff of goodness of fitting to Gauss model
+    'gaussian_shape': 0.5,              # min cutoff of goodness of fitting to Gauss model
     
     
     # retention time alignment
