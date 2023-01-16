@@ -220,14 +220,14 @@ def detect_evaluate_peaks_on_roi(list_intensity_roi, rt_numbers_roi,
     for ii in range(peaks.size):
         if properties['right_bases'][ii] - properties['left_bases'][ii] >= min_fwhm + 2:
             _jpeak = evaluate_roi_peak_json_(
-                ii, list_intensity_roi, rt_numbers_roi, peaks, properties, peakshape
+                ii, list_intensity_roi, rt_numbers_roi, peaks, properties, peakshape, min_fwhm
                 )
             if _jpeak:
                 list_peaks.append(_jpeak)
 
     return check_overlap_peaks(list_peaks)
 
-def evaluate_roi_peak_json_( ii, list_intensity_roi, rt_numbers_roi, peaks, properties, peakshape):
+def evaluate_roi_peak_json_( ii, list_intensity_roi, rt_numbers_roi, peaks, properties, peakshape, min_fwhm):
     '''
     Return the ii-th peak in peaks with basic properties assigned in dict.
     peaks, properties as from scipy find_peaks; list_intensity_roi, rt_numbers_roi from mass_track.
@@ -242,9 +242,8 @@ def evaluate_roi_peak_json_( ii, list_intensity_roi, rt_numbers_roi, peaks, prop
     goodness_fitting, sigma = evaluate_gaussian_peak_on_intensity_list(list_intensity_roi,
                 properties['peak_heights'][ii], peaks[ii], left_index, right_index)
     if goodness_fitting > peakshape:
-        _halfwidth = int(abs(sigma) * 3)
-        # _L, _R = int(0.5*(left_index + peaks[ii]-_halfwidth)), int(0.5*(right_index + peaks[ii]+_halfwidth))
-        _L, _R = peaks[ii] - 3*_halfwidth, peaks[ii] + 3*_halfwidth
+        _halfwidth = int(max(abs(sigma), min_fwhm) * 6)     # sigma needs to be greater than min_fwhm
+        _L, _R = peaks[ii] - _halfwidth, peaks[ii] + _halfwidth
         left_index, right_index = max(left_index, _L), min(right_index, _R)
         left_base, right_base = rt_numbers_roi[left_index], rt_numbers_roi[right_index]
         peak_area = int( list_intensity_roi[left_index: right_index+1].sum() ) 
