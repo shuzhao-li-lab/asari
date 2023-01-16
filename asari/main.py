@@ -24,15 +24,18 @@ def main(parameters=PARAMETERS):
     def __run_process__(parameters, args):
         # main process function
         list_input_files = read_project_dir(args.input)
-        if args.autoheight:
-            from .analyze import estimate_min_peak_height
-            try:
-                parameters['min_peak_height'] = estimate_min_peak_height(list_input_files)
-            except ValueError as err:
-                print("Problems with input files: {0}. Back to default min_peak_height.".format(err))
+        if not list_input_files:
+            print("No valid mzML files are found in the input directory :(")
+        else:
+            if args.autoheight:
+                from .analyze import estimate_min_peak_height
+                try:
+                    parameters['min_peak_height'] = estimate_min_peak_height(list_input_files)
+                except ValueError as err:
+                    print("Problems with input files: {0}. Back to default min_peak_height.".format(err))
 
-        parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
-        process_project( list_input_files,  parameters )
+            parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
+            process_project( list_input_files,  parameters )
 
     print("\n\n~~~~~~~ Hello from Asari (%s) ~~~~~~~~~\n" %__version__)
 

@@ -27,14 +27,13 @@ PARAMETERS = {
 
     # chromatogram and peak parameters
     'min_timepoints': 6,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
-    'signal_noise_ratio': 5,           # peak height at least x fold over noise
+    'signal_noise_ratio': 2,            # peak height at least x fold over local noise
     'min_intensity_threshold': 1000,    # minimal intensity for mass track extraction, filtering baseline
-    'min_peak_height': 10000,           # minimal peak height.
+    'min_peak_height': 100000,           # minimal peak height.
     'wlen': 25,                         # window size for evaluating prominence in peaks. Important to resolve clustered narrow peaks.
     'reverse_detection': False,         # use the reverse peak detection algorithm
     'autoheight': False,                # min_peak_height can be estimated automatically by setting autoheight on in CLI  
-    'gaussian_shape': 0.6,              # min cutoff of goodness of fitting to Gauss model
-    
+    'gaussian_shape': 0.5,              # min cutoff of goodness of fitting to Gauss model
     
     # retention time alignment
     'reference': None,

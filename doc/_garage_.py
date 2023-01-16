@@ -6,6 +6,21 @@ which may be garbage or useful in someway elsewhere.
 # from metDataModel.core import MassTrace, Peak
 # from .utils import *
 
+def main(parameters=PARAMETERS):
+    # These parameters are in default parameter file; access here for convenience but no need to change for most users
+    # taken out to avoid confusion, as default valiues in argv overwrite those from para file
+    parser.add_argument('--min_peak_height', default=100000, type=float,
+            help='apply minimum peak height requirement')
+    parser.add_argument('--snr', default=10, type=float,
+            help='apply snr (signal noise ratio) cutoff value')
+    parser.add_argument('--shape', default=0.6, type=float,
+            help='apply peak shape (goodness of fitting to Gaussian shape) cutoff value')
+    if args.snr:
+        parameters['signal_noise_ratio'] = args.snr
+    if args.shape:
+        parameters['gaussian_shape'] = args.shape
+    if args.min_peak_height:
+        parameters['min_peak_height'] = args.min_peak_height
 
 def metafile_to_dict(infile):
     '''
@@ -1911,3 +1926,21 @@ def detect_elution_peaks( mass_track,
 
     return list_peaks
 
+                if len(peaks) > 3 and list_intensity_roi.max() > 10 * min_peak_height:
+                    # smooth noisy roi; smooth_moving_average(list_intensity_roi, size=min_fwhm + 2)
+                    list_intensity_roi = lowess_smooth_track(list_intensity_roi, len(R))
+                    peaks = detect_evaluate_peaks_on_roi( 
+                            list_intensity_roi, R, 
+                            min_peak_height, min_fwhm, min_prominence_threshold, wlen,
+                            snr, peakshape, min_prominence_ratio, noise_level
+                    )
+
+
+
+
+
+
+
+
+
+                    
