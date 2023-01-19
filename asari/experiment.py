@@ -201,7 +201,8 @@ class ext_Experiment:
             all_feature_ids += [peak['id_number'] for peak in V['MS1_pseudo_Spectra']]
 
         orphans = [peak for peak in self.CMAP.FeatureList if peak['id_number'] not in all_feature_ids]
-        new_id_start = len(dict_empCpds)
+        # will need better tracking of empCpd ID; already used in jms.dbStructures new_id_start = len(self.dict_empCpds) + 10000
+        new_id_start = len(dict_empCpds) + 100000
         for peak in orphans:
             dict_empCpds[new_id_start] = {'interim_id': new_id_start,
                     'neutral_formula_mass': '', 'neutral_formula': '',

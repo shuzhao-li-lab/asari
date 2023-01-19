@@ -9,6 +9,8 @@ booleandict = {'T': True, 'F': False, 1: True, 0: False,
                    'True': True, 'False': False, 'TRUE': True, 'FALSE': False, 'true': True, 'false': False,
                     }
 
+PARAMETERS['asari_version'] = __version__
+
 def main(parameters=PARAMETERS):
     '''
     asari, Trackable and scalable Python program for high-resolution LC-MS metabolomics data preprocessing.
@@ -146,5 +148,4 @@ def main(parameters=PARAMETERS):
 # -----------------------------------------------------------------------------
 #
 if __name__ == '__main__':
-    PARAMETERS['asari_version'] = __version__
     main(PARAMETERS)

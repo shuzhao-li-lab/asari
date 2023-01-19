@@ -36,18 +36,18 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
     iters = []
     min_peak_height = parameters['min_peak_height']
     min_prominence_threshold = parameters['min_prominence_threshold']
+    min_intensity_threshold = parameters['min_intensity_threshold']
     min_fwhm = round( 0.5 * parameters['min_timepoints'] )
     snr = parameters['signal_noise_ratio']
     peakshape = parameters['gaussian_shape']
     wlen = parameters['wlen']            # divided window to the left and to right
     min_prominence_ratio = 0.05
     iteration = False                    # a 2nd round of peak detection if enough remaining datapoints
-    x_factor = None                      # placeholder
     for mass_track in list_mass_tracks:
         if mass_track['intensity'].max() > min_peak_height:
             iters.append(
                 (mass_track, number_of_scans, min_peak_height, min_fwhm, min_prominence_threshold,
-                wlen, snr, peakshape, min_prominence_ratio, iteration, x_factor, 
+                wlen, snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold, 
                 shared_list)
             )
     return iters
@@ -59,7 +59,7 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
 
 def stats_detect_elution_peaks(mass_track, number_of_scans, 
                 min_peak_height, min_fwhm, min_prominence_threshold,
-                wlen, snr, peakshape, min_prominence_ratio, iteration, x_factor,
+                wlen, snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold,
                 shared_list):
     '''
     Stats guided peak detection. 
@@ -97,7 +97,7 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
     list_json_peaks, list_peaks = [], []
     list_scans = np.arange(number_of_scans)
     _baseline_, noise_level, scaling_factor, min_prominence_threshold, list_intensity = audit_mass_track(
-                mass_track['intensity'], min_fwhm, min_peak_height, min_prominence_threshold
+                mass_track['intensity'], min_fwhm, min_intensity_threshold, min_peak_height, min_prominence_threshold
                 )       
     # # get ROIs by separation/filtering with noise_level, allowing 2 gap
     __selected_scans__ = list_scans[list_intensity > noise_level]
@@ -144,7 +144,7 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
 
     shared_list += list_peaks
 
-def compute_noise_by_flanks(peak, list_intensity, noise_data_points, old_noise_level):
+def compute_noise_by_flanks(peak, list_intensity, noise_data_points, min_intensity_threshold, old_noise_level):
     '''Compute SNR by the adjacent nonpeak data points.
     '''
     padding, N = 30, 100          # number of half data points to use
@@ -153,11 +153,11 @@ def compute_noise_by_flanks(peak, list_intensity, noise_data_points, old_noise_l
     use_index = noise_data_points[center-padding-N: center-padding] + \
                 noise_data_points[center+padding: center+N+padding]
     if use_index:
-        return max(100, (list_intensity[use_index]+1).mean())
+        return max(min_intensity_threshold, (list_intensity[use_index]+1).mean())
     else:
         return old_noise_level
 
-def audit_mass_track(list_intensity, min_fwhm, min_peak_height, min_prominence_threshold):
+def audit_mass_track(list_intensity, min_fwhm, min_intensity_threshold, min_peak_height, min_prominence_threshold):
     '''Get stats on a mass track (list_intensity), rescale, detrend, smooth and subtract baseline if needed.
     If noise_level is higher than 1% of max value in cleaned track, or track is low intensity, 
         smooth_moving_average is applied.
@@ -165,7 +165,7 @@ def audit_mass_track(list_intensity, min_fwhm, min_peak_height, min_prominence_t
     If noise is high, min_prominence_threshold is matched to noise level.
     returns    _baseline_, noise_level, scaling_factor, new_prominence, clean_list_intensity 
     '''
-    scaling_factor, LOW, HIGH = 1, 100, 1E8
+    scaling_factor, LOW, HIGH = 1, min_intensity_threshold, 1E8
     _baseline_, noise_level = LOW, LOW                     # will not change on a clean track
     max_intensity, median_intensity = list_intensity.max(), np.median(list_intensity)
     if max_intensity > HIGH:
