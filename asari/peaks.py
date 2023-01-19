@@ -137,7 +137,8 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
                 peak['height'] = scaling_factor * peak['height'] + _baseline_
                 __height = min(peak['height'], 99999999)        # cap upper limit and avoid INF 
                 peak['snr'] = int(__height/compute_noise_by_flanks(
-                                        peak, mass_track['intensity'], noise_data_points, noise_level)) 
+                                    peak, mass_track['intensity'], noise_data_points, 
+                                    min_intensity_threshold, noise_level)) 
                 if peak['snr'] >= snr:
                     peak['height'] = int(peak['height'])
                     list_peaks.append(peak)
