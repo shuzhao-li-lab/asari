@@ -124,10 +124,8 @@ class ext_Experiment:
         self.load_annotation_db()
         self.db_mass_calibrate()
 
-        EED = ExperimentalEcpdDatabase(mode=self.mode, mz_tolerance_ppm=self.mz_tolerance_ppm)
-        EED.build_from_list_peaks(
-            self.CMAP.FeatureList, mz_tolerance_ppm=self.mz_tolerance_ppm, check_isotope_ratio=self.check_isotope_ratio
-            )
+        EED = ExperimentalEcpdDatabase(mode=self.mode, mz_tolerance_ppm=self.mz_tolerance_ppm, rt_tolerance=2)
+        EED.build_from_list_peaks(self.CMAP.FeatureList)
         EED.extend_empCpd_annotation(self.KCD)
         EED.annotate_singletons(self.KCD)       
         # EED.dict_empCpds misses some features 
