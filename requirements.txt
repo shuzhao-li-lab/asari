@@ -1,6 +1,6 @@
 metDatamodel
 mass2chem
-khipu-metabolomics>=0.5.5
+khipu-metabolomics>=0.5.6
 jms-metabolite-services>=0.4.10
 pymzml
 numpy

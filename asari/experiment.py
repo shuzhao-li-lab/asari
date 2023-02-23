@@ -7,7 +7,11 @@ from mass2chem.search import *
 # jms-metabolite-services
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
-# from .samples import SimpleSample
+from .defaul_parameters import adduct_search_patterns, \
+                                adduct_search_patterns_neg, \
+                                    isotope_search_patterns, \
+                                        extended_adducts
+
 from .mass_functions import complete_mass_paired_mapping
 from .constructors import CompositeMap
 from .json_encoder import NpEncoder
@@ -119,12 +123,23 @@ class ext_Experiment:
         '''
         Export Feature_annotation as tsv, Annotated_empricalCompounds in both JSON and pickle.
         Reference databases can be pre-loaded.
-        With db_mass_calibrate to theoretical values, 
+        With db_mass_calibrate to theoretical values.
+        One can pass custom adduct/isotopes to EED.adduct_patterns etc. See 
+        ExperimentalEcpdDatabase.get_isotope_adduct_patterns().
         '''
         self.load_annotation_db()
         self.db_mass_calibrate()
 
+        # asari uses seconds for rt
         EED = ExperimentalEcpdDatabase(mode=self.mode, mz_tolerance_ppm=self.mz_tolerance_ppm, rt_tolerance=2)
+        # passing patterns from .defaul_parameters
+        if self.mode == 'pos':
+            EED.adduct_patterns = adduct_search_patterns
+        else:
+            EED.adduct_patterns = adduct_search_patterns_neg
+        EED.isotope_search_patterns = isotope_search_patterns
+        EED.extended_adducts = extended_adducts
+
         EED.build_from_list_peaks(self.CMAP.FeatureList)
         EED.extend_empCpd_annotation(self.KCD)
         EED.annotate_singletons(self.KCD)       
