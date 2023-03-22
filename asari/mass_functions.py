@@ -108,6 +108,8 @@ def mass_paired_mapping(list1, list2, std_ppm=5):
     This sorts all m/z values first, then compare their differences in sequential neighbors.
     To be considered as an unambiguous match, the m/z values from two lists 
     should have no overlap neighbors in either direction in either list other than their own pair.
+    This and related functions are for m/z alignment only, not used for general search. 
+    See asari.tools.match_features for general search.
 
     This shares some similarity to the RANSAC algorithm but prioritizes selectivity.
     For illustration, one can use one-step Gaussian model for mass shift.
@@ -159,26 +161,20 @@ def mass_paired_mapping(list1, list2, std_ppm=5):
 
     return mapped, ratio_deltas
 
-
 def complete_mass_paired_mapping(list1, list2, std_ppm=5):
     '''
     Similar to mass_paired_mapping, but not enforcing unique matching within std_ppm, 
-    choosing the optimal matches. Singletons are included in returned result if no matches are found.
-    Do not calculate ratio_deltas.
-
+    choosing the optimal among multiple matches. 
+    Singletons are included in returned result if no matches are found.
+    This does not calculate ratio_deltas.
+    This and related functions are for m/z alignment only, not used for general search. 
+    See asari.tools.match_features for general search.
+    
     Return
     ======
-    mapped: E.g. [(33, 151), (34, None), ...] 
+    mapped: E.g. [ (3, 6), (6, 8), (33, 151), ...] 
     list1_unmapped, 
     list2_unmapped
-
-    Test
-    ====
-    complete_mass_paired_mapping(list1, list2) >>>
-    [(0, 2), (3, 6), (6, 8), (10, 23), (12, 24), (14, 28), (16, 32), (23, 43), (25, 49), (26, 60), (29, 65), (31, 66), (36, 70), (38, 71), (41, 72), (44, 77), (46, 81), (51, 85), 
-    (52, 89), (53, 91), (1, None), (2, None), (4, None), (5, None), (7, None), ...]
-
-    Update docstring??
     '''
     all = [(list1[ii], 1, ii) for ii in range(len(list1))] + [(list2[jj], 2, jj) for jj in range(len(list2))]
     # [(mz, list_origin, index_origin), ...]
@@ -213,6 +209,41 @@ def complete_mass_paired_mapping(list1, list2, std_ppm=5):
     list2_unmapped = [x for x in range(len(list2)) if x not in [y[1] for y in mapped]]
     return mapped, list1_unmapped, list2_unmapped
 
+def all_mass_paired_mapping(list1, list2, std_ppm=5):
+    '''
+    Similar to mass_paired_mapping, but return all matched pairs within std_ppm using 
+    a tree search approach (mass2chem.search.build_centurion_tree_mzlist).
+    Return
+    ======
+    mapped: E.g. [ (3, 6), (6, 8), (33, 151), ...] 
+    list1_unmapped, 
+    list2_unmapped
+    '''
+    mz_centurion_tree = build_centurion_tree_mzlist(list1)
+    mapped = []
+    for ii in range(len(list2)):
+        result = _find_all_mzmatches_centurion_indexed_list(list2[ii], mz_centurion_tree, limit_ppm=std_ppm)
+        mapped += [(x[1], ii) for x in result]
+
+    # Now deal with singletons
+    list1_unmapped = [x for x in range(len(list1)) if x not in [y[0] for y in mapped]]
+    list2_unmapped = [x for x in range(len(list2)) if x not in [y[1] for y in mapped]]
+    return mapped, list1_unmapped, list2_unmapped
+
+def _find_all_mzmatches_centurion_indexed_list(query_mz, mz_centurion_tree, limit_ppm=5):
+    '''
+    Return matched peaks in mz_centurion_tree by m/z diff within limit_ppm.
+    '''
+    q = int(query_mz * 100)
+    mz_tol = query_mz * limit_ppm * 0.000001
+    results = []
+    for ii in (q-1, q, q+1):
+        L = mz_centurion_tree.get(ii, [])
+        for x in L:         # (mzList[ii], ii)
+            if abs(x[0] - query_mz) < mz_tol:
+                results.append(x)
+                
+    return results
 
 def mass_paired_mapping_with_correction(list1, list2, std_ppm=5, correction_tolerance_ppm=1):
     '''
@@ -384,44 +415,4 @@ def nn_cluster_by_mz_seeds(bin_data_tuples, mz_tolerance, presorted=True):
         clusters = [C for C in gap_divide_mz_cluster(bin_data_tuples, mz_tolerance)]
 
     return clusters
-
-
-# ----------------------------------------------------
-# from mass2chem.search, will make importable
-def build_centurion_tree_mzlist(mzList):
-    '''
-    Return a dictionary, indexing mzList by 100*mz bins.
-    Because most high-resolution mass spectrometers measure well under 0.01 amu, 
-    one only needs to search the corresponding 0.01 bin and two adjacent bins (to capture bordering values).
-    '''
-    d = {}
-    for ii in range(len(mzList)):
-        cent = int(100*mzList[ii])
-        if cent in d:
-            d[cent].append((mzList[ii], ii))
-        else:
-            d[cent] = [(mzList[ii], ii)]
-    return d
-
-def all_mass_paired_mapping(list1, list2, std_ppm=5):
-    '''
-    Similar to mass_paired_mapping, but return all matched pairs within std_ppm using a tree search approach.
-    '''
-    mz_centurion_tree = build_centurion_tree_mzlist(list2)
-    matched = []
-    for ii in range(len(list1)):
-        result = find_all_matches_centurion_indexed_list(list1[ii], mz_centurion_tree, limit_ppm=std_ppm)
-        matched += [(ii, x[1]) for x in result]
-
-    return matched
-
-
-def match_lc_ms_features(list1, list2, std_ppm=5, rt_tol=12):
-    pass
-
-
-def fast_match_lc_ms_features(list1, list2, std_ppm=5, rt_tol=12):
-    pass
-
-
 

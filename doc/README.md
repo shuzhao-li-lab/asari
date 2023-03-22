@@ -66,7 +66,7 @@ Some chromatogram builders in the field separate the mass traces if there are ga
 but that creates complexity in m/z alignment and searches, and we avoid that in asari.
 
 **MassTrack using full RT range np.array**
-In version 1.5, the massTrack format was changed from ( mz, rtlist, intensities ) to ( mz, intensity_track ).
+Since version 1.5, the massTrack format was changed from ( mz, rtlist, intensities ) to ( mz, intensity_track ).
 intensity_track is np.array(full RT length).
 This increases storage for processed samples, but simplifies
 i) CMAP construction, and
@@ -148,7 +148,13 @@ All data points are processed as [(m/z, scan_number, intensity), ...].
 The m/z values are binned to 0.001 amu, and assembled to mass tracks based on the expected mass resolution.
 The bins can be merged or split in this process.
 If multiple data points exist in the same scan on the same mass track, the highest intensity is used.
-Mass tracks are input to later peak detection.
+Mass tracks are superimposed to composite mass tracks, which are input to later peak detection.
+
+### m/z alignment
+Because asari mass tracks respect mass resolution, the alignment between samples is expected to be 1:1.
+The m/z alignment functions (in asari.mass_functions) use a sort based approach, with marks of originating tracks (e.g. 1 or 2).
+When the delta between two adjacent m/z values from different samples is minimal and within tolerance, 
+the two values are considered matched.
 
 ### Retention time calibration
 Calibration or alignment is needed as slight chromatographic shift is common.
@@ -188,6 +194,11 @@ For tracks of lower intensity or high noise level, smoothing is applied.
 
 ### Search functions
 They are mostly in the JMS package. It uses many indexed dictionaries to facilitate fast search of m/z values.
+
+Note the difference between m/z alignment functions (in asari.mass_functions) and feature match functions (asari.tools.match_features).
+The latter are proper for searching and matching features. 
+The former is efficient pair-wise matching for asari mass tracks when multiple matches are not really concerned, 
+because asari does not allow ambiguous mass tracks within a data file.
 
 ### Multi-core processing
 Python classes are not easy for parallal computing. Therefore, we use JSON and individual functions to facilitate multiprocessing.

@@ -12,7 +12,7 @@ from .defaul_parameters import adduct_search_patterns, \
                                     isotope_search_patterns, \
                                         extended_adducts
 
-from .mass_functions import complete_mass_paired_mapping
+from .mass_functions import all_mass_paired_mapping
 from .constructors import CompositeMap
 from .json_encoder import NpEncoder
 
@@ -310,7 +310,7 @@ class ext_Experiment:
 
         # extract targeted m/z features
         if 'target' in self.parameters and self.parameters['target']:  
-            matched_list, _, target_unmapped = complete_mass_paired_mapping(
+            matched_list, _, target_unmapped = all_mass_paired_mapping(
                 filtered_FeatureTable['mz'].to_list(), self.parameters['target'], self.parameters['mz_tolerance_ppm']
             )
             print("\nIn targeted extraction, %d target mz values are not found in this dataset: " %len(target_unmapped))
