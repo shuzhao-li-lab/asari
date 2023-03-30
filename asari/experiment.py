@@ -121,10 +121,14 @@ class ext_Experiment:
 
     def annotate(self):
         '''
+        Annotate features via JMS and khipu.
         Export Feature_annotation as tsv, Annotated_empricalCompounds in both JSON and pickle.
         Reference databases can be pre-loaded.
         With db_mass_calibrate to theoretical values.
-        One can pass custom adduct/isotopes to EED.adduct_patterns etc. See 
+
+        This produces default annotation with asari, but one can redo annotation on the features afterwards,
+        using a method of choice.
+        With JMS/khipu, one can also pass custom adduct/isotopes to EED.adduct_patterns etc. See 
         ExperimentalEcpdDatabase.get_isotope_adduct_patterns().
         '''
         self.load_annotation_db()
@@ -141,9 +145,11 @@ class ext_Experiment:
         EED.extended_adducts = extended_adducts
 
         EED.build_from_list_peaks(self.CMAP.FeatureList)
+        # It takes three steps to take care of all features. First khipu organized empCpds
         EED.extend_empCpd_annotation(self.KCD)
+        # Second, singletons that get a formula match in KCD
         EED.annotate_singletons(self.KCD)       
-        # EED.dict_empCpds misses some features 
+        # Third, the remaining features unmatched to anything (orphans). Exported for potential downstream work.
         EED.dict_empCpds = self.append_orphans_to_epmCpds(EED.dict_empCpds)
 
         self.export_peak_annotation(EED.dict_empCpds, self.KCD, 'Feature_annotation')
