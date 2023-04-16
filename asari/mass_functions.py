@@ -5,7 +5,6 @@ Functions here could potentially be sped up by JIT, but the code is currently we
 In order to use Numba for JIT, they need to be rewritten with clear typing and likely compartmentalized.
 Alternatively, some of the mass functions can be implemented in C and compiled to interface Python.
 '''
-# from numba import jit
 
 import numpy as np
 from scipy.signal import find_peaks 
@@ -44,13 +43,13 @@ def calculate_selectivity(sorted_mz_list, std_ppm=5):
     It is good approximation by considering 2 lower and 2 higher neighbors here.
     Note: ppm is actually dependent on m/z, not an ideal method. But it's in common practice and good enough.
 
-    Input
-    =====
+    Parameters
+    ----------
     sorted_mz_list: a list of m/z values, sorted from low to high.
     std_ppm: mass resolution in ppm (part per million).
 
-    Return
-    ======
+    Returns
+    -------
     A list of selectivity values, in matched order as the input m/z list.
     '''
     def __sel__(x, std_ppm=std_ppm): 
@@ -83,11 +82,22 @@ def calculate_selectivity(sorted_mz_list, std_ppm=5):
 
 def bin_by_median(List_of_tuples, func_tolerance):
     '''
-    Not perfect because left side may deviate out of tolerance, but LC-MS data always have enough gaps for separation.
-    Will add kernel density method for grouping m/z features.
-    List_of_tuples: [(value, object), (value, object), ...], to be separated into bins by values (either rt or mz).
-                    objects have attribute of sample_name if to align elsewhere.
-    return: [seprated bins], each as a list of objects as [X[1] for X in L]. Possible all falls in same bin.
+    Separate List_of_tuples into bins within tolearance.
+    Not perfect because left side may deviate out of tolerance, 
+    even though LC-MS data always have enough gaps for separation.
+    Use with caution.
+    
+    Parameters
+    ----------
+    List_of_tuples : [(value, object), (value, object), ...], 
+        to be separated into bins by values (either rt or mz).
+        objects have attribute of sample_name if to align elsewhere.
+    func_tolerance : tolearance function to define bounary to separate bins.
+        
+    Returns
+    -------
+    A list of seprated bins, 
+    each as a list of objects as [X[1] for X in L]. Possible all falls in same bin.
     '''
     new = [[List_of_tuples[0], ], ]
     for X in List_of_tuples[1:]:
@@ -101,7 +111,7 @@ def bin_by_median(List_of_tuples, func_tolerance):
     return PL
 
 
-# @jit(nopython=True)
+
 def mass_paired_mapping(list1, list2, std_ppm=5):
     '''
     To find unambiguous matches of m/z values between two lists.
@@ -115,18 +125,18 @@ def mass_paired_mapping(list1, list2, std_ppm=5):
     For illustration, one can use one-step Gaussian model for mass shift.
     Since only mean shift is used here, and stdev is implicitly enforced in matching, no need to do model fitting.
 
-    Input
-    =====
+    Parameters
+    ----------
     Two lists of m/z values, not ncessarily same length.
     std_ppm: instrument accuracy to guide value matching. Low-selectiviy values are not considered in matching.
 
-    Return
-    ======
+    Returns
+    -------
     mapped: mapping list [(index from list1, index from list2), ...]
     ratio_deltas: mean m/z ratio shift between two lists. This is ppm*10^-6. No need to convert btw ppm here.
 
     Test
-    ====
+    ----
     list1 = [101.0596, 101.061, 101.0708, 101.0708, 101.1072, 101.1072, 101.1072, 102.0337, 102.0337, 102.0548, 102.0661, 102.0912, 102.0912, 102.1276, 102.1276, 103.0501, 103.0501, 103.0541, 103.0865, 103.0865, 103.9554, 104.0368, 104.0705, 104.0705, 104.1069, 104.1069, 104.9922, 105.0422, 105.0698, 105.0698, 105.0738, 105.1039, 105.1102, 105.9955, 106.0497, 106.065, 106.065, 106.0683, 106.0683, 106.0861, 106.0861, 106.0861, 106.1111, 106.9964, 107.0475, 107.0602, 107.0653, 107.0895, 107.9667, 108.0443, 108.0555, 108.0807, 109.0632, 109.0759]
     list2 = [101.0087, 101.035, 101.0601, 101.0601, 101.0601, 101.0601, 101.0713, 101.0714, 101.1077, 101.1077, 101.1077, 101.1077, 101.1077, 101.1158, 101.1158, 102.0286, 102.0376, 102.0468, 102.0539, 102.0554, 102.0554, 102.0554, 102.0554, 102.0666, 102.0917, 102.0917, 102.0917, 102.0918, 102.1281, 102.1281, 102.1282, 103.0394, 103.0505, 103.0507, 103.0547, 103.1233, 103.8162, 103.956, 103.956, 103.956, 104.0532, 104.0533, 104.0641, 104.0709, 104.071, 104.0831, 104.0878, 104.0895, 104.0953, 104.1073, 104.1073, 104.1074, 104.1074, 104.1182, 104.1199, 104.1265, 104.1318, 104.1354, 104.1725, 104.3998, 104.9927, 104.9927, 104.9927, 104.9927, 105.0654, 105.0703, 105.1043, 105.1133, 106.049, 106.0503, 106.0655, 106.0688, 106.0866, 106.0867, 106.0867, 106.0867, 106.114, 107.048, 107.0481, 107.0496, 107.0608, 107.0658, 108.0109, 108.0482, 108.0604, 108.0812, 108.0812, 108.9618, 109.0507, 109.0637, 109.0637, 109.0764, 109.1015]
     mass_paired_mapping(list1, list2) >>>
@@ -170,11 +180,11 @@ def complete_mass_paired_mapping(list1, list2, std_ppm=5):
     This and related functions are for m/z alignment only, not used for general search. 
     See asari.tools.match_features for general search.
     
-    Return
-    ======
-    mapped: E.g. [ (3, 6), (6, 8), (33, 151), ...] 
-    list1_unmapped, 
-    list2_unmapped
+    Returns
+    -------
+    mapped: list of mapped index pairs. E.g. [ (3, 6), (6, 8), (33, 151), ...] 
+    list1_unmapped : list of unmapped items in list1.
+    list2_unmapped : list of unmapped items in list2.
     '''
     all = [(list1[ii], 1, ii) for ii in range(len(list1))] + [(list2[jj], 2, jj) for jj in range(len(list2))]
     # [(mz, list_origin, index_origin), ...]
@@ -213,11 +223,12 @@ def all_mass_paired_mapping(list1, list2, std_ppm=5):
     '''
     Similar to mass_paired_mapping, but return all matched pairs within std_ppm using 
     a tree search approach (mass2chem.search.build_centurion_tree_mzlist).
-    Return
-    ======
-    mapped: E.g. [ (3, 6), (6, 8), (33, 151), ...] 
-    list1_unmapped, 
-    list2_unmapped
+
+    Returns
+    -------
+    mapped: list of mapped index pairs. E.g. [ (3, 6), (6, 8), (33, 151), ...] 
+    list1_unmapped : list of unmapped items in list1.
+    list2_unmapped : list of unmapped items in list2.
     '''
     mz_centurion_tree = build_centurion_tree_mzlist(list1)
     mapped = []
@@ -256,8 +267,8 @@ def mass_paired_mapping_with_correction(list1, list2, std_ppm=5, correction_tole
     Two lists of m/z values, not ncessarily same length.
     std_ppm: instrument accuracy to guide value matching. Low-selectiviy values are not considered in matching.
 
-    Return
-    ======
+    Returns
+    -------
     mapped: mapping list [(index from list1, index from list2), ...]
     _r: correction ratios on list2
     # ratio_deltas, corrected_list2
@@ -283,8 +294,8 @@ def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks,
     but the order of REF_reference_mzlist will be disrupted during building MassGrid.
     Do correciton on list2 if m/z shift exceeds correction_tolerance_ppm.
 
-    Return
-    ======
+    Returns
+    -------
     new_reference_mzlist: combined list of all unique m/z values, 
         maintaining original order of REF_reference_mzlist but updating the values as mean of the two lists.
         m/z values are updated here because this is the best place to do it: 
@@ -295,7 +306,7 @@ def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks,
     _r: correction ratios on SM_mzlist, to be attached to Sample class instance
     '''
     _N1 = len(REF_reference_mzlist)
-    _d2, _r = {}, None                                                # tracking how SM_mzlist is mapped to ref
+    _d2, _r = {}, None                                      # tracking how SM_mzlist is mapped to ref
     for ii in range(_N1): 
         _d2[ii] = None
     # first align to landmark mz values
@@ -371,8 +382,14 @@ def identify_mass_peaks(bin_data_tuples, mz_tolerance, presorted=True):
     Get most centroid m/z values as peaks in m/z values distribution, at least mz_tolerance apart.
     This can be used to choose concensus m/z values in constructing or after aligning mass tracks.
 
-    bin_data_tuples is [(mz, scan_num, intensity_int), ...] or [(m/z, track_id, sample_id), ...].
-    mz_tolerance is precomputed based on m/z and ppm, e.g. 5 ppm of 80 = 0.0004;  5 ppm of 800 = 0.0040.
+    Parameters
+    ----------
+    bin_data_tuples : [(mz, scan_num, intensity_int), ...] or [(m/z, track_id, sample_id), ...].
+    mz_tolerance : precomputed based on m/z and ppm, e.g. 5 ppm of 80 = 0.0004;  5 ppm of 800 = 0.0040.
+    
+    Returns
+    -------
+    A list of m/z values, peaks in m/z values distribution, at least mz_tolerance apart.
     '''
     tol4 = int(mz_tolerance * 10000)
     size = max(2, int(0.5 * tol4))
@@ -397,7 +414,19 @@ def nn_cluster_by_mz_seeds(bin_data_tuples, mz_tolerance, presorted=True):
     bin_data_tuples is [(mz, scan_num, intensity_int), ...] or [(m/z, track_id, sample_id), ...].
     Note to future: np.argmin will be faster than sorted here.
 
-    Bug in Python compiler: when clusters = [[]] * _NN is used, it causes occassional duplication of entries. 2022-05-21
+    Parameters
+    ----------
+    bin_data_tuples : a flexible bin in format of [(mz, scan_num, intensity_int), ...].
+    mz_tolerance : precomputed based on m/z and ppm, e.g. 5 ppm of 80 = 0.0004;  5 ppm of 800 = 0.0040.
+
+    Returns
+    -------
+    A list of clusters as separated bins, each bin as [(mz, scan_num, intensity_int), ...]
+
+    Notes
+    -----
+    Bug in Python compiler: when clusters = [[]] * _NN is used, 
+    it causes occassional duplication of entries. 2022-05-21.
 
     '''
     mz_seeds = identify_mass_peaks(bin_data_tuples, mz_tolerance, presorted)
@@ -415,4 +444,3 @@ def nn_cluster_by_mz_seeds(bin_data_tuples, mz_tolerance, presorted=True):
         clusters = [C for C in gap_divide_mz_cluster(bin_data_tuples, mz_tolerance)]
 
     return clusters
-

@@ -135,7 +135,8 @@ class ext_Experiment:
         self.db_mass_calibrate()
 
         # asari uses seconds for rt
-        EED = ExperimentalEcpdDatabase(mode=self.mode, mz_tolerance_ppm=self.mz_tolerance_ppm, rt_tolerance=2)
+        EED = ExperimentalEcpdDatabase(mode=self.mode, 
+                                       mz_tolerance_ppm=self.mz_tolerance_ppm, rt_tolerance=2)
         # passing patterns from .defaul_parameters
         if self.mode == 'pos':
             EED.adduct_patterns = adduct_search_patterns

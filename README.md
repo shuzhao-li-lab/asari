@@ -172,7 +172,7 @@ At https://hub.docker.com/r/shuzhao/asari.
 This image includes mono and ThermoRawFileParser, which converts Thermo .raw files to .mzML files.
 
 Example use
-To launch with volume mapping `$ docker run -v /Users/shuzhao/data:/home -ti shuzhao/asari:1.9.2`.
+To launch with volume mapping `$ docker run -v /Users/shuzhao/data:/home -ti shuzhao/asari`.
 
 In the container, ThermoRawFileParser is under `/usr/local/thermo/`.
 ```
@@ -201,4 +201,3 @@ mass2chem: common utilities in interpreting mass spectrometry data, annotation
 khipu: a Python library for generalized, low-level annotation of MS metabolomics
 
 JMS: Json's Metabolite Services
-

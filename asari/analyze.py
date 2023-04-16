@@ -12,8 +12,17 @@ def analyze_single_sample(infile,
             mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000,
             parameters={}):
     '''
-    Analyze single mzML file and print statistics.
-    parameters are not used, just place holder to use ext_Experiment class.
+    Analyze single mzML file and print statistics. Used by asari subcommand `analyze`.
+    This uses ext_Experiment and default HMDB data to estimate mass accuracy.
+
+    Parameters
+    ----------
+    infile : input mzML file.
+    mz_tolerance_ppm : m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
+    min_intensity : minimal intentsity value to consider, also used to filter out 0s.
+    min_timepoints : minimal consecutive scans to be considered real signal.
+    min_peak_height : a bin is not considered if the max intensity < min_peak_height.
+    parameters : not used, just place holder to use ext_Experiment class.
     '''
     print("Analysis of %s\n" %infile)
     mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(infile,
@@ -30,7 +39,22 @@ def get_file_masstrack_stats(infile,
                         mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000,
                         return_sample=False):
     '''
-    Example output:
+    Extract mass tracks from a file and get statistics.
+    The ionization_mode is assumed on one scan, thus not supporting polarity switch in a single file.
+    Landmark tracks are the mass tracks with paired 13C/12C pattern (based on m/z diff only).
+
+    Parameters
+    ----------
+    infile : input mzML file.
+    mz_tolerance_ppm : m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
+    min_intensity : minimal intentsity value to consider, also used to filter out 0s.
+    min_timepoints : minimal consecutive scans to be considered real signal.
+    min_peak_height : a bin is not considered if the max intensity < min_peak_height.
+    return_sample : if True, return full sample dictionary with mass tracks.
+        Else, return _mz_landmarks_, ionization_mode, min_peak_height_.
+
+    Example output
+    --------------
         Total number of MS1 spectra: 741
         of which 0 are positive ionization mode.
 
@@ -46,8 +70,7 @@ def get_file_masstrack_stats(infile,
 
         Mass accuracy was estimated on 124 matched values as -1.8 ppm.
 
-    ionization_mode is assumed on one scan, thus not supporting polarity switch in a single file.
-        to add output info on instrumentation
+    To-do: to add output info on instrumentation
     '''
     new = {'sample_id': infile, 'input_file': infile, 'ion_mode': '',}
     list_mass_tracks = []
@@ -119,7 +142,21 @@ def estimate_min_peak_height(list_input_files,
             mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=500,
             num_files_to_use=3):
     '''
-    return an estimated parameter for min peak_height as half of the min verified landmark peaks.
+    Compute estimated min peak height. This gets min peak height from the andmark tracks in each file,
+    which is the min of the mass tracks with paired 13C/12C pattern (based on m/z diff only).
+
+    Parameters
+    ----------
+    list_input_files : input mzML files, but only using num_files_to_use.
+    mz_tolerance_ppm : m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
+    min_intensity : minimal intentsity value to consider, also used to filter out 0s.
+    min_timepoints : minimal consecutive scans to be considered real signal.
+    min_peak_height : a bin is not considered if the max intensity < min_peak_height.
+    num_files_to_use : Use randomly chosen num_files_to_use from list_input_files.
+
+    Returns
+    -------
+    int, an estimated parameter for min peak_height as half of the min verified landmark peaks.
     '''
     estimated = []
     if len(list_input_files) <= num_files_to_use:
@@ -143,11 +180,16 @@ def ext_estimate_min_peak_height(list_input_files,
             mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=500,
             num_files_to_use=3):
     '''
-    return dict of
-    ion mode and
-    an estimated parameter for min peak_height as half of the min verified landmark peaks.
+    Extended estimate_min_peak_height for Xasari use.
 
-    Extended estimate_min_peak_height for X-asari use.
+    Returns
+    -------
+    A dict of ion mode and recommended min_peak_height.
+    The latter is an estimated parameter for min peak_height as half of the min verified landmark peaks.
+
+    See also
+    --------
+    estimate_min_peak_height
     '''
     estimated, _ionmode = [], []
     if len(list_input_files) <= num_files_to_use:
@@ -172,48 +214,3 @@ def ext_estimate_min_peak_height(list_input_files,
     else:
         return {'mode': _ionmode[0], 'min_peak_height': recommended}
 
-
-
-#-------------------------------------------------------
-# Alternative using pandas dataframe
-
-# import random
-# import pandas as pd
-# import pymzml
-
-def get_file_stats_dataframes(infile, max_spectra=100, return_dataframe=False):
-    '''
-    Quick estimate statistics based on max_spectra number.
-    Example output: 
-        Total number of spectra: 780
-                        mz     intensity
-        count  106174.000000  1.061740e+05
-        mean      316.125161  1.627240e+05
-        std       202.411866  2.045669e+06
-        min        80.024223  1.201407e+03
-        25%       159.091602  1.091480e+04
-        50%       239.175484  1.943417e+04
-        75%       428.384628  4.698321e+04
-        max       999.849426  2.154302e+08
-    '''
-    mzData, intensityData = np.array([]), np.array([])
-    exp = pymzml.run.Reader(infile)
-    N_all_spectra = exp.get_spectrum_count()
-    if max_spectra < N_all_spectra:
-        chosen = random.sample(range(N_all_spectra), max_spectra)
-    else:
-        chosen = range(N_all_spectra)
-    ii = -1   # scan_number starts with 0
-    for spec in exp:
-        ii += 1
-        if ii in chosen:
-            if spec.ms_level == 1:
-                mzData = np.concatenate((mzData, spec.mz))
-                intensityData = np.concatenate((intensityData, spec.i))
-                
-    print("Total number of spectra: %d" %N_all_spectra)
-    DF = pd.DataFrame({'mz': mzData, 'intensity': intensityData})
-    print(DF.describe())
-    if return_dataframe:
-        return DF
-    

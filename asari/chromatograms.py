@@ -22,22 +22,25 @@ INTENSITY_DATA_TYPE = np.int64
 # mass Tracks
 # -----------------------------------------------------------------------------
 
-def extract_massTracks_(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000):
+def extract_massTracks_(ms_expt, 
+                        mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, 
+                        min_peak_height=1000):
     '''
     Extract mass tracks from an object of parsed LC-MS data file.
     A mass track is an EIC for full RT range, without separating the mass traces of same m/z. 
 
-    Input
-    =====
-    ms_expt = pymzml.run.Reader(f), a parsed object of LC-MS data file
-    mz_tolerance_ppm: m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
-    min_intensity: minimal intentsity value, needed because some instruments keep 0s 
-    min_timepoints: minimal consecutive scans to be considered real signal.
-    min_peak_height: a bin is not considered if the max intensity < min_peak_height.
+    Parameters
+    ----------
+    ms_expt : instance of pymzml.run.Reader(f), a parsed object of LC-MS data file
+    mz_tolerance_ppm : m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
+    min_intensity : minimal intentsity value, needed because some instruments keep 0s 
+    min_timepoints : minimal consecutive scans to be considered real signal.
+    min_peak_height : a bin is not considered if the max intensity < min_peak_height.
 
-    return 
-    ======
-    {rt_numbers, rt_times, tracks as [( mz, np.array(intensities at full rt range) ), ...]}
+    Returns 
+    -------
+    List of mass tracks, 
+        {rt_numbers, rt_times, tracks as [( mz, np.array(intensities at full rt range) ), ...]}
     '''
     alldata = []
     rt_times = []           # in seconds
@@ -90,27 +93,50 @@ def extract_massTracks_(ms_expt, mz_tolerance_ppm=5, min_intensity=100, min_time
 
 def extract_single_track_fullrt_length(bin, rt_length, INTENSITY_DATA_TYPE=INTENSITY_DATA_TYPE):
     '''
+    Build a mass track from a bin of data points already in limited m/z range.
     A mass track is an EIC for full RT range, without separating the mass traces. 
-    input bins in format of [(mz_int, scan_num, intensity_int), ...].
-    return a massTrack as ( mz, np.array(intensities at full rt range) ).
-    New format after v1.5.
+    Consensus m/z is taken as the mean of median m/z and the m/z of highest intensity, to be more robust.
+    When multiple data points exist in the same scan (same RT), max intensity is used.
+
+    Parameters
+    ----------
+    bin : data points, in format of [(mz_int, scan_num, intensity_int), ...].
+    rt_length : full number of scans.
+    INTENSITY_DATA_TYPE : default to np.int64. 
+        Being future safe, but int32 may be adequate and more efficient.
+     
+    Returns
+    -------
+    a massTrack as ( mz, np.array(intensities at full rt range) ).
     '''
     mzs = [x[0] for x in bin]
     ints = [x[2] for x in bin]
-    mz = 0.5 * (np.median(mzs) + mzs[np.argmax(ints)])
+    mz = 0.5 * (np.median(mzs) + mzs[np.argmax(ints)])  # safer option
     intensity_track = np.zeros(rt_length, dtype=INTENSITY_DATA_TYPE)
-    for r in bin:                       # this gets max intensity on the same RT scan
+    for r in bin:                                       # this gets max intensity on the same RT scan
         intensity_track[r[1]] = max(r[2], intensity_track[r[1]])
     return ( mz, intensity_track )
 
 
 def bin_to_mass_tracks(bin_data_tuples, rt_length, mz_tolerance_ppm=5):
     '''
-    input a flexible bin by units of 0.001 amu, in format of 
-                                    [(mz, scan_num, intensity_int), ...].
-    A mass track is an EIC for full RT range, possibly containing multiple extracted ion chromatograms in traditional definition. 
+    Construct mass tracks from data that may exceed proper m/z range (i.e. over mz_tolerance_ppm).
+    A mass track is an EIC for full RT range, without separating the mass traces. 
+    Imperfect ROIs will be examined in extract_massTracks_ and merged if needed.
 
-    return massTracks as ( mz, np.array(intensities at full rt range) )
+    Parameters
+    ----------
+    bin_data_tuples : a flexible bin by units of 0.001 amu, in format of 
+        [(mz, scan_num, intensity_int), ...]. This may or may not be within mz_tolerance_ppm.
+    rt_length : full number of scans.
+
+    Returns
+    -------
+    a list of massTracks as [(mz, np.array(intensities at full rt range)), ...].
+
+    See also
+    --------
+    extract_single_track_fullrt_length
     '''
     bin_data_tuples.sort()   # by m/z, ascending
     mz_range = bin_data_tuples[-1][0] - bin_data_tuples[0][0]
@@ -119,28 +145,27 @@ def bin_to_mass_tracks(bin_data_tuples, rt_length, mz_tolerance_ppm=5):
     if mz_range < mz_tolerance * 2:
         return [extract_single_track_fullrt_length(bin_data_tuples, rt_length)]
     else:
-        # ROIs = build_chromatogram_intensity_aware(bin_data_tuples, rt_length, mz_tolerance)
         ROIs = build_chromatogram_by_mz_clustering(bin_data_tuples, rt_length, mz_tolerance)
-        
-        # imperfect ROIs will be examined in extract_massTracks_ and merged if needed
         return [extract_single_track_fullrt_length(R, rt_length) for R in ROIs]
 
 
 def build_chromatogram_intensity_aware(bin_data_tuples, rt_length, mz_tolerance):
     '''
-    Multiple m/z tracks in the same region are resolved to ROIs.
+    Chromatogram builder as in ADAP for testing. 
     Start with highest intensity, going down by intensity and include data points within mz_tolerance.
-    Repeat until no track is detected. Without requiring continuous RT, which is handled in extract_single_track_fullrt_length.
+    Repeat until no track is detected. Without requiring continuous RT, 
+    which is handled in extract_single_track_fullrt_length.
+    Default in asari is build_chromatogram_by_mz_clustering.
 
-    Input
-    =====
+    Parameters
+    ----------
     bin_data_tuples: a flexible bin in format of [(mz, scan_num, intensity_int), ...].
     mz_tolerance_ppm: m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
 
-    return 
-    ======
-    assigned: separated bins of [(mz, scan_num, intensity_int), ...], prototype of extracted ion chromatograms 
-        to be used by extract_single_track_fullrt_length.
+    Returns
+    -------
+    assigned: separated bins of [(mz, scan_num, intensity_int), ...], 
+        prototype of extracted ion chromatograms to be used by extract_single_track_fullrt_length.
     '''
     bin_data_tuples.sort(key=itemgetter(2), reverse=True)
     assigned, remaining = [], bin_data_tuples
@@ -159,19 +184,28 @@ def build_chromatogram_intensity_aware(bin_data_tuples, rt_length, mz_tolerance)
 
 def build_chromatogram_by_mz_clustering(bin_data_tuples, rt_length, mz_tolerance):
     '''
-    Return clusters as separated bins of [(mz, scan_num, intensity_int), ...], prototype of extracted ion chromatograms 
-        to be used by extract_single_track_fullrt_length.
-    Input
-    =====
-    bin_data_tuples: a flexible bin in format of [(mz, scan_num, intensity_int), ...].
-    mz_tolerance_ppm: m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
+    Generates a list of prototype extracted ion chromatograms to be used 
+    by extract_single_track_fullrt_length.
+
+    Parameters
+    ----------
+    bin_data_tuples : a flexible bin in format of [(mz, scan_num, intensity_int), ...].
+    mz_tolerance : precomputed based on m/z and ppm, e.g. 5 ppm of 80 = 0.0004;  5 ppm of 800 = 0.0040.
+
+    Returns
+    -------
+    A list of clusters as separated bins, each bin as [(mz, scan_num, intensity_int), ...]
     '''
     return nn_cluster_by_mz_seeds(bin_data_tuples, mz_tolerance, presorted=False)
 
 
 def merge_two_mass_tracks(T1, T2):
     '''
-    massTrack as ( mz, np.array(intensities at full rt range) )
+    Merge two mass tracks, each massTrack as ( mz, np.array(intensities at full rt range) ).
+
+    Returns
+    -------
+    The merged mass track.
     '''
     return ( 0.5 * (T1[0] + T2[0]), T1[1] + T2[1] )
 
@@ -182,8 +216,8 @@ def get_thousandth_bins(mzTree, mz_tolerance_ppm=5, min_timepoints=5, min_peak_h
     These data bins can form a single mass track, or span larger m/z region 
     if the m/z values cannot be resolved into discrete tracks here.
 
-    Input
-    =====
+    Parameters
+    ----------
     mzTree: indexed data points, {thousandth_mz: [(mz, ii, intensity_int)...], ...}. 
             (all data points indexed by m/z to thousandth precision, i.e. 0.001 amu).
     mz_tolerance_ppm: m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
@@ -191,8 +225,8 @@ def get_thousandth_bins(mzTree, mz_tolerance_ppm=5, min_timepoints=5, min_peak_h
     min_timepoints: minimal consecutive scans to be considered real signal.
     min_peak_height: a bin is not considered if the max intensity < min_peak_height.
     
-    Return
-    ======
+    Returns
+    -------
     a list of flexible bins, [ [(mz, scan_num, intensity_int), ...], ... ]
     '''
     def __rough_check_consecutive_scans__(datatuples, gap_allowed=2, min_timepoints=min_timepoints):
@@ -251,18 +285,18 @@ def rt_lowess_calibration(good_landmark_peaks, selected_reference_landmark_peaks
         https://www.statsmodels.org/stable/generated/statsmodels.nonparametric.smoothers_lowess.lowess.html    
         But xvals have to be forced as float array until the fix is in new release.
 
-    Input
-    =====
+    Parameters
+    ----------
     good_landmark_peaks and selected_reference_landmark_peaks are equal-length lists of peaks,
     selected from working sample and reference sample as landmarks for RT alignment. 
     sample_rt_numbers: all scan numbers in this sample.
     reference_rt_numbers: all scan numbers in the ref sample.
 
-    Return
-    ======
-    rt_cal_dict, dictionary converting scan number in sample_rt_numbers to calibrated integer values.
+    Returns
+    -------
+    rt_cal_dict : dictionary converting scan number in sample_rt_numbers to calibrated integer values.
                 Range matched. Only changed numbers are kept for efficiency.
-    reverse_rt_cal_dict, from ref RT scan numbers to sample RT scan numbers. 
+    reverse_rt_cal_dict : from ref RT scan numbers to sample RT scan numbers. 
                 Range matched. Only changed numbers are kept for efficiency.
     '''
     # force left and right ends, to prevent runaway curve functions

@@ -128,7 +128,7 @@ def main(parameters=PARAMETERS):
     elif args.run == 'annotate':
         # Annotate a user supplied feature table
         from .annotate_user_table import annotate_user_featuretable
-        annotate_user_featuretable(args.input, parameters=parameters)
+        annotate_user_featuretable(args.input, parameters=parameters, rtime_tolerance=2)
 
     elif args.run == 'join':
         # input a list of directoreis, each a result of asari process

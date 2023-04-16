@@ -1,6 +1,6 @@
-# Technical details
+# README for Developers
 
-This is more for Developers. Please see README at upper directory for general information of asari.
+Please see README at upper directory for general information of asari.
 
 ## Algorithms and work flows
 

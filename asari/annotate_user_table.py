@@ -1,14 +1,5 @@
 '''
 Functions for subcommand `annotate`
-
-from khipu.epdsConstructor import epdsConstructor
-# from mass2chem.epdsConstructor import epdsConstructor
-from khipu.utils import adduct_search_patterns, \
-                            adduct_search_patterns_neg, \
-                                isotope_search_patterns, \
-                                    extended_adducts
-
-
 '''
 from .experiment import *
 from .mass_functions import *
@@ -16,28 +7,21 @@ from .mass_functions import *
 from jms.io import read_table_to_peaks
 
 
-def annotate_user_featuretable(infile, parameters):
-                        # mode='pos', mz_tolerance_ppm=5):
+def annotate_user_featuretable(infile, parameters, rtime_tolerance=2):
     '''
-    infile: tab delimited file with first row as header, first column m/z and 2nd column rtime.
-    output: two files in current directory, Feature_annotation.tsv and Annotated_empricalCompounds.json
+    Annotate a user supplied feature table. Used by asari subcommand `annotate`.
 
-    def is_coeluted_by_distance(P1, P2, rt_tolerance=10):
-        _coeluted = False
-        if abs(P1['apex']-P2['apex']) <= rt_tolerance:
-            _coeluted = True
-        return _coeluted
+    Parameters
+    ----------
+    infile : input feature table, tab delimited file with first row as header, 
+        first column m/z and 2nd column rtime.
+    parameters : parameter dictionary passed from main.py, 
+        which imports from defaul_parameters and updates the dict by user arguments.
+    rtime_tolerance : retention time tolerance to group adducts etc.
 
-    EED.dict_empCpds = ECCON.peaks_to_epdDict(
-                seed_search_patterns = ECCON.seed_search_patterns, 
-                ext_search_patterns = ECCON.ext_search_patterns,
-                mz_tolerance_ppm= parameters['mz_tolerance_ppm'], 
-                coelution_function='distance',
-                check_isotope_ratio = False
-                ) 
-    EED.index_empCpds()
-    ECCON = epdsConstructor(list_peaks, mode=mode)
-
+    Oputputs
+    --------
+    two files in current directory, Feature_annotation.tsv and Annotated_empricalCompounds.json
     '''
     parameters['outdir'] = ''
     mode = parameters['mode']
@@ -48,8 +32,19 @@ def annotate_user_featuretable(infile, parameters):
     EE = ext_Experiment({}, parameters)
     EE.load_annotation_db()
 
-    EED = ExperimentalEcpdDatabase(mode=mode, mz_tolerance_ppm=parameters['mz_tolerance_ppm'])
-    EED.build_from_list_peaks(list_peaks, mz_tolerance_ppm=parameters['mz_tolerance_ppm'], check_isotope_ratio=False)
+    EED = ExperimentalEcpdDatabase(mode=mode, 
+                                   mz_tolerance_ppm=parameters['mz_tolerance_ppm'],
+                                   rt_tolerance=rtime_tolerance)
+    
+    # passing patterns from .defaul_parameters
+    if mode == 'pos':
+        EED.adduct_patterns = adduct_search_patterns
+    else:
+        EED.adduct_patterns = adduct_search_patterns_neg
+    EED.isotope_search_patterns = isotope_search_patterns
+    EED.extended_adducts = extended_adducts
+    
+    EED.build_from_list_peaks(list_peaks)
     EED.extend_empCpd_annotation(EE.KCD)
     EED.annotate_singletons(EE.KCD)
     # EED.dict_empCpds misses some features 
