@@ -38,9 +38,16 @@ class ext_Experiment:
     def __init__(self, sample_registry, parameters):
         '''
         This is the overall container for all data in an experiment/project.
-        sample_registry: dictionary of sample and selected data after mass track extraction.
+
+        Parameters
+        ----------
+        sample_registry : dictionary of sample and selected data after mass track extraction.
             The bulk mass track data are not kept in memory unless specified so.
-        parameters: processing parameters passed from main.py.
+        parameters : processing parameters passed from main.py.
+
+        Updates
+        -------
+        Major class attributes including self.number_of_samples, number_scans, reference_sample_id.
         '''
         self.sample_registry = sample_registry
         self.valid_sample_ids = self.get_valid_sample_ids()
@@ -59,7 +66,7 @@ class ext_Experiment:
     def get_reference_sample_id(self):
         '''
         get_reference_sample_id either by user specification, or
-        as sample of most number_anchor_mz_pairs, limited to first 100 samples to search.
+        using the sample of most number_anchor_mz_pairs, limited to first 100 samples to search.
         '''
         if self.parameters['reference']:
             # match file name; k is sm['sample_id']
@@ -79,9 +86,15 @@ class ext_Experiment:
             return None
         
     def get_valid_sample_ids(self):
+        '''
+        Get valid sample ids, as some samples may not be extracted successfully.
+        '''
         return [k for k,v in self.sample_registry.items() if v['status:eic'] == 'passed']
 
     def get_max_scan_number(self, sample_registry):
+        '''
+        Return max scan number among samples, or None if no valid sample.
+        '''
         if sample_registry:
             return max([sample_registry[k]['max_scan_number'] for k in self.valid_sample_ids]) + 1
         else:
@@ -89,7 +102,7 @@ class ext_Experiment:
 
     def process_all(self):
         '''
-        This is default asari workflow.
+        This is the default asari workflow.
         1. Build MassGrid, using either pairwise (small study) or clustering method. 
             Choose one reference from all samples for the largest number of landmark m/z tracks.
         2. RT alignment via a LOWESS function, using selective landmark peaks.

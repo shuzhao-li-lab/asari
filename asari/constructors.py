@@ -1,12 +1,6 @@
 '''
-MassGrid for correspondence, and FeatureList from feature/peak detection.
-We use a similar concept of FeatureMap as in OpenMS here, 
-but the correspondence algorithms take adavantage of high m/z resolution first, 
-then utilizes MS1_pseudo spectra and cumulative elution profiles.
-
-The use of CompositeMap facilitates data visualization and exploration.
+Classes of MassGrid and CompositeMap.
 '''
-
 import pandas as pd
 from mass2chem.search import *
 
@@ -17,7 +11,20 @@ from .samples import SimpleSample
 
 
 class MassGrid:
+    '''
+    MassGrid is the concept for m/z correspondence in asari.
+    This shares similarity to FeatureMap in OpenMS, but the correspondence 
+    in asari takes adavantage of high m/z resolution first before feature detection.
+    '''
     def __init__(self, cmap=None, experiment=None):
+        '''
+        Initiating MassGrid by linking to CompositeMap and ext_Experiment instances.
+
+        Parameters
+        ----------
+        cmap : CompositeMap instance.
+        experiment : ext_Experiment instance.
+        '''
         self.experiment = experiment
         self.CMAP = cmap
         self.reference_sample_instance = self.CMAP.reference_sample_instance
@@ -28,7 +35,12 @@ class MassGrid:
     def build_grid_sample_wise(self):
         '''
         Align one sample a time to reference m/z grid, based on their anchor m/z tracks.
+        One of the two methods to build the grid.
         This is better for reliable assembly of small number of samples.
+
+        See also
+        --------
+        build_grid_by_centroiding
         '''
         self._initiate_mass_grid()
         sample_ids = self.experiment.valid_sample_ids
@@ -40,9 +52,14 @@ class MassGrid:
 
     def build_grid_by_centroiding(self):
         '''
-        assemble mass grid by grouping m/z values to centroids.
+        Assemble mass grid by grouping m/z values to centroids.
         Each centroid can have no more than one mass track per sample.
+        One of the two methods to build the grid.
         This is more efficient for large number of samples.
+
+        See also
+        --------
+        build_grid_sample_wise
         '''
         all = []
         for ii in range(self._number_of_samples_):
@@ -70,24 +87,35 @@ class MassGrid:
         list_mass_tracks = []
         for ii in range(len(mz_list)):
             list_mass_tracks.append({'id_number': ii, 'mz': mz_list[ii],})
-        self.anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(list_mass_tracks, 
-                                            mz_tolerance_ppm=self.experiment.parameters['mz_tolerance_ppm'])
+        self.anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(
+            list_mass_tracks, mz_tolerance_ppm=self.experiment.parameters['mz_tolerance_ppm']
+            )
         self._mz_landmarks_ = flatten_tuplelist(self.anchor_mz_pairs)
 
         # make sample instances
-        self.reference_sample_instance.rt_cal_dict = self.reference_sample_instance.reverse_rt_cal_dict = {}
+        self.reference_sample_instance.rt_cal_dict = \
+              self.reference_sample_instance.reverse_rt_cal_dict = {}
         self.experiment.all_samples.append(self.reference_sample_instance)
         for sid in self.experiment.valid_sample_ids:
             if sid != self.experiment.reference_sample_id:
                 SM = SimpleSample(self.experiment.sample_registry[sid],
-                    experiment=self.experiment, database_mode=self.experiment.database_mode, mode=self.experiment.mode)
+                    experiment=self.experiment, database_mode=self.experiment.database_mode, 
+                    mode=self.experiment.mode
+                    )
                 self.experiment.all_samples.append(SM)
 
 
     def _initiate_mass_grid(self):
         '''
-        Initiate MassGrid using reference sample. 
+        Initiate self.MassGrid as pandas DataFrame.
+        The reference sample is used to populate first m/z column.
         This sets 1st instance into self.experiment.all_samples.
+
+        Updates
+        -------
+        self._mz_landmarks_ : landmark m/z values that match to 13C/12C pattern
+        self.MassGrid : DataFrame with reference sample as first entry
+        self.experiment.all_samples : adding 1st sample (reference)
         '''
         reference_sample = self.reference_sample_instance
         reference_sample.rt_cal_dict = reference_sample.reverse_rt_cal_dict = {}
@@ -111,14 +139,14 @@ class MassGrid:
         '''
         Add Sample instance to and update MassGrid; 
         add Sample to self.experiment.samples.
-        recalculate_ref is not done here, because 
-        1) it's easier to include unmatched features from Sample; and 
-        2) this sample wise method is applied to small studies only, not expecting much shift.
+
         '''
         print("Adding sample to MassGrid,", sample.name)
         mzlist = [x[0] for x in sample.track_mzs]
-        new_reference_mzlist, new_reference_map2, updated_REF_landmarks, _r = landmark_guided_mapping(
-                                    list(self.MassGrid['mz']), self._mz_landmarks_, mzlist, sample._mz_landmarks_)
+        new_reference_mzlist, new_reference_map2, updated_REF_landmarks, _r = \
+            landmark_guided_mapping(
+                list(self.MassGrid['mz']), self._mz_landmarks_, mzlist, sample._mz_landmarks_
+                )
 
         NewGrid = pd.DataFrame(
             np.full((len(new_reference_mzlist), 1+self._number_of_samples_), None),
@@ -181,9 +209,7 @@ class MassGrid:
 
     def join(self, M2):
         '''
-        Join with another MassGridCluster. Placeholder.
-        Using a common reference, which should be the 1st sample in both clusters.
-        Return the merged MassGridCluster.
+        Placeholder. Future option to join with another MassGrid via a common reference.
         '''
         pass
 
@@ -191,9 +217,11 @@ class MassGrid:
 class CompositeMap:
     '''
     Each experiment is summarized into a CompositeMap (CMAP), as a master feature map.
-    i) MassGrid: a matrix (DataFrame) for correspondence of mass tracks to each sample 
-    ii) FeatureList: list of feature definitions, i.e. peaks defined on composite mass tracks.
-    iii) FeatureTable: a matrix for feature intensities per sample
+    The use of CompositeMap also facilitates data visualization and exploration.
+    Related concepts:
+    i) MassGrid: a matrix for recording correspondence of mass tracks to each sample 
+    ii) FeatureList: list of feature definitions, i.e. elution peaks defined on composite mass tracks.
+    iii) FeatureTable: a matrix for feature intensities per sample.
     '''
     def __init__(self, experiment):
         '''
@@ -209,7 +237,7 @@ class CompositeMap:
         self.dict_scan_rtime = self.get_reference_rtimes(self.rt_length)
         self.max_ref_rtime = self.dict_scan_rtime[self.rt_length-1]
 
-        self.MassGrid = None                        # will be DF
+        self.MassGrid = None                        # will be pandas DataFrame, = MassGrid.MassGrid
         self.FeatureTable = None
         self.FeatureList = []
 
@@ -255,6 +283,9 @@ class CompositeMap:
         self._mz_landmarks_ = MG._mz_landmarks_
 
     def mock_rentention_alignment(self):
+        '''
+        
+        '''
         for sample in self.experiment.all_samples[1:]:      # first sample is reference
             sample.rt_cal_dict, sample.reverse_rt_cal_dict = {}, {}
 
@@ -445,24 +476,3 @@ class CompositeMap:
             fList.append( peak_area )
 
         return fList
-
-
-
-
-class SampleAssembly(CompositeMap):
-    '''
-    
-    Alternative workflow:
-    1) construct MassGrid
-    2) peak detection in each sample, 
-    3) RT align by distance threshold.
-
-
-    '''
-
-
-    def align_samples(self, ):
-        pass
-
-
-

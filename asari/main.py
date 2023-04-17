@@ -72,7 +72,7 @@ def main(parameters=PARAMETERS):
     parser.add_argument('--reverse_detection', default=False,
             help='the reverse peak detection algorithm; not used now')
     parser.add_argument('--pickle', default=False, 
-            help='keep all intermediate pickle files')
+            help='keep all intermediate pickle files, ondisk mode only.')
     parser.add_argument('--anno', default=True, 
             help='perform default annotation after processing data')
 

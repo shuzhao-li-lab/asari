@@ -19,8 +19,8 @@ def annotate_user_featuretable(infile, parameters, rtime_tolerance=2):
         which imports from defaul_parameters and updates the dict by user arguments.
     rtime_tolerance : retention time tolerance to group adducts etc.
 
-    Oputputs
-    --------
+    Outputs
+    -------
     two files in current directory, Feature_annotation.tsv and Annotated_empricalCompounds.json
     '''
     parameters['outdir'] = ''
