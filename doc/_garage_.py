@@ -1936,7 +1936,23 @@ def detect_elution_peaks( mass_track,
                     )
 
 
+def seed_nn_mz_cluster(bin_data_tuples, seed_indices):
+    '''
+    complete NN clustering, by assigning each data tuple to its closest seed.
 
+    Not used, see nn_cluster_by_mz_seeds for bug
+
+    '''
+    seeds = [bin_data_tuples[ii] for ii in set( seed_indices) ]
+    # do set(seed_indices) to avoid repetittive seed_indices in case find_peaks does so
+    _NN = len(seeds)
+    clusters = [[]] * _NN           # see nn_cluster_by_mz_seeds for bug
+    # assing cluster number by nearest distance to a seed
+    for x in bin_data_tuples:
+        deltas = sorted([(abs(x[0]-seeds[ii][0]), ii) for ii in range(_NN)])
+        clusters[deltas[0][1]].append(x)
+
+    return clusters
 
 
 

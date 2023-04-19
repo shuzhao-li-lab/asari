@@ -16,7 +16,8 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 from .mass_functions import check_close_mzs, nn_cluster_by_mz_seeds
 
 INTENSITY_DATA_TYPE = np.int64
-# int32 uses less memory - for large data we can check if int32 is safe, i.e. under 2E9
+# int32 uses less memory - for large data one can check if int32 is safe, 
+# i.e. under 2E9, or transform data
 
 # -----------------------------------------------------------------------------
 # mass Tracks
