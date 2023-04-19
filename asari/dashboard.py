@@ -31,12 +31,13 @@ def epd_convert(epd_dict):
 def read_project(datadir, load_sample_limit=20):
     '''
     Get all project data.
-    Return
-    ======
-    project_desc: dict of project meta data
-    cmap: composite map, ['_number_of_samples_', 'rt_length', 'dict_scan_rtime', 'list_mass_tracks', 'MassGrid']
-    epd: dict of empirical compounds
-    Ftable: pandas dataframe of feature table. Truncated if samples more than load_sample_limit.
+
+    Returns
+    -------
+    project_desc : dict of project meta data
+    cmap : composite map, ['_number_of_samples_', 'rt_length', 'dict_scan_rtime', 'list_mass_tracks', 'MassGrid']
+    epd : dict of empirical compounds
+    Ftable : pandas dataframe of feature table. Truncated if samples more than load_sample_limit.
     '''
     project_desc = json.load(open(os.path.join(datadir, 'project.json')))
     cmap = pickle.load( open(os.path.join(datadir, 'export', 'cmap.pickle'), 'rb') )
@@ -54,6 +55,10 @@ def read_project(datadir, load_sample_limit=20):
 
 def plot_xic(xics, mz_dict, track_id):
     '''
+    Generates scatter plot for a mass track.
+
+    Returns
+    -------
     track_id is a str
     '''
     title = "Mass track viewer - m/z %4.4f" %(mz_dict[track_id])

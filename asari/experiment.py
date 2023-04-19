@@ -34,6 +34,8 @@ class ext_Experiment:
     This encapsulates a set of LC-MS files using the same experimental method 
     (chromatography and ionization) to be processed together.
     E.g., data from postive ESI and negative ESI should not in the same ext_Experiment instance.
+    This class has annotation and export functions.
+    Default asari work flow is in `ext_Experiment.process_all`.
     '''
     def __init__(self, sample_registry, parameters):
         '''
@@ -67,6 +69,7 @@ class ext_Experiment:
         '''
         get_reference_sample_id either by user specification, or
         using the sample of most number_anchor_mz_pairs, limited to first 100 samples to search.
+        This assumes the sample of most good m/z values has a good coverage of features.
         '''
         if self.parameters['reference']:
             # match file name; k is sm['sample_id']
@@ -111,6 +114,10 @@ class ext_Experiment:
         4. Global peak detection is performed on each composite massTrack.
         5. Mapping global peaks (i.e. features) back to all samples and extract sample specific peak areas.
             This completes the FeatureTable.
+
+        Updates
+        -------
+        self.CMAP as instance of CompositeMap, and MassGrid, composite map and features within.
         '''
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
@@ -134,15 +141,22 @@ class ext_Experiment:
 
     def annotate(self):
         '''
-        Annotate features via JMS and khipu.
-        Export Feature_annotation as tsv, Annotated_empricalCompounds in both JSON and pickle.
-        Reference databases can be pre-loaded.
-        With db_mass_calibrate to theoretical values.
+        Annotate features via JMS (jms.dbStructures) and khipu.
+        The pre-annotation step is khipu based emprical compound construction, followed by 
+        three steps of annotation:
+        1) Search known compound database, via neutral mass inferred by khipu
+        2) Search singletons for a formula match
+        3) Encapsulate remaining features in empCpd format, so that all are exported consistently.
 
-        This produces default annotation with asari, but one can redo annotation on the features afterwards,
-        using a method of choice.
-        With JMS/khipu, one can also pass custom adduct/isotopes to EED.adduct_patterns etc. See 
-        ExperimentalEcpdDatabase.get_isotope_adduct_patterns().
+        Export Feature_annotation as tsv, Annotated_empricalCompounds in both JSON and pickle.
+        Reference databases can be pre-loaded. 
+        Measured m/z values are calibrated to database based values (db_mass_calibrate).
+
+        Note:
+            This produces default annotation with asari, 
+            but one can redo annotation on the features afterwards, using a method of choice.
+            With JMS/khipu, one can also pass custom adduct/isotopes to EED.adduct_patterns etc. 
+            See ExperimentalEcpdDatabase.get_isotope_adduct_patterns().
         '''
         self.load_annotation_db()
         self.db_mass_calibrate()
@@ -198,36 +212,50 @@ class ext_Experiment:
 
     def load_annotation_db(self, src='hmdb4'):
         '''
-        Database of known compound using JMS. Will add more options later.
+        Load database of known compound using jms.dbStructures.knownCompoundDatabase.
+        The compound tree is precomputed indexing.
+        The `src` parameter is not used now, but placeholder to add more options later.
         '''
         self.KCD = knownCompoundDatabase()
-        self.KCD.mass_indexed_compounds = pickle.load( pkg_resources.open_binary(db, 'mass_indexed_compounds.pickle') )
-        self.KCD.emp_cpds_trees = pickle.load( pkg_resources.open_binary(db, 'emp_cpds_trees.pickle') )
+        self.KCD.mass_indexed_compounds = pickle.load( 
+            pkg_resources.open_binary(db, 'mass_indexed_compounds.pickle') )
+        self.KCD.emp_cpds_trees = pickle.load( 
+            pkg_resources.open_binary(db, 'emp_cpds_trees.pickle') )
 
     def db_mass_calibrate(self, required_calibrate_threshold=0.000002):
         '''
-        Use KCD.evaluate_mass_accuracy_ratio to check systematic mass shift.
+        Use KCD.evaluate_mass_accuracy_ratio to check systematic mass shift,
+        which is calculated as the average ppm difference between measured m/z and theoretical values.
         If greater than required_calibrate_threshold (default 2 ppm), 
         calibrate m/z values for the whole experiment by updating self.CMAP.FeatureList.
 
-        good_reference_landmark_peaks: [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...]
-        ref_id_num -> index number of mass track in MassGrid.
+        Note:
+            Data format in good_reference_landmark_peaks: 
+            [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...],
+            where ref_id_num is index number of mass track in MassGrid.
         '''
-        mz_landmarks = [self.CMAP.MassGrid['mz'][p['ref_id_num']] for p in self.CMAP.good_reference_landmark_peaks]
-        mass_accuracy_ratio = self.KCD.evaluate_mass_accuracy_ratio(mz_landmarks, mode=self.mode, mz_tolerance_ppm=10)
+        mz_landmarks = [self.CMAP.MassGrid['mz'][p['ref_id_num']] 
+                        for p in self.CMAP.good_reference_landmark_peaks]
+        mass_accuracy_ratio = self.KCD.evaluate_mass_accuracy_ratio(
+            mz_landmarks, mode=self.mode, mz_tolerance_ppm=10)
         if mass_accuracy_ratio:
             if abs(mass_accuracy_ratio) > required_calibrate_threshold:
-                print("Mass shift is greater than %2.1f ppm. Correction applied." %(required_calibrate_threshold*1000000))
+                print("Mass shift is greater than %2.1f ppm. Correction applied." 
+                      %(required_calibrate_threshold*1000000))
                 _correction = mass_accuracy_ratio + 1
                 for F in self.CMAP.FeatureList:
                     F['mz'] = F['mz'] / _correction
                     F['mz_corrected_by_division'] = _correction
         else:
-            print("Mass accuracy check is skipped, too few mz_landmarks (%d) matched." %len(mz_landmarks))
+            print("Mass accuracy check is skipped, too few mz_landmarks (%d) matched." 
+                  %len(mz_landmarks))
 
     def append_orphans_to_epmCpds(self, dict_empCpds):
         '''
-        # EED.dict_empCpds does not include features without formula match, and we add them there.
+        This is the third step of feature annotation in self.annotate,
+        to encapsulate features without annotation in empCpd format.
+        Input via dict_empCpds and returns updated dict_empCpds.
+        See also: annotate
         '''
         all_feature_ids = []
         for _, V in dict_empCpds.items():
@@ -246,12 +274,17 @@ class ext_Experiment:
 
     def export_peak_annotation(self, dict_empCpds, KCD, export_file_name_prefix):
         '''
-        Export feature annotation.
-        interim_id is empCpd id. dict_empCpds as seen in JMS.
+        Export feature annotation to tab delimited tsv file, where interim_id is empCpd id.
         
+        Parameters
+        ----------
+        dict_empCpds : dictionary of empirical compounds, using interim_id as key, as seen in JMS.
+        KCD : the known compound database that was used in annotating the empirical compounds.
+        export_file_name_prefix : to used in output file name.
         '''
-        s = "[peak]id_number\tmz\trtime\tapex(scan number)\t[EmpCpd]interim_id\t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\
-        \tname_1st_guess\tmatched_DB_shorts\tmatched_DB_records\n"
+        s = "[peak]id_number\tmz\trtime\tapex(scan number)\t[EmpCpd]interim_id\
+            \t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\
+            \tname_1st_guess\tmatched_DB_shorts\tmatched_DB_records\n"
         
         for _, V in dict_empCpds.items():
             name_1st_guess, matched_DB_shorts, matched_DB_records = '', '', ''
@@ -264,7 +297,8 @@ class ext_Experiment:
 
             for peak in V['MS1_pseudo_Spectra']:
                 s += '\t'.join([str(x) for x in [
-                    peak['id_number'], peak['mz'], peak['rtime'], peak['apex'], V['interim_id'], peak.get('ion_relation', ''),
+                    peak['id_number'], peak['mz'], peak['rtime'], peak['apex'], 
+                    V['interim_id'], peak.get('ion_relation', ''),
                     V['neutral_formula'], V['neutral_formula_mass'],
                     name_1st_guess, matched_DB_shorts, matched_DB_records]]) + "\n"
 
@@ -277,6 +311,8 @@ class ext_Experiment:
     def select_unique_compound_features(self, dict_empCpds):
         '''
         Get unique feature by highest composite peak area per empirical compound. 
+        One may consider alternatives to select the peak representing an empirical compound,
+        e.g. by SNR or M+H, M-H ions. This is can be done separately on the exported files.
         '''
         self.selected_unique_features = {}
         for interim_id, V in dict_empCpds.items():
@@ -287,7 +323,8 @@ class ext_Experiment:
                 )
             else:
                 try:
-                    all_peaks = sorted([(peak['peak_area'], peak['goodness_fitting'], peak) for peak in V['MS1_pseudo_Spectra']],
+                    all_peaks = sorted([(peak['peak_area'], peak['goodness_fitting'], peak) 
+                                        for peak in V['MS1_pseudo_Spectra']],
                                         reverse=True)
                     best_peak = all_peaks[0][2]
                 except TypeError:
@@ -300,12 +337,15 @@ class ext_Experiment:
     def export_feature_tables(self, _snr=10, _peak_shape=0.7, _cSelectivity=0.7):
         '''
         To export features tables:
-        1) preferred table under `outdir`, after quality filtering by SNR, peak shape and chromatographic selectivity.
+        1) preferred table under `outdir`, after quality filtering 
+            by SNR, peak shape and chromatographic selectivity.
         2) full table under `outdir/export/`
         3) unique compound table under `outdir/export/`
         4) dependent on `target` extract option, a targeted_extraction table under `outdir`.
-        Filtering parameters (_snr, _peak_shape, _cSelectivity) only apply to preferred table and unique_compound_table.
-        Full table is filtered by initial peak detection parameters of lower snr and gaussian_shape.
+        Filtering parameters (_snr, _peak_shape, _cSelectivity) only 
+        apply to preferred table and unique_compound_table.
+        Full table is filtered by initial peak detection parameters, 
+        which contains lower values of snr and gaussian_shape.
         '''
         good_samples = [sample.name for sample in self.all_samples] 
         filtered_FeatureTable = self.CMAP.FeatureTable[good_samples]                       

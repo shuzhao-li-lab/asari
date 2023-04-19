@@ -288,6 +288,11 @@ def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks,
     '''
     Align the mzlists btw CMAP (i.e. REF) and a new Sample,
     prioritizing paired anchors (from isotope/adduct patterns).
+
+    Two-step process: aligning the anchors (landmarks) first, mz correction if needed, 
+    then completing the others. 
+
+
     Similar to anchor_guided_mapping, but simplified by using flat lists of m/z landmarks.
 
     The mzlists are already in ascending order when a Sample is processed,

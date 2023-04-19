@@ -277,20 +277,23 @@ def get_thousandth_bins(mzTree, mz_tolerance_ppm=5, min_timepoints=5, min_peak_h
 # retention time alignment
 # -----------------------------------------------------------------------------
 
-def rt_lowess_calibration(good_landmark_peaks, selected_reference_landmark_peaks, sample_rt_numbers, reference_rt_numbers):
+def rt_lowess_calibration(good_landmark_peaks, 
+                          selected_reference_landmark_peaks, 
+                          sample_rt_numbers, reference_rt_numbers):
     '''
-    Use LOWESS, Locally Weighted Scatterplot Smoothing, to reate correspondence between sample_rt_numbers, reference_rt_numbers.
+    This is the alignment function of retention time between samples.
+    Use LOWESS, Locally Weighted Scatterplot Smoothing, to create 
+    correspondence between sample_rt_numbers, reference_rt_numbers.
     Predicted numbers are skipped when outside real sample boundaries.
-    checked available in statsmodels.nonparametric.smoothers_lowess, v 0.12, 0.13+
-        https://www.statsmodels.org/stable/generated/statsmodels.nonparametric.smoothers_lowess.lowess.html    
-        But xvals have to be forced as float array until the fix is in new release.
 
     Parameters
     ----------
-    good_landmark_peaks and selected_reference_landmark_peaks are equal-length lists of peaks,
-    selected from working sample and reference sample as landmarks for RT alignment. 
-    sample_rt_numbers: all scan numbers in this sample.
-    reference_rt_numbers: all scan numbers in the ref sample.
+    good_landmark_peaks : landmark peaks selected from this working sample.
+        Landmark peaks are usually defined by 13C/12C patterns.
+    selected_reference_landmark_peaks : landmark peaks selected from the reference sample,
+        matched and equal-length to good_landmark_peaks.
+    sample_rt_numbers : all scan numbers in this sample.
+    reference_rt_numbers : all scan numbers in the ref sample.
 
     Returns
     -------
@@ -298,6 +301,12 @@ def rt_lowess_calibration(good_landmark_peaks, selected_reference_landmark_peaks
                 Range matched. Only changed numbers are kept for efficiency.
     reverse_rt_cal_dict : from ref RT scan numbers to sample RT scan numbers. 
                 Range matched. Only changed numbers are kept for efficiency.
+    
+    Note:
+        LOWESS method available in statsmodels.nonparametric.smoothers_lowess, v 0.12, 0.13+
+        https://www.statsmodels.org/stable/generated/statsmodels.nonparametric.smoothers_lowess.lowess.html    
+        But xvals have to be forced as float array until the fix is in new release.
+        See __hacked_lowess__.
     '''
     # force left and right ends, to prevent runaway curve functions
     reference_rt_bound = max(reference_rt_numbers)
@@ -331,7 +340,8 @@ def rt_lowess_calibration(good_landmark_peaks, selected_reference_landmark_peaks
 def __hacked_lowess__(yy, xx, frac, it, xvals):
     '''
     This was workaround of a problem with Statsmodel 0.13, which was dealt by casting xvals as floats.
-    Not checking possible range error
+    Not checking possible range error.
+    The bug was reported and fixed in newer Statsmodel, thus this can be phased out in future.
     '''
     lxy = lowess(yy, xx, frac, it)
     newx, newy = list(zip(*lxy))
@@ -341,6 +351,7 @@ def __hacked_lowess__(yy, xx, frac, it, xvals):
 
 def savitzky_golay_spline(good_landmark_peaks, selected_reference_landmark_peaks, sample_rt_numbers, reference_rt_numbers):
     '''
+    Placeholder.
     Modified Savitzky-Golay filter followed by spline fitting - pls follow format in rt_lowess.
     Because our data are not equally spaced, sav-gol method may produce undesired errors.
     # UnivariateSpline can't handle redundant values -
@@ -353,16 +364,27 @@ def savitzky_golay_spline(good_landmark_peaks, selected_reference_landmark_peaks
     pass
 
 def dwt_rt_calibrate(good_landmark_peaks, selected_reference_landmark_peaks, sample_rt_numbers, reference_rt_numbers):
-    '''Other RT alignment method to include - pls follow format in rt_lowess.
-    not implemented.
+    '''
+    Placeholder.
+    Not implemented.
     '''
     pass
 
 
 def remap_intensity_track(intensity_track, new, rt_cal_dict):
     '''
-    Remap intensity_track based on rt_cal_dict. 
-    new = basetrack.copy(), possible longer than intensity_track
+    Remap intensity_track based on rt_cal_dict, used by constructors.MassGrid.remap_intensity_track.
+
+    Parameters
+    ----------
+    intensity_track : list of intensity values from a mass track.
+    new : new copy of np.zeros of RT length, possible longer than intensity_track,
+        because samples may have different RT lengthes.
+    rt_cal_dict : sample specific mapping dictionary of RT.
+
+    Returns
+    -------
+    Updated list of intensity, using coordinates in composite mass track.
     '''
     new[ :intensity_track.shape[0]] = intensity_track.copy()
     for k,v in rt_cal_dict.items():
@@ -376,14 +398,37 @@ def remap_intensity_track(intensity_track, new, rt_cal_dict):
 
 def smooth_moving_average(list_intensity, size=9):
     '''
-    Smooth data for very noisy mass tracks.
-    Using simple moving average here; LOWESS does not look good for this.
+    Smooth data of a noisy mass track using simple moving average.
+
+    Parameters
+    ----------
+    list_intensity : list of intensity values from a mass track.
+    size : window size for moving average.
+
+    Returns
+    -------
+    New list of smoothed intensity values.
+
+    Note:
+        For very noise data, one may use smooth_lowess.
     '''
     return uniform_filter1d(list_intensity, size, mode='nearest')
 
 def smooth_lowess(list_intensity, frac=0.02):
     '''
-    Smooth data for very noisy mass tracks via LOWESS regression.
+    Smooth data of a very noisy mass track via LOWESS regression.
+
+    Parameters
+    ----------
+    list_intensity : list of intensity values from a mass track.
+    frac : fraction of data used in LOWESS regression.
+
+    Returns
+    -------
+    New list of smoothed intensity values.
+
+    Note:
+        smooth_moving_average is preferred for most data. LOWESS is not good for small peaks.
     '''
     lxy = lowess(list_intensity, range(len(list_intensity)), frac=frac, it=1)
     _, newy = list(zip(*lxy))

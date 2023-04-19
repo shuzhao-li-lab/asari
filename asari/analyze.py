@@ -53,8 +53,9 @@ def get_file_masstrack_stats(infile,
     return_sample : if True, return full sample dictionary with mass tracks.
         Else, return _mz_landmarks_, ionization_mode, min_peak_height_.
 
-    Example output
-    --------------
+    Note:
+        Example output:
+        ```
         Total number of MS1 spectra: 741
         of which 0 are positive ionization mode.
 
@@ -69,8 +70,8 @@ def get_file_masstrack_stats(infile,
         Minimal height of landmark tracks:  2,334 
 
         Mass accuracy was estimated on 124 matched values as -1.8 ppm.
-
-    To-do: to add output info on instrumentation
+        ```
+        To-do: to add output info on instrumentation.
     '''
     new = {'sample_id': infile, 'input_file': infile, 'ion_mode': '',}
     list_mass_tracks = []

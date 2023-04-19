@@ -16,6 +16,24 @@ from .chromatograms import *
 # -----------------------------------------------------------------------------
 
 def batch_deep_detect_elution_peaks(list_mass_tracks, number_of_scans, parameters):
+    '''
+    Performs elution peak detection of a list of mass tracks via multiprocessing.
+    
+    Parameters
+    ----------
+    list_mass_tracks : 
+    number_of_scans : 
+    parameters :  parameter dictionary passed from main.py, 
+        which imports from defaul_parameters and updates the dict by user arguments.
+
+    Returns
+    -------
+    shared_dict : dictionary object used to pass data btw multiple processing.
+
+    See also
+    --------
+    single_sample_EICs_
+    '''
     with mp.Manager() as manager:
         shared_list = manager.list()
         iters = iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters, shared_list)
@@ -352,6 +370,9 @@ def quick_detect_unique_elution_peak(intensity_track,
     '''
     Quick peak detection, only looking for a high peak with high prominence.
     This can be used for quick check on good peaks, or selecting landmarks for alignment purposes.
+
+
+
     '''
     max_intensity = intensity_track.max()
     prominence = min_prominence_threshold_ratio * max_intensity
@@ -425,6 +446,8 @@ def _merge_peak_cluster(cluster_peaks):
 
 def cleanup_peak_cluster(cluster_peaks):
     '''
+    Safeguards peak boundaries when reporting overlap peaks.
+
     scipy find_peaks sometimes report two overlap peak: one small and the other joined with the small peak. 
     Separate them here. 
     Return list of peaks.
