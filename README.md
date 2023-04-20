@@ -143,7 +143,8 @@ Additional details:
 Selectivity is tracked for
 - mSelectivity, how distinct are m/z measurements 
 - cSelectivity, how distinct are chromatograhic elution peaks
-- dSelectivity, how distinct are database records 
+
+Step-by-step algorithms are explained in doc/README.md.
 
 This package uses `mass2chem`, `khipu` and `JMS` for mass search and annotation functions.
 

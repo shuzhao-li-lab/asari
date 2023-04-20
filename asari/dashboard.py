@@ -55,11 +55,7 @@ def read_project(datadir, load_sample_limit=20):
 
 def plot_xic(xics, mz_dict, track_id):
     '''
-    Generates scatter plot for a mass track.
-
-    Returns
-    -------
-    track_id is a str
+    Generates scatter plot for a mass track as dataframe. Test function.
     '''
     title = "Mass track viewer - m/z %4.4f" %(mz_dict[track_id])
     plot = xics.hvplot.scatter(x='rt', y=track_id, height=400, title=title,)
@@ -69,6 +65,23 @@ def plot_xic(xics, mz_dict, track_id):
 def cmapplot_mass_tracks(cmap, rt_list, color, track_id_number):
     '''
     return a hv plot of mass track, by track_id_number
+    
+    Parameters
+    ----------
+    cmap : CMAP as from ext_Experiment {
+            '_number_of_samples_': self.CMAP._number_of_samples_,
+            'rt_length': self.CMAP.rt_length,
+            'dict_scan_rtime': self.CMAP.dict_scan_rtime,
+            'list_mass_tracks': self.CMAP.composite_mass_tracks,
+            'MassGrid': dict(self.CMAP.MassGrid),
+        }
+    rt_list : list of retention time
+    color : color for scatter
+    track_id_number : index for a mass track in cmap['list_mass_tracks']
+
+    Returns
+    -------
+    A holoviz plot object.
     '''
     track_id_number = int(track_id_number)
     mz = cmap['list_mass_tracks'][track_id_number]['mz']
@@ -83,8 +96,9 @@ def cmapplot_mass_tracks(cmap, rt_list, color, track_id_number):
 
 def convert_dict_html(d, title=''):
     '''
-    Convert peak dictionary into readable HTML.
+    Convert a peak dictionary into readable HTML.
     May need to improve error handling since KeyError is potential problem.
+    Returns HTML as a string.
     '''
     s = title
     info = [ ('id_number: ', d['id_number'], ' - ', 'parent_masstrack_id: ', d['parent_masstrack_id'], ' - ', 'parent_epd_id: ', d.get('parent_epd_id', '')),
@@ -98,6 +112,9 @@ def convert_dict_html(d, title=''):
 
 
 def convert_dict_markdown(d, title=''):
+    '''
+    Convert a peak dictionary into Markdown string.
+    '''
     s = title
     for k,v in d.items():
         if k not in ['apex', 'left_base', 'right_base']:
@@ -105,6 +122,10 @@ def convert_dict_markdown(d, title=''):
     return s + '\n'
 
 def track_to_peaks(peakDict):
+    '''
+    Input : peakDict, peak dictionary using 'id_number' as keys.
+    Returns a dictionary using parent_masstrack_id as keys and ['id_number'] as values.
+    '''
     t = {}
     for P in peakDict.values():
         mid = str(P["parent_masstrack_id"])
@@ -126,7 +147,9 @@ def find_track_by_mz(cmap, rt_list, mz):
         return sorted(L)[0][1]
 
 def find_a_good_peak(peakDict):
-    '''find a good example feature/peak'''
+    '''
+    To find a good example feature/peak, which can be used as the feature on landing page.
+    '''
     good = [P for P in peakDict.values() if P['goodness_fitting'] > 0.9 and P['cSelectivity'] > 0.9]
     return good[0]
 
@@ -135,6 +158,9 @@ def find_a_good_peak(peakDict):
 # Summary panel
 #
 def get_summary_panel(project_desc, peakDict, epdDict, Ftable):
+    '''
+    Get a summary panel, returns a panel.Column of multiple tabs for summary metrics.
+    '''
     desc0 = "Project retrieved from %s, %d features and %d empirical compounds." %(project_desc['outdir'],
                     len(peakDict), len(epdDict)
                     )

@@ -19,7 +19,7 @@ Major difference to proteomics is that a feature in LC-MS metabolomics is define
 We use `empirical compound` to group degenerate features into a tentative compound/metabolite.
 Mass track is used in asari, to cover full range of retention time, because alignment of m/z values is fixed in an early step.
 
-## Detailed data processing algorithms step by step
+## Data processing algorithms step by step
 
 1. Build sample registry; see `workflow.process_project`, `workflow.register_samples`.
 
@@ -85,14 +85,21 @@ Mass track is used in asari, to cover full range of retention time, because alig
 
 7. Feature asignment and annotation
 
-   The elution peaks detected from composite mass tracks are equivalent to features. They have peak positions and boundaries on the composite mass tracks, which need to be translated to positions on the individual samples, via the RT alignment dictionaries.
+   a. The elution peaks detected from composite mass tracks are stored in CompositeMap.FeatureList (they are features). The retention time is converted from scan numbers (see `CompositeMap.global_peak_detection`). The features have peak positions and boundaries on the composite mass tracks, which are translated to positions on the individual samples, via the RT alignment dictionaries (see `CompositeMap.extract_features_per_sample`). The sample specific peak areas are recorded into CompositeMap.FeatureTable.
 
-   
+   b. The preannotaion is done via another package khipu (https://github.com/shuzhao-li-lab/khipu), where isotopes and adducts are grouped into empirical compounds. 
+
+   c. The empirical compounds are searched against known compound database (default HMDB 4) via another package JMS (https://github.com/shuzhao-li/JMS). The matched isomers (not distinguished without additional information) and formulas are included in asari output. See `experiment.ext_Experiment.annotate`.
 
 8. Data export
 
+   The output directory by asari bears a time stamp, not to overwrite existing data. The recommended feature table is `preferred_Feature_table.tsv`. All peaks are kept in `export/full_Feature_table.tsv`. Annotation is exported into both JSON and tsv formats. See `experiment.ext_Experiment.export_peak_annotation`. MassGrid is exported as a csv file. Composite map is exported as a pickle file, which is used by the visual dashboard. 
 
 9. The asari dashboard for data inpsection
+
+   The dashboard is built using panel (https://panel.holoviz.org/). The dashboard uses these files under the result folder: 'project.json', 'export/cmap.pickle', 'export/epd.pickle' and 'export/full_Feature_table.tsv'. Multiple summary and QC metrics are plotted in one panel with multiple tabs.
+
+   The Feature browser displays a feature on a single composite mass track as a scatter plot. It is important that asari does not use smoothed data for visual inspection, which may be misleading. The mass track viewer is similar to Feature browser, but displays information on all features that are found on a composite mass track.
 
 
 ## Data formats
