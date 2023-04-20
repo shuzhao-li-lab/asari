@@ -3,7 +3,7 @@ from yaml import load, Loader
 
 from asari import __version__
 from .workflow import *
-from .defaul_parameters import PARAMETERS
+from .default_parameters import PARAMETERS
 
 booleandict = {'T': True, 'F': False, 1: True, 0: False, 
                    'True': True, 'False': False, 'TRUE': True, 'FALSE': False, 'true': True, 'false': False,
@@ -15,13 +15,13 @@ def main(parameters=PARAMETERS):
     '''
     asari, Trackable and scalable Python program for high-resolution LC-MS metabolomics data preprocessing.
 
-        analyze: analyze a single mzML file to print summary of statistics and recommended parameters.
-        process: LC-MS data preprocessing
-        xic: construct mass trakcs (chromatogram) from mzML files
-        extract: targeted extraction of given m/z list
-        annotate: annotate a list of features
-        join: merge multiple processed projects (possibly split a large dataset)
-        viz: start interactive data visualization and exploration.
+        * analyze: analyze a single mzML file to print summary of statistics and recommended parameters.
+        * process: LC-MS data preprocessing
+        * xic: construct mass trakcs (chromatogram) from mzML files
+        * extract: targeted extraction of given m/z list
+        * annotate: annotate a list of features
+        * join: merge multiple processed projects (possibly split a large dataset)
+        * viz: start interactive data visualization and exploration.
     '''
     def __run_process__(parameters, args):
         # main process function

@@ -22,8 +22,10 @@ class MassGrid:
 
         Parameters
         ----------
-        cmap : CompositeMap instance.
-        experiment : ext_Experiment instance.
+        cmap : 
+            CompositeMap instance.
+        experiment : 
+            ext_Experiment instance.
         '''
         self.experiment = experiment
         self.CMAP = cmap
@@ -114,9 +116,12 @@ class MassGrid:
 
         Updates
         -------
-        self._mz_landmarks_ : landmark m/z values that match to 13C/12C pattern
-        self.MassGrid : DataFrame with reference sample as first entry
-        self.experiment.all_samples : adding 1st sample (reference)
+        self._mz_landmarks_ : 
+            landmark m/z values that match to 13C/12C pattern
+        self.MassGrid : 
+            DataFrame with reference sample as first entry
+        self.experiment.all_samples : 
+            adding 1st sample (reference)
         '''
         reference_sample = self.reference_sample_instance
         reference_sample.rt_cal_dict = reference_sample.reverse_rt_cal_dict = {}
@@ -143,14 +148,19 @@ class MassGrid:
 
         Parameters
         ----------
-        sample : instance of SimpleSample class.
-        database_cursor : Not used now.
+        sample : 
+            instance of SimpleSample class.
+        database_cursor : 
+            Not used now.
 
         Updates
         -------
-        self._mz_landmarks_ : landmark m/z values that match to 13C/12C and Na/H patterns
-        self.MassGrid : DataFrame with reference sample as first entry
-        self.experiment.all_samples : adding this sample 
+        self._mz_landmarks_ :   
+            landmark m/z values that match to 13C/12C and Na/H patterns
+        self.MassGrid : 
+            DataFrame with reference sample as first entry
+        self.experiment.all_samples : 
+            adding this sample 
         '''
         print("Adding sample to MassGrid,", sample.name)
         mzlist = [x[0] for x in sample.track_mzs]
@@ -179,14 +189,19 @@ class MassGrid:
 
         Parameters
         ----------
-        tl : sorted list of all track m/z values in experiment, [(m/z, track_id, sample_id), ...]
-        reference_id: the sample_id of reference sample. Not used now.
+        tl : 
+            sorted list of all track m/z values in experiment, [(m/z, track_id, sample_id), ...]
+        reference_id: 
+            the sample_id of reference sample. Not used now.
         
         Returns
         -------
-        list of bins: [ (mean_mz, [(), (), ...]), (mean_mz, [(), (), ...]), ... ]
+        list of bins: 
+            [ (mean_mz, [(), (), ...]), (mean_mz, [(), (), ...]), ... ]
 
-        Note:
+            
+        Note
+        ----
             Because the range of each bin cannot be larger than mz_tolerance, 
             and mass tracks in each sample cannot overlap within mz_tolerance,
             multiple entries from the same sample in same bin will not happen.
@@ -234,8 +249,11 @@ class CompositeMap:
     Each experiment is summarized into a CompositeMap (CMAP), as a master feature map.
     The use of CompositeMap also facilitates data visualization and exploration.
     Related concepts:
+
     i) MassGrid: a matrix for recording correspondence of mass tracks to each sample 
+
     ii) FeatureList: list of feature definitions, i.e. elution peaks defined on composite mass tracks.
+    
     iii) FeatureTable: a matrix for feature intensities per sample.
     '''
     def __init__(self, experiment):
@@ -306,10 +324,14 @@ class CompositeMap:
         
         Updates
         -------
-        self._mz_landmarks_ : landmark m/z values that match to 13C/12C and Na/H patterns
-        self.MassGrid : DataFrame with reference sample as first entry. Use sample name as column identifiers.
+        self._mz_landmarks_ : 
+            landmark m/z values that match to 13C/12C and Na/H patterns
+        self.MassGrid : 
+            DataFrame with reference sample as first entry. Use sample name as column identifiers.
         
-        Note:
+            
+        Note
+        ----
             Number of samples dictate workflow: 
             build_grid_by_centroiding is fast, but build_grid_sample_wise is used for small studies 
             to compensate limited size for statistical distribution.
@@ -340,12 +362,16 @@ class CompositeMap:
 
         Updates
         -------
-        self.good_reference_landmark_peaks : [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...]
-        self.composite_mass_tracks : list of composite mass tracks in this experiment.
+        self.good_reference_landmark_peaks : 
+            [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...]
+        self.composite_mass_tracks : 
+            list of composite mass tracks in this experiment.
         sample.rt_cal_dict and sample.reverse_rt_cal_dict for all samples.
 
-        Note:
-            See calibrate_sample_RT for details in RT alignment. 
+        
+        Note
+        ----
+        See calibrate_sample_RT for details in RT alignment. 
         '''
         print("\nBuilding composite mass tracks and calibrating retention time ...\n")
 
@@ -401,23 +427,32 @@ class CompositeMap:
 
         Parameters
         ----------
-        sample : instance of SimpleSample class
-        list_mass_tracks : list of mass tracks in sample. 
+        sample : 
+            instance of SimpleSample class
+        list_mass_tracks : 
+            list of mass tracks in sample. 
             This may not be kept in memeory with the sample instance, thus require retrieval.
-        calibration_fuction : RT calibration fuction to use, default to rt_lowess_calibration.
-        cal_min_peak_height : minimal height required for a peak to be used for calibration.
+        calibration_fuction : 
+            RT calibration fuction to use, default to rt_lowess_calibration.
+        cal_min_peak_height : 
+            minimal height required for a peak to be used for calibration.
             Only high-quality peaks unique in each mass track are used for calibration.
-        MIN_PEAK_NUM : minimal number of peaks required for calibration. Abort if not met.
+        MIN_PEAK_NUM : 
+            minimal number of peaks required for calibration. Abort if not met.
 
         Updates
         -------
-        sample.rt_cal_dict : dictionary converting scan number in sample_rt_numbers to 
+        sample.rt_cal_dict :   
+            dictionary converting scan number in sample_rt_numbers to 
             calibrated integer values in self.reference_sample.
             Range matched. Only changed numbers are kept for efficiency.
-        sample.reverse_rt_cal_dict : dictionary from ref RT scan numbers to sample RT scan numbers. 
+        sample.reverse_rt_cal_dict : 
+            dictionary from ref RT scan numbers to sample RT scan numbers. 
             Range matched. Only changed numbers are kept for efficiency.
 
-        Note:
+            
+        Note
+        ----
             This is based on a set of unambiguous peaks: quich peak detection on anchor mass trakcs, 
             and peaks that are unique to each track are used for RT alignment.
             Only numbers different btw two samples are kept in the dictionaries for computing efficiency.
@@ -496,10 +531,14 @@ class CompositeMap:
 
         Updates
         -------
-        self.FeatureList : a list of JSON peaks
-        self.FeatureTable : a pandas dataframe for features across all samples.
+        self.FeatureList : 
+            a list of JSON peaks
+        self.FeatureTable : 
+            a pandas dataframe for features across all samples.
 
-        Note:
+            
+        Note
+        ----
             Because the composite mass tracks ar summarized on all samples, 
             the resulting elution peaks are really features at the experiment level.
             Peak area and height are cumulated from all samples, 
@@ -550,7 +589,8 @@ class CompositeMap:
 
         Parameters
         ----------
-        sample : instance of SimpleSample class.
+        sample : 
+            instance of SimpleSample class.
 
         Returns
         ------- 

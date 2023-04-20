@@ -17,12 +17,18 @@ def analyze_single_sample(infile,
 
     Parameters
     ----------
-    infile : input mzML file.
-    mz_tolerance_ppm : m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
-    min_intensity : minimal intentsity value to consider, also used to filter out 0s.
-    min_timepoints : minimal consecutive scans to be considered real signal.
-    min_peak_height : a bin is not considered if the max intensity < min_peak_height.
-    parameters : not used, just place holder to use ext_Experiment class.
+    infile : 
+        input mzML file.
+    mz_tolerance_ppm : 
+        m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
+    min_intensity : 
+        minimal intentsity value to consider, also used to filter out 0s.
+    min_timepoints : 
+        minimal consecutive scans to be considered real signal.
+    min_peak_height : 
+        a bin is not considered if the max intensity < min_peak_height.
+    parameters : 
+        not used, just place holder to use ext_Experiment class.
     '''
     print("Analysis of %s\n" %infile)
     mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(infile,
@@ -45,17 +51,25 @@ def get_file_masstrack_stats(infile,
 
     Parameters
     ----------
-    infile : input mzML file.
-    mz_tolerance_ppm : m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
-    min_intensity : minimal intentsity value to consider, also used to filter out 0s.
-    min_timepoints : minimal consecutive scans to be considered real signal.
-    min_peak_height : a bin is not considered if the max intensity < min_peak_height.
-    return_sample : if True, return full sample dictionary with mass tracks.
+    infile : 
+        input mzML file.
+    mz_tolerance_ppm : 
+        m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
+    min_intensity : 
+        minimal intentsity value to consider, also used to filter out 0s.
+    min_timepoints : 
+        minimal consecutive scans to be considered real signal.
+    min_peak_height : 
+        a bin is not considered if the max intensity < min_peak_height.
+    return_sample : 
+        if True, return full sample dictionary with mass tracks.
         Else, return _mz_landmarks_, ionization_mode, min_peak_height_.
 
-    Note:
-        Example output:
-        ```
+        
+    Note
+    ----
+    Example output::
+
         Total number of MS1 spectra: 741
         of which 0 are positive ionization mode.
 
@@ -70,8 +84,8 @@ def get_file_masstrack_stats(infile,
         Minimal height of landmark tracks:  2,334 
 
         Mass accuracy was estimated on 124 matched values as -1.8 ppm.
-        ```
-        To-do: to add output info on instrumentation.
+
+    To-do: to add output info on instrumentation.
     '''
     new = {'sample_id': infile, 'input_file': infile, 'ion_mode': '',}
     list_mass_tracks = []
@@ -148,12 +162,18 @@ def estimate_min_peak_height(list_input_files,
 
     Parameters
     ----------
-    list_input_files : input mzML files, but only using num_files_to_use.
-    mz_tolerance_ppm : m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
-    min_intensity : minimal intentsity value to consider, also used to filter out 0s.
-    min_timepoints : minimal consecutive scans to be considered real signal.
-    min_peak_height : a bin is not considered if the max intensity < min_peak_height.
-    num_files_to_use : Use randomly chosen num_files_to_use from list_input_files.
+    list_input_files : 
+        input mzML files, but only using num_files_to_use.
+    mz_tolerance_ppm : 
+        m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
+    min_intensity : 
+        minimal intentsity value to consider, also used to filter out 0s.
+    min_timepoints : 
+        minimal consecutive scans to be considered real signal.
+    min_peak_height : 
+        a bin is not considered if the max intensity < min_peak_height.
+    num_files_to_use : 
+        Use randomly chosen num_files_to_use from list_input_files.
 
     Returns
     -------

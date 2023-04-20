@@ -7,7 +7,7 @@ from mass2chem.search import *
 # jms-metabolite-services
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
-from .defaul_parameters import adduct_search_patterns, \
+from .default_parameters import adduct_search_patterns, \
                                 adduct_search_patterns_neg, \
                                     isotope_search_patterns, \
                                         extended_adducts
@@ -31,10 +31,14 @@ if not sys.warnoptions:
 class ext_Experiment:
     '''
     Similar to metDataModel.core.Experiment with preprocessing methods.
+
     This encapsulates a set of LC-MS files using the same experimental method 
     (chromatography and ionization) to be processed together.
+
     E.g., data from postive ESI and negative ESI should not in the same ext_Experiment instance.
+
     This class has annotation and export functions.
+    
     Default asari work flow is in `ext_Experiment.process_all`.
     '''
     def __init__(self, sample_registry, parameters):
@@ -43,9 +47,11 @@ class ext_Experiment:
 
         Parameters
         ----------
-        sample_registry : dictionary of sample and selected data after mass track extraction.
+        sample_registry : 
+            dictionary of sample and selected data after mass track extraction.
             The bulk mass track data are not kept in memory unless specified so.
-        parameters : processing parameters passed from main.py.
+        parameters : 
+            processing parameters passed from main.py.
 
         Updates
         -------
@@ -106,14 +112,15 @@ class ext_Experiment:
     def process_all(self):
         '''
         This is the default asari workflow.
+        
         1. Build MassGrid, using either pairwise (small study) or clustering method. 
-            Choose one reference from all samples for the largest number of landmark m/z tracks.
+           Choose one reference from all samples for the largest number of landmark m/z tracks.
         2. RT alignment via a LOWESS function, using selective landmark peaks.
         3. Build composite elution profile (composite_mass_tracks),
-            by cumulative sum of mass tracks from all samples after RT correction.
+           by cumulative sum of mass tracks from all samples after RT correction.
         4. Global peak detection is performed on each composite massTrack.
         5. Mapping global peaks (i.e. features) back to all samples and extract sample specific peak areas.
-            This completes the FeatureTable.
+           This completes the FeatureTable.
 
         Updates
         -------
@@ -144,19 +151,23 @@ class ext_Experiment:
         Annotate features via JMS (jms.dbStructures) and khipu.
         The pre-annotation step is khipu based emprical compound construction, followed by 
         three steps of annotation:
+
         1) Search known compound database, via neutral mass inferred by khipu
+
         2) Search singletons for a formula match
+
         3) Encapsulate remaining features in empCpd format, so that all are exported consistently.
 
         Export Feature_annotation as tsv, Annotated_empricalCompounds in both JSON and pickle.
         Reference databases can be pre-loaded. 
         Measured m/z values are calibrated to database based values (db_mass_calibrate).
 
-        Note:
-            This produces default annotation with asari, 
-            but one can redo annotation on the features afterwards, using a method of choice.
-            With JMS/khipu, one can also pass custom adduct/isotopes to EED.adduct_patterns etc. 
-            See ExperimentalEcpdDatabase.get_isotope_adduct_patterns().
+        Note
+        ----
+        This produces default annotation with asari, 
+        but one can redo annotation on the features afterwards, using a method of choice.
+        With JMS/khipu, one can also pass custom adduct/isotopes to EED.adduct_patterns etc. 
+        See ExperimentalEcpdDatabase.get_isotope_adduct_patterns().
         '''
         self.load_annotation_db()
         self.db_mass_calibrate()
@@ -229,10 +240,11 @@ class ext_Experiment:
         If greater than required_calibrate_threshold (default 2 ppm), 
         calibrate m/z values for the whole experiment by updating self.CMAP.FeatureList.
 
-        Note:
-            Data format in good_reference_landmark_peaks: 
-            [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...],
-            where ref_id_num is index number of mass track in MassGrid.
+        Note
+        ----
+        Data format in good_reference_landmark_peaks: 
+        [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...],
+        where ref_id_num is index number of mass track in MassGrid.
         '''
         mz_landmarks = [self.CMAP.MassGrid['mz'][p['ref_id_num']] 
                         for p in self.CMAP.good_reference_landmark_peaks]
@@ -278,9 +290,12 @@ class ext_Experiment:
         
         Parameters
         ----------
-        dict_empCpds : dictionary of empirical compounds, using interim_id as key, as seen in JMS.
-        KCD : the known compound database that was used in annotating the empirical compounds.
-        export_file_name_prefix : to used in output file name.
+        dict_empCpds : 
+            dictionary of empirical compounds, using interim_id as key, as seen in JMS.
+        KCD : 
+            the known compound database that was used in annotating the empirical compounds.
+        export_file_name_prefix : 
+            to used in output file name.
         '''
         s = "[peak]id_number\tmz\trtime\tapex(scan number)\t[EmpCpd]interim_id\
             \t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\
@@ -337,11 +352,16 @@ class ext_Experiment:
     def export_feature_tables(self, _snr=10, _peak_shape=0.7, _cSelectivity=0.7):
         '''
         To export features tables:
-        1) preferred table under `outdir`, after quality filtering 
-            by SNR, peak shape and chromatographic selectivity.
-        2) full table under `outdir/export/`
-        3) unique compound table under `outdir/export/`
-        4) dependent on `target` extract option, a targeted_extraction table under `outdir`.
+
+        1. preferred table under `outdir`, after quality filtering 
+           by SNR, peak shape and chromatographic selectivity.
+
+        2. full table under `outdir/export/`
+
+        3. unique compound table under `outdir/export/`
+
+        4. dependent on `target` extract option, a targeted_extraction table under `outdir`.
+
         Filtering parameters (_snr, _peak_shape, _cSelectivity) only 
         apply to preferred table and unique_compound_table.
         Full table is filtered by initial peak detection parameters, 

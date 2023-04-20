@@ -34,10 +34,14 @@ def read_project(datadir, load_sample_limit=20):
 
     Returns
     -------
-    project_desc : dict of project meta data
-    cmap : composite map, ['_number_of_samples_', 'rt_length', 'dict_scan_rtime', 'list_mass_tracks', 'MassGrid']
-    epd : dict of empirical compounds
-    Ftable : pandas dataframe of feature table. Truncated if samples more than load_sample_limit.
+    project_desc : 
+        dict of project meta data
+    cmap : 
+        composite map, ['_number_of_samples_', 'rt_length', 'dict_scan_rtime', 'list_mass_tracks', 'MassGrid']
+    epd : 
+        dict of empirical compounds
+    Ftable : 
+        pandas dataframe of feature table. Truncated if samples more than load_sample_limit.
     '''
     project_desc = json.load(open(os.path.join(datadir, 'project.json')))
     cmap = pickle.load( open(os.path.join(datadir, 'export', 'cmap.pickle'), 'rb') )
@@ -68,16 +72,20 @@ def cmapplot_mass_tracks(cmap, rt_list, color, track_id_number):
     
     Parameters
     ----------
-    cmap : CMAP as from ext_Experiment {
+    cmap : 
+        CMAP as from ext_Experiment {
             '_number_of_samples_': self.CMAP._number_of_samples_,
             'rt_length': self.CMAP.rt_length,
             'dict_scan_rtime': self.CMAP.dict_scan_rtime,
             'list_mass_tracks': self.CMAP.composite_mass_tracks,
             'MassGrid': dict(self.CMAP.MassGrid),
         }
-    rt_list : list of retention time
-    color : color for scatter
-    track_id_number : index for a mass track in cmap['list_mass_tracks']
+    rt_list : 
+        list of retention time
+    color : 
+        color for scatter
+    track_id_number : 
+        index for a mass track in cmap['list_mass_tracks']
 
     Returns
     -------
@@ -123,8 +131,13 @@ def convert_dict_markdown(d, title=''):
 
 def track_to_peaks(peakDict):
     '''
-    Input : peakDict, peak dictionary using 'id_number' as keys.
-    Returns a dictionary using parent_masstrack_id as keys and ['id_number'] as values.
+    Parameters
+    -----
+    peakDict, peak dictionary using 'id_number' as keys.
+    
+    Returns
+    -------
+    a dictionary using parent_masstrack_id as keys and ['id_number'] as values.
     '''
     t = {}
     for P in peakDict.values():
