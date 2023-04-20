@@ -420,7 +420,7 @@ class CompositeMap:
         Note:
             This is based on a set of unambiguous peaks: quich peak detection on anchor mass trakcs, 
             and peaks that are unique to each track are used for RT alignment.
-            Only numbers different btw two samples are kept in these dictionaries for computing efficiency.
+            Only numbers different btw two samples are kept in the dictionaries for computing efficiency.
             When calibration_fuction fails, e.g. inf on lowess_predicted,
             it is assumed that this sample is not amendable to computational alignment,
             and the sample will be attached later without adjusting retention time.

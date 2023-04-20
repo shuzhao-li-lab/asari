@@ -1954,6 +1954,18 @@ def seed_nn_mz_cluster(bin_data_tuples, seed_indices):
 
     return clusters
 
+def reverse_reverse_peak_detection(list_json_peaks, max_rt_index):
+    '''
+    Recover json peaks when reverse_peak_detection is used.
+    '''
+    LL = []
+    for J in list_json_peaks:
+        old_left, old_right = J['left_base'], J['right_base']
+        J['right_base'] = max_rt_index - old_left
+        J['left_base'] = max_rt_index - old_right
+        J['apex'] = max_rt_index - J['apex']
+        LL.append(J)
+    return LL
 
 
 
