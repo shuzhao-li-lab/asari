@@ -1,5 +1,7 @@
 Asari
 =====
+[![Documentation Status](https://readthedocs.org/projects/asari/badge/?version=latest)](https://asari.readthedocs.io/en/latest/?badge=latest)
+
 Trackable and scalable Python program for high-resolution LC-MS metabolomics data preprocessing, 
 
 - Taking advantage of high mass resolution to prioritize mass separation and alignment
