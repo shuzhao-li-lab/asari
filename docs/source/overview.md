@@ -1,5 +1,5 @@
-Asari
-=====
+Overview
+========
 Trackable and scalable Python program for high-resolution LC-MS metabolomics data preprocessing, 
 
 - Taking advantage of high mass resolution to prioritize mass separation and alignment
@@ -11,8 +11,8 @@ Trackable and scalable Python program for high-resolution LC-MS metabolomics dat
 - Transparent, JSON centric data structures, easy to chain other tools
 
 Input data are centroied mzML files.
-We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
-Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats.
+We use [ThermoRawFileParser](https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
+Msconvert in [ProteoWizard](https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats.
 
 Install
 -------
@@ -111,7 +111,7 @@ That is, commandline overwrites `xyz.yaml`, which overwrites default asari param
 
 Algorithms
 ----------
-Basic data concepts follow https://github.com/shuzhao-li/metDataModel, organized as
+Basic data concepts follow <https://github.com/shuzhao-li/metDataModel>, organized as
 
     ├── Experiment
        ├── Sample
@@ -168,7 +168,7 @@ Future improvement can be made by implementing some functions, e.g. chromatogram
 
 Docker image
 ------------
-At https://hub.docker.com/r/shuzhao/asari.
+At <https://hub.docker.com/r/shuzhao/asari>.
 
 This image includes mono and ThermoRawFileParser, which converts Thermo .raw files to .mzML files.
 
@@ -187,9 +187,9 @@ In the container, ThermoRawFileParser is under `/usr/local/thermo/`.
 
 Links
 -----
-Source code: https://github.com/shuzhao-li/asari
+Source code: <https://github.com/shuzhao-li/asari>
 
-Package Repository: https://pypi.org/project/asari-metabolomics/
+Package Repository: <https://pypi.org/project/asari-metabolomics/>
 
 Related projects:
 

@@ -2,7 +2,7 @@
 
 .. default-domain:: py
 
-asari workflow
+Workflow
 ======================
 
 .. automodule:: asari.workflow

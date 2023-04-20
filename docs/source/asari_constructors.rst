@@ -2,7 +2,7 @@
 
 .. default-domain:: py
 
-asari constructors
+Constructors
 ======================
 
 .. automodule:: asari.constructors

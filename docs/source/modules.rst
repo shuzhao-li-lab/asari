@@ -1,4 +1,4 @@
-asari module content
+Module Index
 =====================
 
 .. toctree::

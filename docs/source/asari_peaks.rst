@@ -2,7 +2,7 @@
 
 .. default-domain:: py
 
-asari peaks
+Peaks
 ======================
 
 .. automodule:: asari.peaks

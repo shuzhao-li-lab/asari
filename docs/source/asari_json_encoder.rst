@@ -2,7 +2,7 @@
 
 .. default-domain:: py
 
-asari json encoder
+Json Encoder
 ======================
 
 .. automodule:: asari.json_encoder

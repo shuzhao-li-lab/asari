@@ -2,7 +2,7 @@
 
 .. default-domain:: py
 
-asari mass functions
+Mass Functions
 ======================
 
 .. automodule:: asari.mass_functions

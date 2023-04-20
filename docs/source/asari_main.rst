@@ -2,7 +2,7 @@
 
 .. default-domain:: py
 
-asari main
+Main
 ======================
 
 .. automodule:: asari.main

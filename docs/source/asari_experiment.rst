@@ -2,7 +2,7 @@
 
 .. default-domain:: py
 
-asari experiment
+Experiment
 ======================
 
 .. automodule:: asari.experiment

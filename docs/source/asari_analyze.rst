@@ -2,7 +2,7 @@
 
 .. default-domain:: py
 
-asari analyze
+Analyze
 ======================
 
 .. automodule:: asari.analyze

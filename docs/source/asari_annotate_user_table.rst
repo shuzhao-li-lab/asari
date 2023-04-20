@@ -2,7 +2,7 @@
 
 .. default-domain:: py
 
-asari annotate user table
+Annotate User Table
 =========================
 
 .. automodule:: asari.annotate_user_table

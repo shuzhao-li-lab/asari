@@ -2,7 +2,7 @@
 
 .. default-domain:: py
 
-asari dashboard
+Dashboard
 ======================
 
 .. automodule:: asari.dashboard

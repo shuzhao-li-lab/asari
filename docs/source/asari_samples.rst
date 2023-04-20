@@ -2,7 +2,7 @@
 
 .. default-domain:: py
 
-asari samples
+Samples
 ======================
 
 .. automodule:: asari.samples

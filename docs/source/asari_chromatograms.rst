@@ -2,7 +2,7 @@
 
 .. default-domain:: py
 
-asari chromatograms
+Chromatograms
 ======================
 
 .. automodule:: asari.chromatograms
