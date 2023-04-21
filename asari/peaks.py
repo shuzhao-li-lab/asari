@@ -19,16 +19,20 @@ def batch_deep_detect_elution_peaks(list_mass_tracks, number_of_scans, parameter
     
     Parameters
     ----------
-    list_mass_tracks : list of mass tracks. 
+    list_mass_tracks : 
+        list of mass tracks. 
         Asari uses this on composite mass tracks in full experiment.
         But this can be generic mass tracks.
-    number_of_scans : number of scans, usually corresponding to maximum number in RT.
-    parameters :  parameter dictionary passed from main.py, 
+    number_of_scans : 
+        number of scans, usually corresponding to maximum number in RT.
+    parameters :  
+        parameter dictionary passed from main.py, 
         which imports from defaul_parameters and updates the dict by user arguments.
 
     Returns
     -------
-    FeatureList : a list of JSON elution peaks.
+    FeatureList : 
+        a list of JSON elution peaks.
 
     See also
     --------
@@ -50,20 +54,24 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
 
     Parameters
     ----------
-    list_mass_tracks : list of mass tracks. 
+    list_mass_tracks : 
+        list of mass tracks. 
         Asari uses this on composite mass tracks in full experiment.
         But this can be generic mass tracks.
-    number_of_scans : number of scans, usually corresponding to maximum number in RT.
-    parameters :  parameter dictionary passed from main.py, 
+    number_of_scans : 
+        number of scans, usually corresponding to maximum number in RT.
+    parameters :  
+        parameter dictionary passed from main.py, 
         which imports from defaul_parameters and updates the dict by user arguments.
-    shared_list : list object used to pass data btw multiple processing.
+    shared_list : 
+        list object used to pass data btw multiple processing.
 
     Returns
     -------
-    A list of iterative parameters, e.g.
-    [(mass_track, number_of_scans, min_peak_height, min_fwhm, min_prominence_threshold,
-    wlen, snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold, 
-    shared_list), ...]
+    A list of iterative parameters
+        [(mass_track, number_of_scans, min_peak_height, min_fwhm, min_prominence_threshold,
+        wlen, snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold, 
+        shared_list), ...]
     '''
     iters = []
     min_peak_height = parameters['min_peak_height']
@@ -99,39 +107,53 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
 
     Parameters
     ----------
-    mass_track : {'id_number': k, 'mz': mz, 'rt_scan_numbers': [..], 'intensity': [..]}
-    number_of_scans : number of scans in mass track.
-    min_peak_height : as in main parameters.
-    min_fwhm : taken as half of min_timepoints in main parameters.
-    min_prominence_threshold : as in main parameters, default min_peak_height/3.
-    wlen : window size for evaluating prominence in peaks. 
+    mass_track : 
+        {'id_number': k, 'mz': mz, 'rt_scan_numbers': [..], 'intensity': [..]}
+    number_of_scans : 
+        number of scans in mass track.
+    min_peak_height : 
+        as in main parameters.
+    min_fwhm : 
+        taken as half of min_timepoints in main parameters.
+    min_prominence_threshold : 
+        as in main parameters, default min_peak_height/3.
+    wlen : 
+        window size for evaluating prominence in peaks. 
         Important to resolve clustered narrow peaks. Default 25 scans.
-    snr: minimal signal to noise ratio required for a peak. 
-    peakshape : parameters['gaussian_shape'], minimal shape score required for a peak.
-    min_prominence_ratio : require ratio of prominence relative to peak height, default 0.05.
-    iteration : not used in this function but possible to add iteration on high intensity ROIs 
-                if peaks are not detected 1st round.
-    min_intensity_threshold : as in main parameters.
-    shared_list : list used to exchange data in multiprocessing.
+    snr: 
+        minimal signal to noise ratio required for a peak. 
+    peakshape : 
+        parameters['gaussian_shape'], minimal shape score required for a peak.
+    min_prominence_ratio : 
+        require ratio of prominence relative to peak height, default 0.05.
+    iteration : 
+        not used in this function but possible to add iteration on high intensity ROIs 
+        if peaks are not detected 1st round.
+    min_intensity_threshold : 
+        as in main parameters.
+    shared_list : 
+        list used to exchange data in multiprocessing.
 
     Updates
     -------
-    shared_list: list of peaks in JSON format, to pool with batch_deep_detect_elution_peaks.
+    shared_list: 
+        list of peaks in JSON format, to pool with batch_deep_detect_elution_peaks.
 
-    Note:
-        The mass_track is first cleaned: rescale, detrend, smooth and subtract baseline if needed.
-        The track wide noise_level is estimated on stdev of bottom quartile values.
-        ROIs are then separated by a filter (i.e. baseline + noise level) on each mass track. 
-        Gap allowed for 2 scans in constructing ROIs. Actually in composite mass track - 
-        gaps should not exist after combining many samples.
-        The advantages of separating ROI are 1) better performance of long LC runs, 
-        2) big peaks are less likely to shallow over small peaks, 
-        and 3) recalculate min_prominence_threshold.
+    Note
+    ----
+    The mass_track is first cleaned: rescale, detrend, smooth and subtract baseline if needed.
+    The track wide noise_level is estimated on stdev of bottom quartile values.
+    ROIs are then separated by a filter (i.e. baseline + noise level) on each mass track. 
+    Gap allowed for 2 scans in constructing ROIs. Actually in composite mass track - 
+    gaps should not exist after combining many samples.
+    The advantages of separating ROI are 1) better performance of long LC runs, 
+    2) big peaks are less likely to shallow over small peaks, 
+    and 3) recalculate min_prominence_threshold.
 
-        Prominence requirement is critical to peak detection. 
-        It is dynamically determined based on the noise level in a region.
-        The peakshape is calculated on cleaned mass track.
-        SNR is computed on local noise (average of up to 100 nonpeak data points on each side of a peak).
+    Prominence requirement is critical to peak detection. 
+    It is dynamically determined based on the noise level in a region.
+    The peakshape is calculated on cleaned mass track.
+    SNR is computed on local noise (average of up to 100 nonpeak data points on each side of a peak).
     '''
     list_json_peaks, list_peaks = [], []
     list_scans = np.arange(number_of_scans)
@@ -197,13 +219,18 @@ def compute_noise_by_flanks(peak,
 
     Parameters
     ----------
-    peak : an elution peak in JSON format, e.g. 
+    peak : 
+        an elution peak in JSON format, e.g. 
         {'id_number': k, 'mz': mz, 'apex': x, 'left_base': xx, 'right_base': yy}
-    list_intensity : list of intensity of an ROI.
-    noise_data_points : the indices of data points that do not belong to any peak.
+    list_intensity : 
+        list of intensity of an ROI.
+    noise_data_points : 
+        the indices of data points that do not belong to any peak.
         Precomputed in stats_detect_elution_peaks.
-    min_intensity_threshold : minimal intensity threshold used for mass track extraction.
-    old_noise_level : fallback value if it fails to collect non-peak data points.
+    min_intensity_threshold :
+         minimal intensity threshold used for mass track extraction.
+    old_noise_level : 
+        fallback value if it fails to collect non-peak data points.
 
     Returns
     -------
@@ -211,9 +238,10 @@ def compute_noise_by_flanks(peak,
     If the computed noise level is lower than min_intensity_threshold, the latter is used.
     If this fails to get usable data points, returns the old_noise_level.
 
-    Note:
-        The default window size is 100 scans on each side of a peak, offset by 30 as padding.
-        Future version should infer these parameters based on global data distribution.
+    Note
+    ----
+    The default window size is 100 scans on each side of a peak, offset by 30 as padding.
+    Future version should infer these parameters based on global data distribution.
     '''
     padding, N = 30, 100          # number of half data points to use
     noise_data_points = sorted(noise_data_points + [peak['apex']])
@@ -237,43 +265,50 @@ def audit_mass_track(list_intensity,
 
     Parameters
     ----------
-    list_intensity : list of intensity values from a mass track.
+    list_intensity : 
+        list of intensity values from a mass track.
     min_fwhm, min_intensity_threshold, min_peak_height, min_prominence_threshold : 
         from parameter dictionary passed from main.py, 
         which imports from defaul_parameters and updates the dict by user arguments.
 
     Returns
     -------
-    _baseline_ : estimated baseline level
-    noise_level : estimated noise level
-    scaling_factor : a normalization factor to scale the data under preset ceiling
-    new_prominence : new prominence value, overwriting with noise_level if it is
+    _baseline_ : 
+        estimated baseline level
+    noise_level : 
+        estimated noise level
+    scaling_factor : 
+        a normalization factor to scale the data under preset ceiling
+    new_prominence : 
+        new prominence value, overwriting with noise_level if it is
         greater than the initial min_prominence_threshold.
-    list_intensity : list of intensity values after being cleaned up here 
+    list_intensity : 
+        list of intensity values after being cleaned up here 
         (also subtracted by baseline).
     
-    Note:
-        If the max intensity of a mass track is higher that a preset ceiling (1E8), 
-        the mass track is rescaled under the preset ceiling for the purpose of peak detection.
-        After peak detection, the peak height is scaled back using the same scaling factor.
+    Note
+    ----
+    If the max intensity of a mass track is higher that a preset ceiling (1E8), 
+    the mass track is rescaled under the preset ceiling for the purpose of peak detection.
+    After peak detection, the peak height is scaled back using the same scaling factor.
 
-        If the median intensity on a mass track is below the preset min_intensity_threshold 
-        (default 1e3 for Orbitrap data), this is a low-intensity track. 
-        Both baseline level and noise level are set to min_intensity_threshold.
+    If the median intensity on a mass track is below the preset min_intensity_threshold 
+    (default 1e3 for Orbitrap data), this is a low-intensity track. 
+    Both baseline level and noise level are set to min_intensity_threshold.
 
-        If over half the data points are above min_intensity_threshold and the median intensity 
-        is heigher than 10 times of preset min_peak_height (default 1e5 for Orbitrap data), 
-        detrend (scipy.signal.detrend) is performed on the mass track. 
+    If over half the data points are above min_intensity_threshold and the median intensity 
+    is heigher than 10 times of preset min_peak_height (default 1e5 for Orbitrap data), 
+    detrend (scipy.signal.detrend) is performed on the mass track. 
 
-        If a track is not low-intensity, the bottom signals are taken as intensity values 
-        below the lower quartile plus min_intensity_threshold. The constant of 
-        min_intensity_threshold makes this method stable, even when zeros dominate the track. 
-        Here, the baseline level and noise level are assigned as the mean and 
-        standard deviation of the bottom signals, respectively.
+    If a track is not low-intensity, the bottom signals are taken as intensity values 
+    below the lower quartile plus min_intensity_threshold. The constant of 
+    min_intensity_threshold makes this method stable, even when zeros dominate the track. 
+    Here, the baseline level and noise level are assigned as the mean and 
+    standard deviation of the bottom signals, respectively.
 
-        Smoothing (chromatograms.smooth_moving_average) is applied when the noise level 
-        is higher than 1% of max intensity and max intensity is lower than 10 times of the 
-        preset min_peak_height. 
+    Smoothing (chromatograms.smooth_moving_average) is applied when the noise level 
+    is higher than 1% of max intensity and max intensity is lower than 10 times of the 
+    preset min_peak_height. 
     '''
     scaling_factor, LOW, HIGH = 1, min_intensity_threshold, 1E8
     _baseline_, noise_level = LOW, LOW                     # will not change on a clean track
@@ -310,17 +345,27 @@ def detect_evaluate_peaks_on_roi(list_intensity_roi, rt_numbers_roi,
      
     Parameters
     ----------
-    list_intensity : list of intensity values from a mass track.
-    rt_numbers_roi : scan numbers that define the ROI.
-    min_peak_height : as in main parameters.
-    min_fwhm : taken as half of min_timepoints in main parameters.
-    min_prominence_threshold : as in main parameters, default min_peak_height/3.
-    wlen : window size for evaluating prominence in peaks. 
+    list_intensity : 
+        list of intensity values from a mass track.
+    rt_numbers_roi : 
+        scan numbers that define the ROI.
+    min_peak_height : 
+        as in main parameters.
+    min_fwhm : 
+        taken as half of min_timepoints in main parameters.
+    min_prominence_threshold : 
+        as in main parameters, default min_peak_height/3.
+    wlen : 
+        window size for evaluating prominence in peaks. 
         Important to resolve clustered narrow peaks. Default 25 scans.
-    snr: minimal signal to noise ratio required for a peak. Not used here.
-    peakshape : parameters['gaussian_shape'], minimal shape score required for a peak.
-    min_prominence_ratio : require ratio of prominence relative to peak height, default 0.05.
-    noise_level : estimated noise level on the mass track.
+    snr: 
+        minimal signal to noise ratio required for a peak. Not used here.
+    peakshape : 
+        parameters['gaussian_shape'], minimal shape score required for a peak.
+    min_prominence_ratio : 
+        require ratio of prominence relative to peak height, default 0.05.
+    noise_level : 
+        estimated noise level on the mass track.
 
     Returns
     -------
@@ -359,18 +404,25 @@ def evaluate_roi_peak_json_(ii,
 
     Parameters
     ----------
-    ii : the ii-th peak to use in peaks. 
-    list_intensity : list of intensity values from a mass track.
-    rt_numbers_roi : scan numbers that define the ROI.
-    peaks, properties : as from scipy find_peaks.
-    peakshape : parameters['gaussian_shape'], minimal shape score required for a peak.
-    min_fwhm : taken as half of min_timepoints in main parameters.
+    ii :   
+        the ii-th peak to use in peaks. 
+    list_intensity :    
+        list of intensity values from a mass track.
+    rt_numbers_roi : 
+        scan numbers that define the ROI.
+    peaks, properties : 
+        as from scipy find_peaks.
+    peakshape : 
+        parameters['gaussian_shape'], minimal shape score required for a peak.
+    min_fwhm : 
+        taken as half of min_timepoints in main parameters.
     
-    Note:
-        This handles the conversion btw indices of ROI and indices of mass_track.
-        The peak shape is evluated here on a Gaussian model.  
-        The left, right bases are constrained by N*stdev in the fitted model,
-        which can be optimized in the future.
+    Note
+    ----
+    This handles the conversion btw indices of ROI and indices of mass_track.
+    The peak shape is evluated here on a Gaussian model.  
+    The left, right bases are constrained by N*stdev in the fitted model,
+    which can be optimized in the future.
     '''
     left_index, right_index = properties['left_bases'][ii], \
         properties['right_bases'][ii]   # index positions on ROI
@@ -401,13 +453,17 @@ def __peaks_cSelectivity_stats_(__list_intensity, _jpeaks):
 
     Parameters
     ----------
-    __list_intensity : list of intensity values from a mass track.
-    _jpeaks : list of peaks in JSON dictionary format.
+    __list_intensity : 
+        list of intensity values from a mass track.
+    _jpeaks : 
+        list of peaks in JSON dictionary format.
 
     Returns
     -------
-    list_cSelectivity : list of cSelectivity, a value for each peak.
-    set_peak_datapoints : a set of data points that belong to any peak.
+    list_cSelectivity : 
+        list of cSelectivity, a value for each peak.
+    set_peak_datapoints : 
+        a set of data points that belong to any peak.
         Later used for SNR calculation, which exclues these data points.
     '''
     set_peak_datapoints = []
@@ -440,10 +496,14 @@ def gaussian_function__(x, a, mu, sigma):
 
     Parameters
     ----------
-    x : input variable.
-    a : constant for magnitude or height
-    mu : constant for center position
-    sigma : constant for standard deviation
+    x : 
+        input variable.
+    a : 
+        constant for magnitude or height
+    mu : 
+        constant for center position
+    sigma : 
+        constant for standard deviation
 
     Returns
     -------
@@ -463,22 +523,25 @@ def evaluate_gaussian_peak_on_intensity_list(intensity_list, height, apex, left,
     
     Parameters
     ----------
-    intensity_list : list of intensity values.
-    height, apex, left, right : peak parameters.
+    intensity_list : 
+        list of intensity values.
+    height, apex, left, right : 
+        peak parameters.
 
     Returns
     -------
     goodness_fitting, fitted_sigma
 
-    Note:
-        The parameters height, apex, left, right are relevant to intensity_list.
-        When intensity_list is of ROI, these parameters are not referring to full mass track.
-    
-        Very high peaks in LC-MS tend to get high fitness scores, 
-        but inaccurate estimation of parameters, e.g. the predicted peaks too narrow.
-        Could consider re-weighted methods (e.g. by np.sqrt) for very high data points.
+    Note
+    ----
+    The parameters height, apex, left, right are relevant to intensity_list.
+    When intensity_list is of ROI, these parameters are not referring to full mass track.
 
-        Peak shapes may be more Voigt or bigaussian, but the impact on fitting result is negligible.
+    Very high peaks in LC-MS tend to get high fitness scores, 
+    but inaccurate estimation of parameters, e.g. the predicted peaks too narrow.
+    Could consider re-weighted methods (e.g. by np.sqrt) for very high data points.
+
+    Peak shapes may be more Voigt or bigaussian, but the impact on fitting result is negligible.
     '''
     goodness_fitting = 0
     xx = range(left, right+1, 1)
@@ -522,14 +585,18 @@ def quick_detect_unique_elution_peak(intensity_track,
 
     Parameters
     ----------
-    intensity_track : list of intensity values from a mass track.
-    min_peak_height : minimal peak height required for a peak.
-    min_fwhm : minimal peak width required for a peak.
-    min_prominence_threshold_ratio : require ratio of prominence relative to peak height.
+    intensity_track : 
+        list of intensity values from a mass track.
+    min_peak_height : 
+        minimal peak height required for a peak.
+    min_fwhm : 
+        minimal peak width required for a peak.
+    min_prominence_threshold_ratio : 
+        require ratio of prominence relative to peak height.
 
     Returns
     -------
-    A qualified peaks in {'apex': xx, } format or None.
+    A qualified peaks in ``{'apex' : xx, }`` format or None.
     '''
     max_intensity = intensity_track.max()
     prominence = min_prominence_threshold_ratio * max_intensity
@@ -553,7 +620,8 @@ def check_overlap_peaks(list_peaks):
 
     Parameters
     ----------
-    list_peaks : a list of peaks in JSON format.
+    list_peaks : 
+        a list of peaks in JSON format.
 
     Returns
     -------

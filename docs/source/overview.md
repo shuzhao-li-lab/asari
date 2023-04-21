@@ -1,7 +1,5 @@
-Asari
-=====
-[![Documentation Status](https://readthedocs.org/projects/asari/badge/?version=latest)](https://asari.readthedocs.io/en/latest/?badge=latest)
-
+Overview
+========
 Trackable and scalable Python program for high-resolution LC-MS metabolomics data preprocessing, 
 
 - Taking advantage of high mass resolution to prioritize mass separation and alignment
@@ -13,17 +11,17 @@ Trackable and scalable Python program for high-resolution LC-MS metabolomics dat
 - Transparent, JSON centric data structures, easy to chain other tools
 
 Input data are centroied mzML files.
-We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
-Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats.
+We use [ThermoRawFileParser](https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
+Msconvert in [ProteoWizard](https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats.
 
 Install
-=======
+-------
 - From PyPi repository: `pip3 install asari-metabolomics`. Add `--upgrade` to update to new versions.
 
 - Or clone from source code: https://github.com/shuzhao-li/asari . One can run it as a Python module by calling Python interpreter. GitHub repo is often ahead of PyPi versions.
 
 Use 
-===
+---
 If installed from pip, one can run `asari` as a command in a terminal, followed by a subcommand for specific tasks.
 
 For help information:
@@ -61,7 +59,7 @@ Alternative to a standalone command, to run as a module via Python interpreter, 
 `python3 -m asari.main process --mode pos --input mydir/projectx_dir`
 
 Output
-======
+------
 A typical run on disk may generatae a directory like this
 
     rsvstudy_asari_project_427105156
@@ -92,14 +90,14 @@ Users can choose to keep them by specifying `--pickle True`.
 
 
 Dashboard
-=========
+---------
 After data are processed, users can use `asari viz --input process_result_dir` to launch a dashboard to inspect data, where 'process_result_dir' refers to the result folder. The dashboard uses these files under the result folder: 'project.json', 'export/cmap.pickle', 'export/epd.pickle' and 'export/full_Feature_table.tsv'. Thus, one can move around the folder, but modification of these files is not a good idea. Please note that pickle files are for internal use, and one should not trust pickle files from other people.
  
-![viz_screen_shot](doc/viz_screen_shot20220518.png)
+![viz_screen_shot](_static/viz_screen_shot20220518.png)
 
 
 Parameters
-==========
+----------
 Only one parameter in asari requires real attention, i.e., m/z precision is set at 5 ppm by default. 
 Most modern instruments are fine with 5 ppm, but one may want to change if needed.
 
@@ -112,8 +110,8 @@ When the above methods overlap, command line arguments take priority.
 That is, commandline overwrites `xyz.yaml`, which overwrites default asari parameters in `defaul_parameters.py`. 
 
 Algorithms
-==========
-Basic data concepts follow https://github.com/shuzhao-li/metDataModel, organized as
+----------
+Basic data concepts follow <https://github.com/shuzhao-li/metDataModel>, organized as
 
     ├── Experiment
        ├── Sample
@@ -152,7 +150,7 @@ This package uses `mass2chem`, `khipu` and `JMS` for mass search and annotation 
 
 
 Performance
-===========
+-----------
 Asari is designed to run > 1000 samples on a laptop computer. The performance is achieved via
 - Implementation of basic functions using discrete mathematics and avoiding continuous curves.
 - Main intensity values of each sample are not kept in memory.
@@ -169,8 +167,8 @@ One can then use `asari join` to merge the results [in progress].
 Future improvement can be made by implementing some functions, e.g. chromatogram building, in C.
 
 Docker image
-============
-At https://hub.docker.com/r/shuzhao/asari.
+------------
+At <https://hub.docker.com/r/shuzhao/asari>.
 
 This image includes mono and ThermoRawFileParser, which converts Thermo .raw files to .mzML files.
 
@@ -188,10 +186,10 @@ In the container, ThermoRawFileParser is under `/usr/local/thermo/`.
 
 
 Links
-=====
-Source code: https://github.com/shuzhao-li/asari
+-----
+Source code: <https://github.com/shuzhao-li/asari>
 
-Package Repository: https://pypi.org/project/asari-metabolomics/
+Package Repository: <https://pypi.org/project/asari-metabolomics/>
 
 Related projects:
 

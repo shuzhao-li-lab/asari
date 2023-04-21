@@ -53,16 +53,20 @@ def calculate_selectivity(sorted_mz_list, std_ppm=5):
 
     Parameters
     ----------
-    sorted_mz_list: a list of m/z values, sorted from low to high.
-    std_ppm: mass resolution in ppm (part per million).
+    sorted_mz_list: 
+        a list of m/z values, sorted from low to high.
+    std_ppm: 
+        mass resolution in ppm (part per million).
 
     Returns
     -------
     A list of selectivity values, in matched order as the input m/z list.
 
-    Note: 
-        ppm is actually dependent on m/z, not an ideal method. 
-        But it's in common practice and good enough approximation.
+    
+    Note
+    ----
+    ppm is actually dependent on m/z, not an ideal method. 
+    But it's in common practice and good enough approximation.
     '''
     def __sel__(x, std_ppm=std_ppm): 
         if x > 100:         # too high, not bother
@@ -119,44 +123,48 @@ def mass_paired_mapping(list1, list2, std_ppm=5):
 
     Parameters
     ----------
-    list1, list2 : Two lists of m/z values, not ncessarily same length.
-    std_ppm : limit of instrument accuracy in matching m/z values. 
+    list1, list2 : 
+        Two lists of m/z values, not ncessarily same length.
+    std_ppm : 
+        limit of instrument accuracy in matching m/z values. 
 
     Returns
     -------
-    mapped : mapping list [(index from list1, index from list2), ...]
-    ratio_deltas : mean m/z ratio shift between two lists. This is ppm*10^-6. 
+    mapped : 
+        mapping list [(index from list1, index from list2), ...]
+    ratio_deltas : 
+        mean m/z ratio shift between two lists. This is ppm*10^-6. 
         No need to convert btw ppm here.
 
-    Test
-    ----
-    list1 = [101.0596, 101.061, 101.0708, 101.0708, 101.1072, 101.1072, 101.1072, 102.0337, 
-        102.0337, 102.0548, 102.0661, 102.0912, 102.0912, 102.1276, 102.1276, 103.0501, 
-        103.0501, 103.0541, 103.0865, 103.0865, 103.9554, 104.0368, 104.0705, 104.0705, 
-        104.1069, 104.1069, 104.9922, 105.0422, 105.0698, 105.0698, 105.0738, 105.1039, 
-        105.1102, 105.9955, 106.0497, 106.065, 106.065, 106.0683, 106.0683, 106.0861, 106.0861, 
-        106.0861, 106.1111, 106.9964, 107.0475, 107.0602, 107.0653, 107.0895, 107.9667, 108.0443, 
-        108.0555, 108.0807, 109.0632, 109.0759]
-    list2 = [101.0087, 101.035, 101.0601, 101.0601, 101.0601, 101.0601, 101.0713, 101.0714, 
-        101.1077, 101.1077, 101.1077, 101.1077, 101.1077, 101.1158, 101.1158, 102.0286, 102.0376, 
-        102.0468, 102.0539, 102.0554, 102.0554, 102.0554, 102.0554, 102.0666, 102.0917, 102.0917, 
-        102.0917, 102.0918, 102.1281, 102.1281, 102.1282, 103.0394, 103.0505, 103.0507, 103.0547, 
-        103.1233, 103.8162, 103.956, 103.956, 103.956, 104.0532, 104.0533, 104.0641, 104.0709, 
-        104.071, 104.0831, 104.0878, 104.0895, 104.0953, 104.1073, 104.1073, 104.1074, 104.1074, 
-        104.1182, 104.1199, 104.1265, 104.1318, 104.1354, 104.1725, 104.3998, 104.9927, 104.9927, 
-        104.9927, 104.9927, 105.0654, 105.0703, 105.1043, 105.1133, 106.049, 106.0503, 106.0655, 
-        106.0688, 106.0866, 106.0867, 106.0867, 106.0867, 106.114, 107.048, 107.0481, 107.0496, 
-        107.0608, 107.0658, 108.0109, 108.0482, 108.0604, 108.0812, 108.0812, 108.9618, 109.0507, 
-        109.0637, 109.0637, 109.0764, 109.1015]
-    mass_paired_mapping(list1, list2) >>>
-        ([(10, 23), (29, 65), (31, 66), (36, 70), (38, 71), (46, 81), (53, 91)],
-        [4.898762180656323e-06,
-        4.758718686464085e-06,
-        3.805743437700149e-06,
-        4.714068193732999e-06,
-        4.713921530199148e-06,
-        4.670025348919892e-06,
-        4.583942997773922e-06])
+    Examples
+    --------
+        >>> list1 = [101.0596, 101.061, 101.0708, 101.0708, 101.1072, 101.1072, 101.1072, 102.0337, 
+            102.0337, 102.0548, 102.0661, 102.0912, 102.0912, 102.1276, 102.1276, 103.0501, 
+            103.0501, 103.0541, 103.0865, 103.0865, 103.9554, 104.0368, 104.0705, 104.0705, 
+            104.1069, 104.1069, 104.9922, 105.0422, 105.0698, 105.0698, 105.0738, 105.1039, 
+            105.1102, 105.9955, 106.0497, 106.065, 106.065, 106.0683, 106.0683, 106.0861, 106.0861, 
+            106.0861, 106.1111, 106.9964, 107.0475, 107.0602, 107.0653, 107.0895, 107.9667, 108.0443, 
+            108.0555, 108.0807, 109.0632, 109.0759]
+        >>> list2 = [101.0087, 101.035, 101.0601, 101.0601, 101.0601, 101.0601, 101.0713, 101.0714, 
+            101.1077, 101.1077, 101.1077, 101.1077, 101.1077, 101.1158, 101.1158, 102.0286, 102.0376, 
+            102.0468, 102.0539, 102.0554, 102.0554, 102.0554, 102.0554, 102.0666, 102.0917, 102.0917, 
+            102.0917, 102.0918, 102.1281, 102.1281, 102.1282, 103.0394, 103.0505, 103.0507, 103.0547, 
+            103.1233, 103.8162, 103.956, 103.956, 103.956, 104.0532, 104.0533, 104.0641, 104.0709, 
+            104.071, 104.0831, 104.0878, 104.0895, 104.0953, 104.1073, 104.1073, 104.1074, 104.1074, 
+            104.1182, 104.1199, 104.1265, 104.1318, 104.1354, 104.1725, 104.3998, 104.9927, 104.9927, 
+            104.9927, 104.9927, 105.0654, 105.0703, 105.1043, 105.1133, 106.049, 106.0503, 106.0655, 
+            106.0688, 106.0866, 106.0867, 106.0867, 106.0867, 106.114, 107.048, 107.0481, 107.0496, 
+            107.0608, 107.0658, 108.0109, 108.0482, 108.0604, 108.0812, 108.0812, 108.9618, 109.0507, 
+            109.0637, 109.0637, 109.0764, 109.1015]
+        >>> mass_paired_mapping(list1, list2) >>>
+            ([(10, 23), (29, 65), (31, 66), (36, 70), (38, 71), (46, 81), (53, 91)],
+            [4.898762180656323e-06,
+            4.758718686464085e-06,
+            3.805743437700149e-06,
+            4.714068193732999e-06,
+            4.713921530199148e-06,
+            4.670025348919892e-06,
+            4.583942997773922e-06])
     '''
     all = [(list1[ii], 1, ii) for ii in range(len(list1))] + [(list2[jj], 2, jj) for jj in range(len(list2))]
     # [(mz, list_origin, index_origin), ...]
@@ -191,18 +199,24 @@ def complete_mass_paired_mapping(list1, list2, std_ppm=5):
     
     Parameters
     ----------
-    list1, list2 : Two lists of m/z values, not ncessarily same length.
-    std_ppm : limit of instrument accuracy in matching m/z values.
+    list1, list2 : 
+        Two lists of m/z values, not ncessarily same length.
+    std_ppm : 
+        limit of instrument accuracy in matching m/z values.
 
     Returns
     -------
-    mapped: list of mapped index pairs. E.g. [ (3, 6), (6, 8), (33, 151), ...] 
-    list1_unmapped : list of unmapped items in list1.
-    list2_unmapped : list of unmapped items in list2.
+    mapped: 
+        list of mapped index pairs. E.g. [ (3, 6), (6, 8), (33, 151), ...] 
+    list1_unmapped : 
+        list of unmapped items in list1.
+    list2_unmapped : 
+        list of unmapped items in list2.
 
-    Note:
-        This and related functions are for m/z alignment only, not used for general search. 
-        See asari.tools.match_features for general search.
+    Note
+    ----
+    This and related functions are for m/z alignment only, not used for general search. 
+    See asari.tools.match_features for general search.
     '''
     all = [(list1[ii], 1, ii) for ii in range(len(list1))] + [(list2[jj], 2, jj) for jj in range(len(list2))]
     # [(mz, list_origin, index_origin), ...]
@@ -256,11 +270,12 @@ def all_mass_paired_mapping(list1, list2, std_ppm=5):
     list1_unmapped : list of unmapped items in list1.
     list2_unmapped : list of unmapped items in list2.
 
-    Note:
-        This function returns all matched pairs within std_ppm using 
-        a tree search approach (mass2chem.search.build_centurion_tree_mzlist).
-        The other functions, mass_paired_mapping and complete_mass_paired_mapping, 
-        return only one pair per match and use a sorting based algorithm.
+    Note
+    ----
+    This function returns all matched pairs within std_ppm using 
+    a tree search approach (mass2chem.search.build_centurion_tree_mzlist).
+    The other functions, mass_paired_mapping and complete_mass_paired_mapping, 
+    return only one pair per match and use a sorting based algorithm.
     '''
     mz_centurion_tree = build_centurion_tree_mzlist(list1)
     mapped = []
@@ -345,24 +360,29 @@ def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks,
 
     Returns
     -------
-    new_reference_mzlist : combined list of all unique m/z values, 
+    new_reference_mzlist : 
+        combined list of all unique m/z values, 
         maintaining original order of REF_reference_mzlist but updating the values 
         as mean of the two lists.
-    new_reference_map2 : mapping index numbers from SM_malist, 
+    new_reference_map2 : 
+        mapping index numbers from SM_malist, 
         to be used to update MassGrid[Sample.input_file]
-    REF_landmarks : updated landmark m/z values using the new index numbers 
+    REF_landmarks : 
+        updated landmark m/z values using the new index numbers 
         as part of new_reference_mzlist
-    _r : correction ratios on SM_mzlist, to be attached to Sample class instance.
+    _r : 
+        correction ratios on SM_mzlist, to be attached to Sample class instance.
 
-    Note:
-        The m/z values are updated here because this is the best place to do it: 
-        SM_mzlist is already corrected if needed; no need to look up irregular values in MassGrid.
-        This mixes features from samples and they need to be consistent on how they are calibrated.
+    Note
+    ----
+    The m/z values are updated here because this is the best place to do it: 
+    SM_mzlist is already corrected if needed; no need to look up irregular values in MassGrid.
+    This mixes features from samples and they need to be consistent on how they are calibrated.
 
-        The mzlists are already in ascending order when a Sample is processed,
-        but the order of REF_reference_mzlist will be disrupted during building MassGrid.
-        Do correciton on list2 if m/z shift exceeds correction_tolerance_ppm.
-        See `MassGrid.add_sample`.
+    The mzlists are already in ascending order when a Sample is processed,
+    but the order of REF_reference_mzlist will be disrupted during building MassGrid.
+    Do correciton on list2 if m/z shift exceeds correction_tolerance_ppm.
+    See `MassGrid.add_sample`.
 
     '''
     _N1 = len(REF_reference_mzlist)
@@ -426,20 +446,23 @@ def bin_by_median(List_of_tuples, func_tolerance):
     
     Parameters
     ----------
-    List_of_tuples : [(value, object), (value, object), ...], 
+    List_of_tuples : 
+        [(value, object), (value, object), ...], 
         to be separated into bins by values (either rt or mz).
         objects have attribute of sample_name if to align elsewhere.
-    func_tolerance : tolearance function to define bounary to separate bins.
+    func_tolerance : 
+        tolearance function to define bounary to separate bins.
         
     Returns
     -------
     A list of seprated bins, 
     each as a list of objects as [X[1] for X in L]. Possible all falls in same bin.
 
-    Note:
-        Not perfect because left side may deviate out of tolerance, 
-        even though LC-MS data always have enough gaps for separation.
-        Use with caution.
+    Note
+    ----
+    Not perfect because left side may deviate out of tolerance, 
+    even though LC-MS data always have enough gaps for separation.
+    Use with caution.
     '''
     new = [[List_of_tuples[0], ], ]
     for X in List_of_tuples[1:]:
@@ -481,11 +504,14 @@ def identify_mass_peaks(bin_data_tuples, mz_tolerance, presorted=True):
 
     Parameters
     ----------
-    bin_data_tuples : a flexible bin in format of [(mz, scan_num, intensity_int), ...], 
+    bin_data_tuples : 
+        a flexible bin in format of [(mz, scan_num, intensity_int), ...], 
         or [(m/z, track_id, sample_id), ...].
-    mz_tolerance : precomputed based on m/z and ppm, 
+    mz_tolerance : 
+        precomputed based on m/z and ppm, 
         e.g. 5 ppm of 80 = 0.0004;  5 ppm of 800 = 0.0040.
-    presorted : flag to determine if sorting is needed on bin_data_tuples.
+    presorted : 
+        flag to determine if sorting is needed on bin_data_tuples.
     
     Returns
     -------
@@ -518,21 +544,25 @@ def nn_cluster_by_mz_seeds(bin_data_tuples, mz_tolerance, presorted=True):
 
     Parameters
     ----------
-    bin_data_tuples : a flexible bin in format of [(mz, scan_num, intensity_int), ...], 
+    bin_data_tuples : 
+        a flexible bin in format of [(mz, scan_num, intensity_int), ...], 
         or [(m/z, track_id, sample_id), ...].
-    mz_tolerance : precomputed based on m/z and ppm, 
+    mz_tolerance : 
+        precomputed based on m/z and ppm, 
         e.g. 5 ppm of 80 = 0.0004;  5 ppm of 800 = 0.0040.
-    presorted : flag to determine if sorting is needed on bin_data_tuples.
+    presorted : 
+        flag to determine if sorting is needed on bin_data_tuples.
 
     Returns
     -------
     A list of clusters as separated bins, each bin as [(mz, scan_num, intensity_int), ...]
 
-    Note:
-        Bug in Python compiler: when clusters = [[]] * _NN is used, 
-        it causes occassional duplication of entries. 2022-05-21.
+    Note
+    ----
+    Bug in Python compiler: when clusters = [[]] * _NN is used, 
+    it causes occassional duplication of entries. 2022-05-21.
 
-        Future consideration: np.argmin will be faster than sorted here.
+    Future consideration: np.argmin will be faster than sorted here.
     '''
     mz_seeds = identify_mass_peaks(bin_data_tuples, mz_tolerance, presorted)
     if mz_seeds:

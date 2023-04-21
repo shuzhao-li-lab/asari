@@ -32,11 +32,16 @@ def extract_massTracks_(ms_expt,
 
     Parameters
     ----------
-    ms_expt : instance of pymzml.run.Reader(f), a parsed object of LC-MS data file
-    mz_tolerance_ppm : m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
-    min_intensity : minimal intentsity value, needed because some instruments keep 0s 
-    min_timepoints : minimal consecutive scans to be considered real signal.
-    min_peak_height : a bin is not considered if the max intensity < min_peak_height.
+    ms_expt : 
+        instance of pymzml.run.Reader(f), a parsed object of LC-MS data file
+    mz_tolerance_ppm : 
+        m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
+    min_intensity : 
+        minimal intentsity value, needed because some instruments keep 0s 
+    min_timepoints : 
+        minimal consecutive scans to be considered real signal.
+    min_peak_height : 
+        a bin is not considered if the max intensity < min_peak_height.
 
     Returns 
     -------
@@ -101,9 +106,12 @@ def extract_single_track_fullrt_length(bin, rt_length, INTENSITY_DATA_TYPE=INTEN
 
     Parameters
     ----------
-    bin : data points, in format of [(mz_int, scan_num, intensity_int), ...].
-    rt_length : full number of scans.
-    INTENSITY_DATA_TYPE : default to np.int64. 
+    bin : 
+        data points, in format of [(mz_int, scan_num, intensity_int), ...].
+    rt_length :     
+        full number of scans.
+    INTENSITY_DATA_TYPE : 
+        default to np.int64. 
         Being future safe, but int32 may be adequate and more efficient.
      
     Returns
@@ -127,9 +135,11 @@ def bin_to_mass_tracks(bin_data_tuples, rt_length, mz_tolerance_ppm=5):
 
     Parameters
     ----------
-    bin_data_tuples : a flexible bin by units of 0.001 amu, in format of 
+    bin_data_tuples :  
+        a flexible bin by units of 0.001 amu, in format of 
         [(mz, scan_num, intensity_int), ...]. This may or may not be within mz_tolerance_ppm.
-    rt_length : full number of scans.
+    rt_length :    
+        full number of scans.
 
     Returns
     -------
@@ -160,12 +170,15 @@ def build_chromatogram_intensity_aware(bin_data_tuples, rt_length, mz_tolerance)
 
     Parameters
     ----------
-    bin_data_tuples: a flexible bin in format of [(mz, scan_num, intensity_int), ...].
-    mz_tolerance_ppm: m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
+    bin_data_tuples: 
+        a flexible bin in format of [(mz, scan_num, intensity_int), ...].
+    mz_tolerance_ppm: 
+        m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
 
     Returns
     -------
-    assigned: separated bins of [(mz, scan_num, intensity_int), ...], 
+    assigned: 
+        separated bins of [(mz, scan_num, intensity_int), ...], 
         prototype of extracted ion chromatograms to be used by extract_single_track_fullrt_length.
     '''
     bin_data_tuples.sort(key=itemgetter(2), reverse=True)
@@ -190,8 +203,10 @@ def build_chromatogram_by_mz_clustering(bin_data_tuples, rt_length, mz_tolerance
 
     Parameters
     ----------
-    bin_data_tuples : a flexible bin in format of [(mz, scan_num, intensity_int), ...].
-    mz_tolerance : precomputed based on m/z and ppm, e.g. 5 ppm of 80 = 0.0004;  5 ppm of 800 = 0.0040.
+    bin_data_tuples : 
+        a flexible bin in format of [(mz, scan_num, intensity_int), ...].
+    mz_tolerance : 
+        precomputed based on m/z and ppm, e.g. 5 ppm of 80 = 0.0004;  5 ppm of 800 = 0.0040.
 
     Returns
     -------
@@ -219,12 +234,17 @@ def get_thousandth_bins(mzTree, mz_tolerance_ppm=5, min_timepoints=5, min_peak_h
 
     Parameters
     ----------
-    mzTree: indexed data points, {thousandth_mz: [(mz, ii, intensity_int)...], ...}. 
-            (all data points indexed by m/z to thousandth precision, i.e. 0.001 amu).
-    mz_tolerance_ppm: m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
-    min_intensity: minimal intentsity value, needed because some instruments keep 0s 
-    min_timepoints: minimal consecutive scans to be considered real signal.
-    min_peak_height: a bin is not considered if the max intensity < min_peak_height.
+    mzTree: 
+        indexed data points, {thousandth_mz: [(mz, ii, intensity_int)...], ...}. 
+        (all data points indexed by m/z to thousandth precision, i.e. 0.001 amu).
+    mz_tolerance_ppm:  
+        m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
+    min_intensity: 
+        minimal intentsity value, needed because some instruments keep 0s 
+    min_timepoints: 
+        minimal consecutive scans to be considered real signal.
+    min_peak_height:
+        a bin is not considered if the max intensity < min_peak_height.
     
     Returns
     -------
@@ -289,21 +309,29 @@ def rt_lowess_calibration(good_landmark_peaks,
 
     Parameters
     ----------
-    good_landmark_peaks : landmark peaks selected from this working sample.
+    good_landmark_peaks : 
+        landmark peaks selected from this working sample.
         Landmark peaks are usually defined by 13C/12C patterns.
-    selected_reference_landmark_peaks : landmark peaks selected from the reference sample,
+    selected_reference_landmark_peaks : 
+        landmark peaks selected from the reference sample,
         matched and equal-length to good_landmark_peaks.
-    sample_rt_numbers : all scan numbers in this sample.
-    reference_rt_numbers : all scan numbers in the ref sample.
+    sample_rt_numbers : 
+        all scan numbers in this sample.
+    reference_rt_numbers : 
+        all scan numbers in the ref sample.
 
     Returns
     -------
-    rt_cal_dict : dictionary converting scan number in sample_rt_numbers to calibrated integer values.
-                Range matched. Only changed numbers are kept for efficiency.
-    reverse_rt_cal_dict : from ref RT scan numbers to sample RT scan numbers. 
-                Range matched. Only changed numbers are kept for efficiency.
+    rt_cal_dict : 
+        dictionary converting scan number in sample_rt_numbers to calibrated integer values.
+        Range matched. Only changed numbers are kept for efficiency.
+    reverse_rt_cal_dict : 
+        from ref RT scan numbers to sample RT scan numbers. 
+        Range matched. Only changed numbers are kept for efficiency.
     
-    Note:
+        
+    Note
+    ----
         LOWESS method available in statsmodels.nonparametric.smoothers_lowess, v 0.12, 0.13+
         https://www.statsmodels.org/stable/generated/statsmodels.nonparametric.smoothers_lowess.lowess.html    
         But xvals have to be forced as float array until the fix is in new release.
@@ -379,10 +407,13 @@ def remap_intensity_track(intensity_track, new, rt_cal_dict):
 
     Parameters
     ----------
-    intensity_track : list of intensity values from a mass track.
-    new : new copy of np.zeros of RT length, possible longer than intensity_track,
+    intensity_track : 
+        list of intensity values from a mass track.
+    new : 
+        new copy of np.zeros of RT length, possible longer than intensity_track,
         because samples may have different RT lengthes.
-    rt_cal_dict : sample specific mapping dictionary of RT.
+    rt_cal_dict : 
+        sample specific mapping dictionary of RT.
 
     Returns
     -------
@@ -404,14 +435,18 @@ def smooth_moving_average(list_intensity, size=9):
 
     Parameters
     ----------
-    list_intensity : list of intensity values from a mass track.
-    size : window size for moving average.
+    list_intensity : 
+        list of intensity values from a mass track.
+    size : 
+        window size for moving average.
 
     Returns
     -------
     New list of smoothed intensity values.
 
-    Note:
+    
+    Note
+    ----
         For very noise data, one may use smooth_lowess.
     '''
     return uniform_filter1d(list_intensity, size, mode='nearest')
@@ -422,14 +457,18 @@ def smooth_lowess(list_intensity, frac=0.02):
 
     Parameters
     ----------
-    list_intensity : list of intensity values from a mass track.
-    frac : fraction of data used in LOWESS regression.
+    list_intensity : 
+        list of intensity values from a mass track.
+    frac : 
+        fraction of data used in LOWESS regression.
 
     Returns
     -------
     New list of smoothed intensity values.
 
-    Note:
+        
+    Note
+    ----
         smooth_moving_average is preferred for most data. LOWESS is not good for small peaks.
     '''
     lxy = lowess(list_intensity, range(len(list_intensity)), frac=frac, it=1)
