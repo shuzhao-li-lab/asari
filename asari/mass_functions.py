@@ -15,13 +15,34 @@ from mass2chem.search import *
 
 def flatten_tuplelist(L):
     '''
-    Reformat [(a,b), ...] to [a, b, ...], keep unique entries only.
+    Given a list of tuples e.g., [(a,b), ...] flatten list to [a, b, ...] keeping unique entries only
+
+    Parameters
+    ----------
+    L - list 
+        list of tuples [(a,b), ...]
+
+    Return
+    ------
+    list of the unique elements in L, flattened to one dimension: [a, b, ...]
+    
     '''
     return list(set([x[0] for x in L] + [x[1] for x in L]))
 
 def check_close_mzs(mzlist, ppm_tol=5):
     '''
-    check potentially overlapping m/z values in a sample. mzlist already in ascending order.
+    Given a list of mz_values and a mz tolerance in ppm, determine if any pair of values differ by less than the mz 
+    tolerance. mzlist must be sorted in ascending order!
+
+    Parameters
+    ----------
+    mzlist - list
+        list of floating point values represented m/z's in ascending order
+
+    Return
+    ------
+    a list of the index pairs representing m/z values within the m/z tolerance
+    
     '''
     warning = []
     for ii in range(1, len(mzlist)):
