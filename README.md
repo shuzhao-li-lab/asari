@@ -95,7 +95,7 @@ Dashboard
 =========
 After data are processed, users can use `asari viz --input process_result_dir` to launch a dashboard to inspect data, where 'process_result_dir' refers to the result folder. The dashboard uses these files under the result folder: 'project.json', 'export/cmap.pickle', 'export/epd.pickle' and 'export/full_Feature_table.tsv'. Thus, one can move around the folder, but modification of these files is not a good idea. Please note that pickle files are for internal use, and one should not trust pickle files from other people.
  
-![viz_screen_shot](doc/viz_screen_shot20220518.png)
+![viz_screen_shot](docs/source/_static/viz_screen_shot20220518.png)
 
 
 Parameters
