@@ -18,7 +18,7 @@ def annotate_user_featuretable(infile, parameters, rtime_tolerance=2):
         first column m/z and 2nd column rtime.
     parameters : 
         parameter dictionary passed from main.py, 
-        which imports from defaul_parameters and updates the dict by user arguments.
+        which imports from default_parameters and updates the dict by user arguments.
     rtime_tolerance : r
         etention time tolerance to group adducts etc.
 
@@ -39,7 +39,7 @@ def annotate_user_featuretable(infile, parameters, rtime_tolerance=2):
                                    mz_tolerance_ppm=parameters['mz_tolerance_ppm'],
                                    rt_tolerance=rtime_tolerance)
     
-    # passing patterns from .defaul_parameters
+    # passing patterns from .default_parameters
     if mode == 'pos':
         EED.adduct_patterns = adduct_search_patterns
     else:

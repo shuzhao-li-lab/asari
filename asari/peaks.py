@@ -27,7 +27,7 @@ def batch_deep_detect_elution_peaks(list_mass_tracks, number_of_scans, parameter
         number of scans, usually corresponding to maximum number in RT.
     parameters :  
         parameter dictionary passed from main.py, 
-        which imports from defaul_parameters and updates the dict by user arguments.
+        which imports from default_parameters and updates the dict by user arguments.
 
     Returns
     -------
@@ -62,7 +62,7 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
         number of scans, usually corresponding to maximum number in RT.
     parameters :  
         parameter dictionary passed from main.py, 
-        which imports from defaul_parameters and updates the dict by user arguments.
+        which imports from default_parameters and updates the dict by user arguments.
     shared_list : 
         list object used to pass data btw multiple processing.
 
@@ -269,7 +269,7 @@ def audit_mass_track(list_intensity,
         list of intensity values from a mass track.
     min_fwhm, min_intensity_threshold, min_peak_height, min_prominence_threshold : 
         from parameter dictionary passed from main.py, 
-        which imports from defaul_parameters and updates the dict by user arguments.
+        which imports from default_parameters and updates the dict by user arguments.
 
     Returns
     -------

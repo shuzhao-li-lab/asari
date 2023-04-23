@@ -75,7 +75,7 @@ def calculate_selectivity(sorted_mz_list, std_ppm=5):
     Parameters
     ----------
     sorted_mz_list: 
-        a list of m/z values, sorted from low to high.
+        a list of m/z values, sorted from low to high, length > 3.
     std_ppm: 
         mass resolution in ppm (part per million).
 
