@@ -1,7 +1,5 @@
 # Developer's Guide
 
-Please see README at upper directory for general information of asari.
-
 ## Overview of algorithms and work flows
 
 - From each mzML data file, mass tracks of unique m/z values are extracted, then aligned into a MassGrid.
