@@ -544,7 +544,7 @@ def evaluate_gaussian_peak_on_intensity_list(intensity_list, height, apex, left,
     Peak shapes may be more Voigt or bigaussian, but the impact on fitting result is negligible.
     '''
     goodness_fitting = 0
-    xx = range(left, right+1, 1)
+    xx = np.arange(left, right+1, 1)
     yy = intensity_list[xx]
     a, mu, sigma =  height, apex, np.std(xx)    # set initial parameters
     try:
@@ -557,6 +557,37 @@ def evaluate_gaussian_peak_on_intensity_list(intensity_list, height, apex, left,
         goodness_fitting = 0
 
     return goodness_fitting, sigma
+
+
+def get_gaussian_peakarea_on_intensity_list(intensity_list, left, right):
+    '''
+    Use Gaussian model to fit peak and return peak area.
+    
+    Parameters
+    ----------
+    intensity_list : 
+        list of intensity values.
+    height, apex, left, right : 
+        peak parameters.
+
+    Returns
+    -------
+    peak area, float value as gaussian integral.
+    '''
+    xx = np.arange(left, right+1, 1)
+    yy = intensity_list[xx]
+    a, mu, sigma =  yy.max(), xx.mean(), np.std(xx)    # set initial parameters
+    try:
+        popt, pcov = curve_fit(gaussian_function__, xx, yy, p0=[a, mu, sigma])
+        a, mu, sigma = popt
+        # gaussian integral
+        area = a * np.sqrt(2 * np.pi * sigma**2)
+    # failure to fit
+    except (RuntimeError, ValueError, TypeError):
+        # fitting errors 
+        area = 0
+
+    return area
 
 
 def lowess_smooth_track(list_intensity, number_of_scans):

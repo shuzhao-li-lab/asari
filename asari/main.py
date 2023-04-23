@@ -69,8 +69,8 @@ def main(parameters=PARAMETERS):
 
     parser.add_argument('--autoheight', default=False,
             help='automatic determining min peak height')
-    parser.add_argument('--reverse_detection', default=False,
-            help='the reverse peak detection algorithm; not used now')
+    parser.add_argument('--peak_area', default='sum',
+            help='peak area culculation, sum, auc or gauss for area under the curve')
     parser.add_argument('--pickle', default=False, 
             help='keep all intermediate pickle files, ondisk mode only.')
     parser.add_argument('--anno', default=True, 
@@ -96,8 +96,8 @@ def main(parameters=PARAMETERS):
         parameters['project_name'] = args.project
     if args.output:
         parameters['outdir'] = args.output
-    if args.reverse_detection:
-        parameters['reverse_detection'] = booleandict[args.reverse_detection]
+    if args.peak_area:
+        parameters['peak_area'] = booleandict[args.peak_area]
     if args.pickle:
         parameters['pickle'] = booleandict[args.pickle]
     if args.anno:

@@ -570,18 +570,90 @@ class CompositeMap:
         self.generate_feature_table()
 
 
+    def get_peak_area_sum(self, track_intensity, left_base, right_base):
+        '''
+        Option to calculate peak area by sum of the intensity values on the track 
+        within the peak boundaries.
+
+        Parameters
+        ----------
+        track_intensity : 
+            np.array, i.e. mass_track['intensity']
+        left_base :
+            index for peak left base
+        right_base : 
+            index for peak right base
+
+        Returns
+        ------- 
+        Integer of peak area value
+        '''
+        return track_intensity[left_base: right_base+1].sum()
+    
+    
+    def get_peak_area_auc(self, track_intensity, left_base, right_base):
+        '''
+        Option to calculate peak area as area under the curve.
+        This is approximated by a maximum filter to cover potential gaps.
+
+        Parameters
+        ----------
+        track_intensity : 
+            np.array, i.e. mass_track['intensity']
+        left_base :
+            index for peak left base
+        right_base : 
+            index for peak right base
+
+        Returns
+        ------- 
+        Integer of peak area value
+        
+        '''
+        return int(maximum_filter1d(
+            track_intensity[left_base: right_base+1], size=2, mode='constant').sum())
+
+
+    def get_peak_area_gaussian(self, track_intensity, left_base, right_base):
+        '''
+        Option to calculate peak area by fitting the data to a gaussian model.
+        This is 
+
+        Parameters
+        ----------
+        track_intensity : 
+            np.array, i.e. mass_track['intensity']
+        left_base :
+            index for peak left base
+        right_base : 
+            index for peak right base
+
+        Returns
+        ------- 
+        peak area, Integer value as gaussian integral.
+        '''
+        return int(get_gaussian_peakarea_on_intensity_list(
+            track_intensity, left_base, right_base))
+
+
     def generate_feature_table(self):
         '''
         Initiate and populate self.FeatureTable, each sample per column in dataframe.
         '''
+        peak_area_function = self.get_peak_area_sum
+        if self.experiment.parameters['peak_area'] == 'auc':
+            peak_area_function = self.get_peak_area_auc
+        elif self.experiment.parameters['peak_area'] == 'gauss':
+            peak_area_function = self.get_peak_area_gaussian
+
         FeatureTable = pd.DataFrame(self.FeatureList)
         for SM in self.experiment.all_samples:
-            FeatureTable[SM.name] = self.extract_features_per_sample(SM)
+            FeatureTable[SM.name] = self.extract_features_per_sample(SM, peak_area_function)
 
         self.FeatureTable = FeatureTable
 
 
-    def extract_features_per_sample(self, sample):
+    def extract_features_per_sample(self, sample, peak_area_function):
         '''
         Extract and return peak area values in a sample, 
         based on the start and end positions defined in self.FeatureList.
@@ -591,6 +663,8 @@ class CompositeMap:
         ----------
         sample : 
             instance of SimpleSample class.
+        peak_area_function :
+            function to be used for peak area calculation
 
         Returns
         ------- 
@@ -607,7 +681,7 @@ class CompositeMap:
                 # watch for range due to calibration/conversion.
                 left_base = sample.reverse_rt_cal_dict.get(peak['left_base'], peak['left_base'])
                 right_base = sample.reverse_rt_cal_dict.get(peak['right_base'], peak['right_base'])
-                peak_area = mass_track['intensity'][left_base: right_base+1].sum()
+                peak_area = peak_area_function(mass_track['intensity'], left_base, right_base)
 
             fList.append( peak_area )
 

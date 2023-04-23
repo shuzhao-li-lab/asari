@@ -31,9 +31,9 @@ PARAMETERS = {
     'min_intensity_threshold': 1000,    # minimal intensity for mass track extraction, filtering baseline
     'min_peak_height': 100000,           # minimal peak height.
     'wlen': 25,                         # window size for evaluating prominence in peaks. Important to resolve clustered narrow peaks.
-    'reverse_detection': False,         # use the reverse peak detection algorithm
     'autoheight': False,                # min_peak_height can be estimated automatically by setting autoheight on in CLI  
     'gaussian_shape': 0.5,              # min cutoff of goodness of fitting to Gauss model
+    'peak_area': 'sum',                 # `sum` for simple sum, `auc` for area under the curve, `gauss` for gaussian
     
     # retention time alignment
     'reference': None,
