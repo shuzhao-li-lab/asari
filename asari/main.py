@@ -97,7 +97,7 @@ def main(parameters=PARAMETERS):
     if args.output:
         parameters['outdir'] = args.output
     if args.peak_area:
-        parameters['peak_area'] = booleandict[args.peak_area]
+        parameters['peak_area'] = args.peak_area
     if args.pickle:
         parameters['pickle'] = booleandict[args.pickle]
     if args.anno:

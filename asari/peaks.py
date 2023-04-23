@@ -574,10 +574,11 @@ def get_gaussian_peakarea_on_intensity_list(intensity_list, left, right):
     -------
     peak area, float value as gaussian integral.
     '''
-    xx = np.arange(left, right+1, 1)
+    right = min(right, len(intensity_list))                # check boundary
+    xx = np.arange(left, right, 1)
     yy = intensity_list[xx]
-    a, mu, sigma =  yy.max(), xx.mean(), np.std(xx)    # set initial parameters
     try:
+        a, mu, sigma =  yy.max(), xx.mean(), np.std(xx)    # set initial parameters
         popt, pcov = curve_fit(gaussian_function__, xx, yy, p0=[a, mu, sigma])
         a, mu, sigma = popt
         # gaussian integral
