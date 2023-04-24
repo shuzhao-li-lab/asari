@@ -75,7 +75,7 @@ class ext_Experiment:
     def get_reference_sample_id(self):
         '''
         get_reference_sample_id either by user specification, or
-        using the sample of most number_anchor_mz_pairs, limited to first 100 samples to search.
+        using the sample of most number_anchor_mz_pairs.
         This assumes the sample of most good m/z values has a good coverage of features.
         '''
         if self.parameters['reference']:
