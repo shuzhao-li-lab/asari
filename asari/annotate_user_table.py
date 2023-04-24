@@ -13,14 +13,14 @@ def annotate_user_featuretable(infile, parameters, rtime_tolerance=2):
 
     Parameters
     ----------
-    infile : 
-        input feature table, tab delimited file with first row as header, 
+    infile : str
+        input feature table filepath, tab delimited file with first row as header, 
         first column m/z and 2nd column rtime.
-    parameters : 
+    parameters : dict
         parameter dictionary passed from main.py, 
         which imports from default_parameters and updates the dict by user arguments.
-    rtime_tolerance : r
-        etention time tolerance to group adducts etc.
+    rtime_tolerance : int, optional, default: 2
+        retention time tolerance to group adducts etc.
 
     Outputs
     -------

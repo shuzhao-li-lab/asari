@@ -32,21 +32,22 @@ def extract_massTracks_(ms_expt,
 
     Parameters
     ----------
-    ms_expt : 
+    ms_expt : pymzml.run.Reader(f)
         instance of pymzml.run.Reader(f), a parsed object of LC-MS data file
-    mz_tolerance_ppm : 
+    mz_tolerance_ppm : float, optional, default: 5
         m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
-    min_intensity : 
+    min_intensity : float, optional, default: 100
         minimal intentsity value, needed because some instruments keep 0s 
-    min_timepoints : 
+    min_timepoints : int, optional, default: 5
         minimal consecutive scans to be considered real signal.
-    min_peak_height : 
+    min_peak_height : float, optional, default: 1000
         a bin is not considered if the max intensity < min_peak_height.
 
     Returns 
     -------
-    List of mass tracks, 
-        {rt_numbers, rt_times, tracks as [( mz, np.array(intensities at full rt range) ), ...]}
+    Dict with keys 'rt_numbers', 'rt_times', and 'tracks', each with a value that is a list of
+    co-indexed rt_numbers, rt_times, and mass tracks respectively. Mass tracks are represented
+    as [( mz, np.array(intensities at full rt range) ), ...]
     '''
     alldata = []
     rt_times = []           # in seconds
@@ -106,11 +107,11 @@ def extract_single_track_fullrt_length(bin, rt_length, INTENSITY_DATA_TYPE=INTEN
 
     Parameters
     ----------
-    bin : 
+    bin : list[tuple]
         data points, in format of [(mz_int, scan_num, intensity_int), ...].
-    rt_length :     
+    rt_length : int     
         full number of scans.
-    INTENSITY_DATA_TYPE : 
+    INTENSITY_DATA_TYPE : any int numpy.dtype, optional, default: INTENSITY_DATA_TYPE (currently np.int64)
         default to np.int64. 
         Being future safe, but int32 may be adequate and more efficient.
      
@@ -135,11 +136,12 @@ def bin_to_mass_tracks(bin_data_tuples, rt_length, mz_tolerance_ppm=5):
 
     Parameters
     ----------
-    bin_data_tuples :  
+    bin_data_tuples : list[tuple]
         a flexible bin by units of 0.001 amu, in format of 
         [(mz, scan_num, intensity_int), ...]. This may or may not be within mz_tolerance_ppm.
-    rt_length :    
+    rt_length : int   
         full number of scans.
+    mz_tolerance_ppm: float, optional, default: 5
 
     Returns
     -------
@@ -170,10 +172,12 @@ def build_chromatogram_intensity_aware(bin_data_tuples, rt_length, mz_tolerance)
 
     Parameters
     ----------
-    bin_data_tuples: 
+    bin_data_tuples: list[tuple]
         a flexible bin in format of [(mz, scan_num, intensity_int), ...].
-    mz_tolerance_ppm: 
-        m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
+    rt_length: int
+        number of scans (NOT USED, remove from call signature in future)
+    mz_tolerance_ppm: float
+        m/z tolerance in part-per-million. Used to seggregate m/z regions here.
 
     Returns
     -------
@@ -203,9 +207,11 @@ def build_chromatogram_by_mz_clustering(bin_data_tuples, rt_length, mz_tolerance
 
     Parameters
     ----------
-    bin_data_tuples : 
+    bin_data_tuples : list[tuple]
         a flexible bin in format of [(mz, scan_num, intensity_int), ...].
-    mz_tolerance : 
+    rt_length: int
+        number of scans (NOT USED, remove from call signature in future)
+    mz_tolerance : float
         precomputed based on m/z and ppm, e.g. 5 ppm of 80 = 0.0004;  5 ppm of 800 = 0.0040.
 
     Returns
@@ -219,9 +225,16 @@ def merge_two_mass_tracks(T1, T2):
     '''
     Merge two mass tracks, each massTrack as ( mz, np.array(intensities at full rt range) ).
 
+    Parameters
+    ----------
+    T1 : list
+        a massTrack rerpesented as ( mz, np.array(intensities at full rt range))
+    T2: list
+        a massTrack rerpesented as ( mz, np.array(intensities at full rt range))
+
     Returns
     -------
-    The merged mass track.
+    The merged mass track. The mz value is averaged between tracks, intensities are summed pair-wise.
     '''
     return ( 0.5 * (T1[0] + T2[0]), T1[1] + T2[1] )
 
@@ -234,16 +247,14 @@ def get_thousandth_bins(mzTree, mz_tolerance_ppm=5, min_timepoints=5, min_peak_h
 
     Parameters
     ----------
-    mzTree: 
+    mzTree: dict[list[tuples]]
         indexed data points, {thousandth_mz: [(mz, ii, intensity_int)...], ...}. 
         (all data points indexed by m/z to thousandth precision, i.e. 0.001 amu).
-    mz_tolerance_ppm:  
+    mz_tolerance_ppm:  float, optional, default: 5
         m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
-    min_intensity: 
-        minimal intentsity value, needed because some instruments keep 0s 
-    min_timepoints: 
+    min_timepoints: int, optional, default: 5
         minimal consecutive scans to be considered real signal.
-    min_peak_height:
+    min_peak_height: float, optional, default: 1000
         a bin is not considered if the max intensity < min_peak_height.
     
     Returns
@@ -309,23 +320,23 @@ def rt_lowess_calibration(good_landmark_peaks,
 
     Parameters
     ----------
-    good_landmark_peaks : 
+    good_landmark_peaks : list[peak]
         landmark peaks selected from this working sample.
         Landmark peaks are usually defined by 13C/12C patterns.
-    selected_reference_landmark_peaks : 
+    selected_reference_landmark_peaks : list[peak]
         landmark peaks selected from the reference sample,
         matched and equal-length to good_landmark_peaks.
-    sample_rt_numbers : 
+    sample_rt_numbers : list
         all scan numbers in this sample.
-    reference_rt_numbers : 
+    reference_rt_numbers : list
         all scan numbers in the ref sample.
 
     Returns
     -------
-    rt_cal_dict : 
+    rt_cal_dict : dict
         dictionary converting scan number in sample_rt_numbers to calibrated integer values.
         Range matched. Only changed numbers are kept for efficiency.
-    reverse_rt_cal_dict : 
+    reverse_rt_cal_dict : dict
         from ref RT scan numbers to sample RT scan numbers. 
         Range matched. Only changed numbers are kept for efficiency.
     
@@ -407,13 +418,14 @@ def remap_intensity_track(intensity_track, new, rt_cal_dict):
 
     Parameters
     ----------
-    intensity_track : 
+    intensity_track : list[int]
         list of intensity values from a mass track.
-    new : 
+    new : np.zeros
         new copy of np.zeros of RT length, possible longer than intensity_track,
         because samples may have different RT lengthes.
-    rt_cal_dict : 
+    rt_cal_dict : dict
         sample specific mapping dictionary of RT.
+        dictionary converting scan number in sample_rt_numbers to calibrated integer values.
 
     Returns
     -------
@@ -435,9 +447,9 @@ def smooth_moving_average(list_intensity, size=9):
 
     Parameters
     ----------
-    list_intensity : 
+    list_intensity : list[int]
         list of intensity values from a mass track.
-    size : 
+    size : int, optional, default: 9
         window size for moving average.
 
     Returns
@@ -457,9 +469,9 @@ def smooth_lowess(list_intensity, frac=0.02):
 
     Parameters
     ----------
-    list_intensity : 
+    list_intensity : list[int]
         list of intensity values from a mass track.
-    frac : 
+    frac : float, optional, default: 0.02
         fraction of data used in LOWESS regression.
 
     Returns

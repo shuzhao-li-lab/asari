@@ -17,17 +17,17 @@ def analyze_single_sample(infile,
 
     Parameters
     ----------
-    infile : 
-        input mzML file.
-    mz_tolerance_ppm : 
+    infile : str
+        input mzML filepath.
+    mz_tolerance_ppm : float, optional, default: 5
         m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
-    min_intensity : 
+    min_intensity : float, optional, default: 100
         minimal intentsity value to consider, also used to filter out 0s.
-    min_timepoints : 
+    min_timepoints : int, optional, default: 5
         minimal consecutive scans to be considered real signal.
-    min_peak_height : 
+    min_peak_height : float, optional, default: 1000
         a bin is not considered if the max intensity < min_peak_height.
-    parameters : 
+    parameters : dict, optional, default: {}
         not used, just place holder to use ext_Experiment class.
     '''
     print("Analysis of %s\n" %infile)
@@ -51,17 +51,17 @@ def get_file_masstrack_stats(infile,
 
     Parameters
     ----------
-    infile : 
-        input mzML file.
-    mz_tolerance_ppm : 
+    infile : str
+        input mzML filepath.
+    mz_tolerance_ppm : float, optional, default: 5
         m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
-    min_intensity : 
+    min_intensity : float, optional, default: 100
         minimal intentsity value to consider, also used to filter out 0s.
-    min_timepoints : 
+    min_timepoints : int, optional, default: 5
         minimal consecutive scans to be considered real signal.
-    min_peak_height : 
+    min_peak_height : float, optional, default : 1000
         a bin is not considered if the max intensity < min_peak_height.
-    return_sample : 
+    return_sample : bool, optional, default: False
         if True, return full sample dictionary with mass tracks.
         Else, return _mz_landmarks_, ionization_mode, min_peak_height_.
 
@@ -162,17 +162,17 @@ def estimate_min_peak_height(list_input_files,
 
     Parameters
     ----------
-    list_input_files : 
-        input mzML files, but only using num_files_to_use.
-    mz_tolerance_ppm : 
+    list_input_files : list[str]
+        input mzML filepaths, but only using num_files_to_use.
+    mz_tolerance_ppm : float, optional, default: 5
         m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
-    min_intensity : 
+    min_intensity : float, optional, default: 100
         minimal intentsity value to consider, also used to filter out 0s.
-    min_timepoints : 
+    min_timepoints : int, optional, default: 5
         minimal consecutive scans to be considered real signal.
-    min_peak_height : 
+    min_peak_height : float, optional, default: 500
         a bin is not considered if the max intensity < min_peak_height.
-    num_files_to_use : 
+    num_files_to_use : int, optional, default: 3
         Use randomly chosen num_files_to_use from list_input_files.
 
     Returns
@@ -202,6 +202,21 @@ def ext_estimate_min_peak_height(list_input_files,
             num_files_to_use=3):
     '''
     Extended estimate_min_peak_height for Xasari use.
+
+    Parameters
+    ----------
+    list_input_files : list[str]
+        input mzML filepaths, but only using num_files_to_use.
+    mz_tolerance_ppm : float, optional, default: 5
+        m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
+    min_intensity : float, optional, default: 100
+        minimal intentsity value to consider, also used to filter out 0s.
+    min_timepoints : int, optional, default: 5
+        minimal consecutive scans to be considered real signal.
+    min_peak_height : float, optional, default: 500
+        a bin is not considered if the max intensity < min_peak_height.
+    num_files_to_use : int, optional, default: 3
+        Use randomly chosen num_files_to_use from list_input_files.
 
     Returns
     -------
