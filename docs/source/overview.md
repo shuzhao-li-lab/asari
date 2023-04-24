@@ -76,13 +76,13 @@ A typical run on disk may generatae a directory like this
     ├── preferred_Feature_table.tsv
     └── project.json
 
-The recommended feature table is `preferred_Feature_table.tsv`. 
+Asari generates two feature tables:
+    1. preferred_Feature_table.tsv
+    2. export/full_Feature_table.tsv
 
-All peaks are kept in `export/full_Feature_table.tsv` if they meet signal (snr) and shape standards 
-(part of input parameters but default values are fine for most people). 
-That is, if a feature is only present in one sample, it will be reported, 
-as we think this is important for applications like exposome and personalized medicine. 
-The filtering decisions are left to end users.
+The recommended feature table for futher analyses is `preferred_Feature_table.tsv`. Only peaks passing user-provided (or default) parameters regarding signal-to-noise (snr) ratios and shape requirements will be reported in the `preferred_Feature_table.tsv` while `export/full_Feature_table.tsv` contains all detected features regardless of if they pass the snr or shape requirements. The default values for snr and shape requirements should be fine for most people. 
+
+Furthermore, even if a feature is only present in one sample, it will be reported, as we think this is important for applications like exposome and personalized medicine. The filtering decisions are left to end users.
 
 The `pickle` folder keeps intermediate files during processing.
 They are removed after the processing by default, to save disk space.
