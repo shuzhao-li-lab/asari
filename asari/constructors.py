@@ -22,11 +22,18 @@ class MassGrid:
 
         Parameters
         ----------
-        cmap : 
+        cmap : CompositeMap intance, optional, default: None
             CompositeMap instance.
-        experiment : 
+        experiment : ext_Experiment instance, optional, default: None
             ext_Experiment instance.
+
+        
+        Notes
+        -----
+        cmap and experiment are currently optional, but cmap appears to be required.
+        should refactor this if possible.
         '''
+
         self.experiment = experiment
         self.CMAP = cmap
         self.reference_sample_instance = self.CMAP.reference_sample_instance
@@ -36,7 +43,7 @@ class MassGrid:
         
     def build_grid_sample_wise(self):
         '''
-        Align one sample a time to reference m/z grid, based on their anchor m/z tracks.
+        Align one sample at a time to reference m/z grid, based on their anchor m/z tracks.
         One of the two methods to build the grid.
         This is better for reliable assembly of small number of samples.
 
@@ -148,9 +155,9 @@ class MassGrid:
 
         Parameters
         ----------
-        sample : 
+        sample : SimpleSample instance
             instance of SimpleSample class.
-        database_cursor : 
+        database_cursor : cursor object
             Not used now.
 
         Updates
@@ -189,9 +196,9 @@ class MassGrid:
 
         Parameters
         ----------
-        tl : 
+        tl : list[tuple]
             sorted list of all track m/z values in experiment, [(m/z, track_id, sample_id), ...]
-        reference_id: 
+        reference_id: str?
             the sample_id of reference sample. Not used now.
         
         Returns
@@ -240,6 +247,11 @@ class MassGrid:
     def join(self, M2):
         '''
         Placeholder. Future option to join with another MassGrid via a common reference.
+
+        Parameters
+        ----------
+        M2: MassGrid instance
+            the mass grid to be merged with this MassGrid
         '''
         pass
 
@@ -259,6 +271,11 @@ class CompositeMap:
     def __init__(self, experiment):
         '''
         Composite map of mass tracks and features, with pointers to individual samples.
+
+        Parameters
+        ----------
+        experiment: ext_experiment instance
+            the object representing the experiment from which to build the composite map
         '''
         self.experiment = experiment
         self._number_of_samples_ = experiment.number_of_samples
@@ -286,6 +303,11 @@ class CompositeMap:
         Wraps the reference_sample into a SimpleSample instance, so that
         it have same behaivors as other samples.
 
+        Parameters
+        ----------
+        reference_sample_id: any valid sample_id
+            this is used to retrieve the sample from the experiment's sample_registry
+
         Returns
         -------
         instance of SimpleSample class for the reference_sample.
@@ -301,6 +323,11 @@ class CompositeMap:
         '''
         Extrapolate retention time on self.reference_sample_instance to max scan number in the experiment.
         This will be used to calculate retention time in the end, as intermediary steps use scan numbers.
+
+        Parameters
+        ----------
+        rt_length: int
+            this represents the total number of scans
 
         Returns
         -------
@@ -409,9 +436,15 @@ class CompositeMap:
 
         self.composite_mass_tracks = result
 
-    def calibrate_sample_RT_by_standards(self, sample, ):
+    def calibrate_sample_RT_by_standards(self, sample):
         '''
-        Placeholder, to add RT calibration based on spikie-in compound standards.
+        Placeholder, to add RT calibration based on spike-in compound standards.
+
+        Parameters
+        ----------
+        sample: 
+            this will either be a SimpleSample object for the sample containing 
+            the spike-in standards.
         '''
         pass
 
@@ -427,17 +460,17 @@ class CompositeMap:
 
         Parameters
         ----------
-        sample : 
+        sample : SimpleSample instance
             instance of SimpleSample class
-        list_mass_tracks : 
+        list_mass_tracks : list
             list of mass tracks in sample. 
             This may not be kept in memeory with the sample instance, thus require retrieval.
-        calibration_fuction : 
+        calibration_fuction : function, optional, default: rt_lowess_calibration
             RT calibration fuction to use, default to rt_lowess_calibration.
-        cal_min_peak_height : 
+        cal_min_peak_height : float, optional, default: 100000
             minimal height required for a peak to be used for calibration.
             Only high-quality peaks unique in each mass track are used for calibration.
-        MIN_PEAK_NUM : 
+        MIN_PEAK_NUM : int, optional, default: 15
             minimal number of peaks required for calibration. Abort if not met.
 
         Updates
@@ -501,6 +534,11 @@ class CompositeMap:
         Do a quick peak detection for good peaks; use high selectivity m/z to avoid ambiguity 
         in peak definitions.
 
+        Parameters
+        ----------
+        cal_peak_intensity_threshold: float, optional, default: 100000
+            a peak must have an intensity above this value to be used as an RT_reference
+
         Returns
         ------- 
         good_reference_landmark_peaks: [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...]
@@ -531,7 +569,7 @@ class CompositeMap:
 
         Updates
         -------
-        self.FeatureList : 
+        self.FeatureList :
             a list of JSON peaks
         self.FeatureTable : 
             a pandas dataframe for features across all samples.
@@ -577,11 +615,11 @@ class CompositeMap:
 
         Parameters
         ----------
-        track_intensity : 
+        track_intensity : np.array[dtype=INTENSITY_DATA_TYPE]
             np.array, i.e. mass_track['intensity']
-        left_base :
+        left_base : int
             index for peak left base
-        right_base : 
+        right_base : int 
             index for peak right base
 
         Returns
@@ -598,11 +636,11 @@ class CompositeMap:
 
         Parameters
         ----------
-        track_intensity : 
+        track_intensity : np.array[dtype=INTENSITY_DATA_TYPE]
             np.array, i.e. mass_track['intensity']
-        left_base :
+        left_base : int
             index for peak left base
-        right_base : 
+        right_base : int
             index for peak right base
 
         Returns
@@ -621,11 +659,11 @@ class CompositeMap:
 
         Parameters
         ----------
-        track_intensity : 
+        track_intensity : np.array[dtype=INTENSITY_DATA_TYPE]
             np.array, i.e. mass_track['intensity']
-        left_base :
+        left_base : int
             index for peak left base
-        right_base : 
+        right_base : int
             index for peak right base
 
         Returns
@@ -661,9 +699,9 @@ class CompositeMap:
 
         Parameters
         ----------
-        sample : 
+        sample : SimpleSample instance
             instance of SimpleSample class.
-        peak_area_function :
+        peak_area_function : function
             function to be used for peak area calculation
 
         Returns
