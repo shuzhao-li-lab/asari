@@ -19,13 +19,13 @@ def batch_deep_detect_elution_peaks(list_mass_tracks, number_of_scans, parameter
     
     Parameters
     ----------
-    list_mass_tracks : 
+    list_mass_tracks : list[tuple]
         list of mass tracks. 
         Asari uses this on composite mass tracks in full experiment.
         But this can be generic mass tracks.
-    number_of_scans : 
+    number_of_scans : int
         number of scans, usually corresponding to maximum number in RT.
-    parameters :  
+    parameters :  dict
         parameter dictionary passed from main.py, 
         which imports from default_parameters and updates the dict by user arguments.
 
@@ -54,16 +54,16 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
 
     Parameters
     ----------
-    list_mass_tracks : 
+    list_mass_tracks : list[tuple]
         list of mass tracks. 
         Asari uses this on composite mass tracks in full experiment.
         But this can be generic mass tracks.
-    number_of_scans : 
+    number_of_scans : int
         number of scans, usually corresponding to maximum number in RT.
-    parameters :  
+    parameters :  dict
         parameter dictionary passed from main.py, 
         which imports from default_parameters and updates the dict by user arguments.
-    shared_list : 
+    shared_list : list
         list object used to pass data btw multiple processing.
 
     Returns
@@ -107,36 +107,36 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
 
     Parameters
     ----------
-    mass_track : 
+    mass_track : dict
         {'id_number': k, 'mz': mz, 'rt_scan_numbers': [..], 'intensity': [..]}
-    number_of_scans : 
+    number_of_scans : int
         number of scans in mass track.
-    min_peak_height : 
+    min_peak_height : float
         as in main parameters.
-    min_fwhm : 
+    min_fwhm : float
         taken as half of min_timepoints in main parameters.
-    min_prominence_threshold : 
+    min_prominence_threshold : float
         as in main parameters, default min_peak_height/3.
-    wlen : 
+    wlen : int
         window size for evaluating prominence in peaks. 
         Important to resolve clustered narrow peaks. Default 25 scans.
-    snr: 
+    snr: float
         minimal signal to noise ratio required for a peak. 
-    peakshape : 
+    peakshape : float
         parameters['gaussian_shape'], minimal shape score required for a peak.
-    min_prominence_ratio : 
+    min_prominence_ratio : float
         require ratio of prominence relative to peak height, default 0.05.
-    iteration : 
+    iteration : int
         not used in this function but possible to add iteration on high intensity ROIs 
         if peaks are not detected 1st round.
-    min_intensity_threshold : 
+    min_intensity_threshold : float
         as in main parameters.
-    shared_list : 
+    shared_list : list
         list used to exchange data in multiprocessing.
 
     Updates
     -------
-    shared_list: 
+    shared_list: list[dict]
         list of peaks in JSON format, to pool with batch_deep_detect_elution_peaks.
 
     Note
@@ -219,17 +219,17 @@ def compute_noise_by_flanks(peak,
 
     Parameters
     ----------
-    peak : 
+    peak : dict
         an elution peak in JSON format, e.g. 
         {'id_number': k, 'mz': mz, 'apex': x, 'left_base': xx, 'right_base': yy}
-    list_intensity : 
+    list_intensity : list
         list of intensity of an ROI.
-    noise_data_points : 
+    noise_data_points : list[int]
         the indices of data points that do not belong to any peak.
         Precomputed in stats_detect_elution_peaks.
-    min_intensity_threshold :
+    min_intensity_threshold : float
          minimal intensity threshold used for mass track extraction.
-    old_noise_level : 
+    old_noise_level : float
         fallback value if it fails to collect non-peak data points.
 
     Returns
@@ -265,24 +265,29 @@ def audit_mass_track(list_intensity,
 
     Parameters
     ----------
-    list_intensity : 
+    list_intensity : list[np.integer]
         list of intensity values from a mass track.
-    min_fwhm, min_intensity_threshold, min_peak_height, min_prominence_threshold : 
-        from parameter dictionary passed from main.py, 
-        which imports from default_parameters and updates the dict by user arguments.
+    min_fwhm : float
+        taken as half of min_timepoints in main parameters.
+    min_intensity_threshold : float
+        as in main parameters.
+    min_peak_height : float
+        as in main parameters.
+    min_prominence_ratio : float
+        require ratio of prominence relative to peak height, default 0.05.
 
     Returns
     -------
-    _baseline_ : 
+    _baseline_ : float
         estimated baseline level
-    noise_level : 
+    noise_level : float
         estimated noise level
-    scaling_factor : 
+    scaling_factor : float
         a normalization factor to scale the data under preset ceiling
-    new_prominence : 
+    new_prominence : float
         new prominence value, overwriting with noise_level if it is
         greater than the initial min_prominence_threshold.
-    list_intensity : 
+    list_intensity : list[np.integer]
         list of intensity values after being cleaned up here 
         (also subtracted by baseline).
     
@@ -345,26 +350,26 @@ def detect_evaluate_peaks_on_roi(list_intensity_roi, rt_numbers_roi,
      
     Parameters
     ----------
-    list_intensity : 
+    list_intensity : list[np.integer]
         list of intensity values from a mass track.
-    rt_numbers_roi : 
+    rt_numbers_roi : list[int]
         scan numbers that define the ROI.
-    min_peak_height : 
+    min_peak_height : float
         as in main parameters.
-    min_fwhm : 
+    min_fwhm : float
         taken as half of min_timepoints in main parameters.
-    min_prominence_threshold : 
+    min_prominence_threshold : float
         as in main parameters, default min_peak_height/3.
-    wlen : 
+    wlen : int
         window size for evaluating prominence in peaks. 
         Important to resolve clustered narrow peaks. Default 25 scans.
-    snr: 
+    snr: float
         minimal signal to noise ratio required for a peak. Not used here.
-    peakshape : 
+    peakshape : float 
         parameters['gaussian_shape'], minimal shape score required for a peak.
-    min_prominence_ratio : 
+    min_prominence_ratio : float 
         require ratio of prominence relative to peak height, default 0.05.
-    noise_level : 
+    noise_level : float
         estimated noise level on the mass track.
 
     Returns
@@ -404,17 +409,19 @@ def evaluate_roi_peak_json_(ii,
 
     Parameters
     ----------
-    ii :   
+    ii : int
         the ii-th peak to use in peaks. 
-    list_intensity :    
+    list_intensity : list[np.integer]   
         list of intensity values from a mass track.
-    rt_numbers_roi : 
+    rt_numbers_roi : list[int]
         scan numbers that define the ROI.
-    peaks, properties : 
-        as from scipy find_peaks.
-    peakshape : 
+    peaks : list[int]
+        as from scipy find_peaks
+    properties : dict
+        as from scipy find_peaks
+    peakshape : float
         parameters['gaussian_shape'], minimal shape score required for a peak.
-    min_fwhm : 
+    min_fwhm : float
         taken as half of min_timepoints in main parameters.
     
     Note
@@ -453,16 +460,16 @@ def __peaks_cSelectivity_stats_(__list_intensity, _jpeaks):
 
     Parameters
     ----------
-    __list_intensity : 
+    __list_intensity : list[np.integer]
         list of intensity values from a mass track.
-    _jpeaks : 
+    _jpeaks : list[dict]
         list of peaks in JSON dictionary format.
 
     Returns
     -------
-    list_cSelectivity : 
+    list_cSelectivity : list[float]
         list of cSelectivity, a value for each peak.
-    set_peak_datapoints : 
+    set_peak_datapoints : set
         a set of data points that belong to any peak.
         Later used for SNR calculation, which exclues these data points.
     '''
@@ -496,13 +503,13 @@ def gaussian_function__(x, a, mu, sigma):
 
     Parameters
     ----------
-    x : 
+    x : float
         input variable.
-    a : 
+    a : float
         constant for magnitude or height
-    mu : 
+    mu : float
         constant for center position
-    sigma : 
+    sigma : float
         constant for standard deviation
 
     Returns
@@ -523,10 +530,16 @@ def evaluate_gaussian_peak_on_intensity_list(intensity_list, height, apex, left,
     
     Parameters
     ----------
-    intensity_list : 
+    intensity_list : int[np.integer]
         list of intensity values.
-    height, apex, left, right : 
-        peak parameters.
+    height: float
+        estimated height of a peak
+    apex: float
+        estimated apex of a peak
+    left: float
+        estimated left bound of a peak
+    right: float
+        estimated right bound of a peak
 
     Returns
     -------
@@ -565,10 +578,16 @@ def get_gaussian_peakarea_on_intensity_list(intensity_list, left, right):
     
     Parameters
     ----------
-    intensity_list : 
+    intensity_list : list[np.integer]
         list of intensity values.
-    height, apex, left, right : 
-        peak parameters.
+    height: float
+        estimated height of a peak
+    apex: float
+        estimated apex of a peak
+    left: float
+        estimated left bound of a peak
+    right: float
+        estimated right bound of a peak
 
     Returns
     -------
@@ -598,6 +617,17 @@ def lowess_smooth_track(list_intensity, number_of_scans):
     because peak area is extracted from each sample after. 
     The likely slight expansion of peak bases can add to robustness.
     smooth_moving_average is preferred for most data. LOWESS is not good for small peaks.
+
+    Parameters
+    ----------
+    list_intensity: list[np.integer]
+        list of intensity values for a mass track
+    number_of_scans: int
+        the number of scans in the experiment
+
+    Returns
+    -------
+    The smoothed intensities of the mass tracks as smoothed by LOWESS.
     '''
     _frac_ = 0.05
     if number_of_scans < 200:
@@ -617,13 +647,13 @@ def quick_detect_unique_elution_peak(intensity_track,
 
     Parameters
     ----------
-    intensity_track : 
+    intensity_track : list[np.integer]
         list of intensity values from a mass track.
-    min_peak_height : 
+    min_peak_height : float
         minimal peak height required for a peak.
-    min_fwhm : 
+    min_fwhm : float
         minimal peak width required for a peak.
-    min_prominence_threshold_ratio : 
+    min_prominence_threshold_ratio : float
         require ratio of prominence relative to peak height.
 
     Returns
@@ -652,7 +682,7 @@ def check_overlap_peaks(list_peaks):
 
     Parameters
     ----------
-    list_peaks : 
+    list_peaks : list[dict]
         a list of peaks in JSON format.
 
     Returns
@@ -680,6 +710,17 @@ def check_overlap_peaks(list_peaks):
 def _check_overlap(peak1, peak2):
     '''
     Check if overlap btw (peak1, peak2) exceeds 3 scans. Returns True or False.
+
+    Parameters
+    ----------
+    peak1: dict
+        dictionary representing a peak, containing at least the keys left_base and right_base
+    peak2: dict
+        dictionary representing a peak, containing at least the keys left_base and right_base
+
+    Returns
+    -------
+    True if overlap exceeds three scans else False
     '''
     tuple1, tuple2 = (peak1['left_base'], peak1['right_base']), (
         peak2['left_base'], peak2['right_base'])
@@ -699,6 +740,11 @@ def _merge_peak_cluster(cluster_peaks):
     and the reported peak bases should not overlap by N scans.
     But good to have reevaluation of ROI if future developement desires so.
     Used by `cleanup_peak_cluster`.
+
+    Parameters
+    ----------
+    cluster_peaks: list[dict]
+        a list of peak dictionary from the same cluster
 
     Returns
     -------
@@ -722,6 +768,11 @@ def cleanup_peak_cluster(cluster_peaks):
     with the small peak. Mostly already controlled by wlen parameter.
     Used by `check_overlap_peaks`.
 
+    Parameters
+    ----------
+    cluster_peaks: list[dict]
+        a list of peak dictionary from the same cluster
+
     Returns
     ------
     list of peaks after cleanup.
@@ -743,7 +794,16 @@ def extend_ROI(ROI, number_of_scans):
     '''
     Add 3 datapoints to each end if ROI is too short (< 3*min_fwhm),
     so that peak detection does not run into boundary issues.
+
+    Parameters
+    ----------
+    ROI: list
+        rerpesenting a region of interest
+    number_of_scans: int
+        the number of scans an ROI must possess, if an ROI has fewer scans, 3 datapoints will be added
+        
     '''
     left = [x for x in [ROI[0]-3, ROI[0]-2, ROI[0]-1] if x >=0]
+    # todo - should we add *up to* 3 datapoints instead of 3 datapoints in the case that the difference is less than 3?
     right = [x for x in [ROI[-1]+1, ROI[-1]+2, ROI[-1]+3] if x < number_of_scans]
     return left + ROI + right

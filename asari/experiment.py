@@ -19,6 +19,7 @@ from .json_encoder import NpEncoder
 try:
     import importlib.resources as pkg_resources
 except ImportError:
+    # Shuzhao - what is the purpose of this? I'm assuming this is vestigial and can be removed?
     import importlib_resources as pkg_resources
 
 from . import db
@@ -47,10 +48,10 @@ class ext_Experiment:
 
         Parameters
         ----------
-        sample_registry : 
+        sample_registry : dict
             dictionary of sample and selected data after mass track extraction.
             The bulk mass track data are not kept in memory unless specified so.
-        parameters : 
+        parameters : dict
             processing parameters passed from main.py.
 
         Updates
@@ -103,7 +104,14 @@ class ext_Experiment:
     def get_max_scan_number(self, sample_registry):
         '''
         Return max scan number among samples, or None if no valid sample.
+
+        Parameters
+        ----------
+        sample_registry: dict
+            a dict that maps sample IDs to sample data
         '''
+
+        # todo - why does this function need to take sample_registry as an external argument vs. self.sample_registry?
         if sample_registry:
             return max([sample_registry[k]['max_scan_number'] for k in self.valid_sample_ids]) + 1
         else:
@@ -137,6 +145,11 @@ class ext_Experiment:
         '''
         Export all files.
         Annotation of features to empirical compounds is done here.
+
+        Paramters
+        ---------
+        anno: bool, optional, default: True
+            if true, generate the annotation of features to empirical compounds, else skip annotating.
         '''
         self.CMAP.MassGrid.to_csv(
             os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
@@ -226,6 +239,11 @@ class ext_Experiment:
         Load database of known compound using jms.dbStructures.knownCompoundDatabase.
         The compound tree is precomputed indexing.
         The `src` parameter is not used now, but placeholder to add more options later.
+
+        Parameters
+        ----------
+        src: str, optional, default: hmdb4
+            not used but can, in the future, dictate which database is used to generate annotations
         '''
         self.KCD = knownCompoundDatabase()
         self.KCD.mass_indexed_compounds = pickle.load( 
@@ -239,6 +257,11 @@ class ext_Experiment:
         which is calculated as the average ppm difference between measured m/z and theoretical values.
         If greater than required_calibrate_threshold (default 2 ppm), 
         calibrate m/z values for the whole experiment by updating self.CMAP.FeatureList.
+
+        Paramters
+        ---------
+        required_calibrate_treshold: float, optional, default: 0.000002
+            if the mass shift exceeds this value, mass correction will be applied. 
 
         Note
         ----
@@ -268,6 +291,12 @@ class ext_Experiment:
         to encapsulate features without annotation in empCpd format.
         Input via dict_empCpds and returns updated dict_empCpds.
         See also: annotate
+
+        Parameters
+        ----------
+        dict_empCpds: dict
+            a dictionary of empirical compounds in empCpd format
+
         '''
         all_feature_ids = []
         for _, V in dict_empCpds.items():
@@ -290,11 +319,11 @@ class ext_Experiment:
         
         Parameters
         ----------
-        dict_empCpds : 
+        dict_empCpds : dict
             dictionary of empirical compounds, using interim_id as key, as seen in JMS.
-        KCD : 
+        KCD : KnownCompoundDatabase instance
             the known compound database that was used in annotating the empirical compounds.
-        export_file_name_prefix : 
+        export_file_name_prefix : str
             to used in output file name.
         '''
         s = "[peak]id_number\tmz\trtime\tapex(scan number)\t[EmpCpd]interim_id\
@@ -328,6 +357,11 @@ class ext_Experiment:
         Get unique feature by highest composite peak area per empirical compound. 
         One may consider alternatives to select the peak representing an empirical compound,
         e.g. by SNR or M+H, M-H ions. This is can be done separately on the exported files.
+
+        Parameters
+        ----------
+        dict_empCpds : dict
+            dictionary of empirical compounds, using interim_id as key, as seen in JMS.
         '''
         self.selected_unique_features = {}
         for interim_id, V in dict_empCpds.items():
@@ -366,6 +400,17 @@ class ext_Experiment:
         apply to preferred table and unique_compound_table.
         Full table is filtered by initial peak detection parameters, 
         which contains lower values of snr and gaussian_shape.
+
+        Parameters
+        ----------
+        _snr: float, optional, default: 10
+            signal to noise ratio, peaks must have SNR above this value to be a preferred feature
+        _peak_shape: float, optional, default: 0.7
+            the goodness fitting for a peak must be above this value to be a preferred feature
+        _cSelectivity: float, optional, default: 0.7
+            the cSelectivity of a peak must be above this value to be a preferred feature
+
+
         '''
         good_samples = [sample.name for sample in self.all_samples] 
         filtered_FeatureTable = self.CMAP.FeatureTable[good_samples]                       

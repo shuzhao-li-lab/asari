@@ -20,9 +20,7 @@ class NpEncoder(json.JSONEncoder):
             np.integer -> int, np.floating -> float, np.ndarray -> list, else, the object
             is converted to its default serialization representation.
         '''
-
-
-
+        
         if isinstance(obj, np.integer):
             return int(obj)
         if isinstance(obj, np.floating):

@@ -22,8 +22,16 @@ def main(parameters=PARAMETERS):
         * annotate: annotate a list of features
         * join: merge multiple processed projects (possibly split a large dataset)
         * viz: start interactive data visualization and exploration.
+
+    Parameters
+    ----------
+    parameters : dict
+        This dictionary contains a number of key value pairs that determine the behavior of various aspects
+        of the asari processing. The parameters can be seen in default_parameters.py. Command line arguments
+        will override any defaults and any values provided in the parameters.json file. 
     '''
     def __run_process__(parameters, args):
+        
         # main process function
         list_input_files = read_project_dir(args.input)
         if not list_input_files:

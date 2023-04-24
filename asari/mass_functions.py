@@ -19,7 +19,7 @@ def flatten_tuplelist(L):
 
     Parameters
     ----------
-    L - list 
+    L : list[tuple]
         list of tuples [(a,b), ...]
 
     Return
@@ -36,7 +36,7 @@ def check_close_mzs(mzlist, ppm_tol=5):
 
     Parameters
     ----------
-    mzlist - list
+    mzlist : list[float]
         list of floating point values represented m/z's in ascending order
 
     Return
@@ -74,9 +74,9 @@ def calculate_selectivity(sorted_mz_list, std_ppm=5):
 
     Parameters
     ----------
-    sorted_mz_list: 
+    sorted_mz_list: list 
         a list of m/z values, sorted from low to high, length > 3.
-    std_ppm: 
+    std_ppm: float, optional, default: 5
         mass resolution in ppm (part per million).
 
     Returns
@@ -144,9 +144,11 @@ def mass_paired_mapping(list1, list2, std_ppm=5):
 
     Parameters
     ----------
-    list1, list2 : 
-        Two lists of m/z values, not ncessarily same length.
-    std_ppm : 
+    list1: list[float]
+        list of m/z values, not necessarially the same length as list2
+    list2: list[float]
+        list of m/z values, not necessarially the same length as list1
+    std_ppm: float, optional, default: 5 
         limit of instrument accuracy in matching m/z values. 
 
     Returns
@@ -220,10 +222,12 @@ def complete_mass_paired_mapping(list1, list2, std_ppm=5):
     
     Parameters
     ----------
-    list1, list2 : 
-        Two lists of m/z values, not ncessarily same length.
-    std_ppm : 
-        limit of instrument accuracy in matching m/z values.
+    list1: list[float]
+        list of m/z values, not necessarially the same length as list2
+    list2: list[float]
+        list of m/z values, not necessarially the same length as list1
+    std_ppm: float, optional, default: 5 
+        limit of instrument accuracy in matching m/z values. 
 
     Returns
     -------
@@ -282,9 +286,12 @@ def all_mass_paired_mapping(list1, list2, std_ppm=5):
 
     Parameters
     ----------
-    list1, list2 : Two lists of m/z values, not ncessarily same length.
-    std_ppm : limit of instrument accuracy in matching m/z values.
-
+    list1: list[float]
+        list of m/z values, not necessarially the same length as list2
+    list2: list[float]
+        list of m/z values, not necessarially the same length as list1
+    std_ppm: float, optional, default: 5 
+        limit of instrument accuracy in matching m/z values. 
     Returns
     -------
     mapped: list of mapped index pairs. E.g. [ (3, 6), (6, 8), (33, 151), ...] 
@@ -316,11 +323,14 @@ def _find_all_mzmatches_centurion_indexed_list(query_mz, mz_centurion_tree, limi
 
     Parameters
     ----------
-    query_mz: one query m/z value
-    mz_centurion_tree: indexed tree of m/z values, 
+    query_mz: float
+        one query m/z value
+    mz_centurion_tree: dict
+        indexed tree of m/z values, 
         mz_centurion_tree[cent] = [(mzList[ii], ii), ...]. 
         See mass2chem.search.build_centurion_tree_mzlist.
-    std_ppm : limit of ppm accuracy in matching m/z values.
+    std_ppm: float, optional, default: 5 
+        limit of ppm accuracy in matching m/z values.
 
     Returns
     -------
@@ -345,9 +355,14 @@ def mass_paired_mapping_with_correction(list1, list2, std_ppm=5, correction_tole
 
     Parameters
     ----------
-    list1, list2 : Two lists of m/z values, not ncessarily same length.
-    std_ppm : limit of instrument accuracy in matching m/z values.
-    correction_tolerance_ppm : threshold to trigger m/z recalibration of list2.
+    list1: list[float]
+        list of m/z values, not necessarially the same length as list2
+    list2: list[float]
+        list of m/z values, not necessarially the same length as list1
+    std_ppm: float, optional, default: 5 
+        limit of instrument accuracy in matching m/z values. 
+    correction_tolerance_ppm: float, optional, default: 1 
+        threshold to trigger m/z recalibration of list2.
 
     Returns
     -------
@@ -378,6 +393,21 @@ def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks,
     mz correction if needed, then completing the remaining m/z values.
     Since the landmarks are of high confidence, this improves the quality 
     of m/z alignment.
+
+    Parameters
+    ----------
+    REF_reference_mzlist: list
+        the list of mz values from the REF sample
+    REF_landmarks: list
+        the list of landmarks in the REF sample
+    SM_mzlist: list
+        the list of mz values in the sample
+    SM_landmarks: list
+        the list of landmarks in the sample
+    std_ppm: float, optional, default: 5
+        the assumed mass resolution in ppm
+    correction_tolerance_ppm: float, optional, default: 1
+        a mass correction is applied if the mass shift is above this value
 
     Returns
     -------
@@ -467,11 +497,11 @@ def bin_by_median(List_of_tuples, func_tolerance):
     
     Parameters
     ----------
-    List_of_tuples : 
+    List_of_tuples : list[tuple]
         [(value, object), (value, object), ...], 
         to be separated into bins by values (either rt or mz).
         objects have attribute of sample_name if to align elsewhere.
-    func_tolerance : 
+    func_tolerance : function
         tolearance function to define bounary to separate bins.
         
     Returns
@@ -504,6 +534,14 @@ def gap_divide_mz_cluster(bin_data_tuples, mz_tolerance):
     This is a fallback method when `identify_mass_peaks` fails.
     See `nn_cluster_by_mz_seeds`.
 
+    Parameters
+    ----------
+    bin_data_tuples: list[tuple]
+        a flexible bin in format of [(mz, scan_num, intensity_int), ...], 
+        or [(m/z, track_id, sample_id), ...].
+    mz_tolerance: 
+        the allowed tolerance in m/z values, NOT USED.
+
     Returns
     -------
     Two lists after dividing bin_data_tuples by the largest gap.
@@ -525,19 +563,21 @@ def identify_mass_peaks(bin_data_tuples, mz_tolerance, presorted=True):
 
     Parameters
     ----------
-    bin_data_tuples : 
+    bin_data_tuples : list[tuple]
         a flexible bin in format of [(mz, scan_num, intensity_int), ...], 
         or [(m/z, track_id, sample_id), ...].
-    mz_tolerance : 
+    mz_tolerance : float
         precomputed based on m/z and ppm, 
         e.g. 5 ppm of 80 = 0.0004;  5 ppm of 800 = 0.0040.
-    presorted : 
+    presorted : boolean, optional, default: True
         flag to determine if sorting is needed on bin_data_tuples.
     
     Returns
     -------
     A list of m/z values, peaks in m/z values distribution, at least mz_tolerance apart.
     '''
+
+    #todo - should identify mass peaks have a default mz_tolerance of 5 ppm? like the other asari functions?
     tol4 = int(mz_tolerance * 10000)
     size = max(2, int(0.5 * tol4))
     mz4 = [int(x[0]*10000) for x in bin_data_tuples]
@@ -565,13 +605,13 @@ def nn_cluster_by_mz_seeds(bin_data_tuples, mz_tolerance, presorted=True):
 
     Parameters
     ----------
-    bin_data_tuples : 
+    bin_data_tuples : list[tuple]
         a flexible bin in format of [(mz, scan_num, intensity_int), ...], 
         or [(m/z, track_id, sample_id), ...].
-    mz_tolerance : 
+    mz_tolerance : float
         precomputed based on m/z and ppm, 
         e.g. 5 ppm of 80 = 0.0004;  5 ppm of 800 = 0.0040.
-    presorted : 
+    presorted : boolean, optional, default: True
         flag to determine if sorting is needed on bin_data_tuples.
 
     Returns
