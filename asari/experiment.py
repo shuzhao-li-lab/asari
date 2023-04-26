@@ -231,7 +231,7 @@ class ext_Experiment:
             from .qc import asari_qc_plot
             # using prefilter CMAP.FeatureTable
             asari_qc_plot(self.CMAP.FeatureTable,
-                          os.path.join(self.parameters['outdir'], 'export', outfile))
+                          outfile=os.path.join(self.parameters['outdir'], 'export', outfile))
 
         except ImportError:
             print("[QC plot] cannot import matplotlib, skipping.")

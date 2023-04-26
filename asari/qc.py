@@ -22,10 +22,10 @@ def get_dataframe_from_file(infile, header=0, index_col=0, sep='\t', max_col=21)
                          )
 
 def asari_qc_plot(data, 
+                  outfile="qc_plot.pdf",
                   height=12,
                   aspect=0.7,
                   cmap = sns.color_palette("Spectral", as_cmap=True),
-                  outfile="qc_plot.pdf"
                   ):
     '''
     Plot asari QC metrics in a combined figure and save to a PDF file.
@@ -33,11 +33,11 @@ def asari_qc_plot(data,
     Parameters
     ----------
     data : dataframe as from asari feature table file, fixed column headers.
+    outfile : output file name.
     height : height of figure, as in seaborn.
     aspect : aspect of figure, as in seaborn.
     cmap : color map, as in seaborn/matplotlib.
-    outfile : output file name.
-
+    
     Outputs
     -------
     A PDF file of the combined figure for QC metrics.
