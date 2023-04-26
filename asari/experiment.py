@@ -149,13 +149,15 @@ class ext_Experiment:
         Paramters
         ---------
         anno: bool, optional, default: True
-            if true, generate the annotation of features to empirical compounds, else skip annotating.
+            if true, generate annotation files, export CMAP pickle and do QC plot;
+            else skip annotating.
         '''
         self.CMAP.MassGrid.to_csv(
             os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
         if anno:
             self.export_CMAP_pickle()
             self.annotate()
+            self.generate_qc_plot_pdf()
         self.export_feature_tables()
         self.export_log()
 
@@ -218,6 +220,20 @@ class ext_Experiment:
         outfile = os.path.join(self.parameters['outdir'], 'export', 'epd.pickle')
         with open(outfile, 'wb') as f:
             pickle.dump(EED.dict_empCpds, f, pickle.HIGHEST_PROTOCOL)
+
+    def generate_qc_plot_pdf(self, outfile="qc_plot.pdf"):
+        '''
+        Generates a PDF figure of a combined plot feature quality metrics.
+        Used only when --anno True (default).
+        Skip if matplotlib is missing.
+        '''
+        try:
+            from .qc import asari_qc_plot
+            # using prefilter CMAP.FeatureTable
+            asari_qc_plot(self.CMAP.FeatureTable)
+
+        except ImportError:
+            print("[QC plot] cannot import matplotlib, skipping.")
 
     def export_CMAP_pickle(self):
         '''
@@ -383,19 +399,9 @@ class ext_Experiment:
                     interim_id, V['neutral_formula'], best_peak.get('ion_relation', '')
                 )
 
-    def export_feature_tables(self, _snr=10, _peak_shape=0.7, _cSelectivity=0.7):
+    def export_feature_tables(self, _snr=2, _peak_shape=0.7, _cSelectivity=0.7):
         '''
-        To export features tables:
-
-        1. preferred table under `outdir`, after quality filtering 
-           by SNR, peak shape and chromatographic selectivity.
-
-        2. full table under `outdir/export/`
-
-        3. unique compound table under `outdir/export/`
-
-        4. dependent on `target` extract option, a targeted_extraction table under `outdir`.
-
+        To export multiple features tables. 
         Filtering parameters (_snr, _peak_shape, _cSelectivity) only 
         apply to preferred table and unique_compound_table.
         Full table is filtered by initial peak detection parameters, 
@@ -403,14 +409,21 @@ class ext_Experiment:
 
         Parameters
         ----------
-        _snr: float, optional, default: 10
+        _snr: float, optional, default: 2
             signal to noise ratio, peaks must have SNR above this value to be a preferred feature
         _peak_shape: float, optional, default: 0.7
             the goodness fitting for a peak must be above this value to be a preferred feature
         _cSelectivity: float, optional, default: 0.7
             the cSelectivity of a peak must be above this value to be a preferred feature
 
-
+        Outputs
+        -------
+        Multiple features tables under output directory:
+        1. preferred table under `outdir`, after quality filtering 
+           by SNR, peak shape and chromatographic selectivity.
+        2. full table under `outdir/export/`
+        3. unique compound table under `outdir/export/`
+        4. dependent on `target` extract option, a targeted_extraction table under `outdir`. 
         '''
         good_samples = [sample.name for sample in self.all_samples] 
         filtered_FeatureTable = self.CMAP.FeatureTable[good_samples]                       
