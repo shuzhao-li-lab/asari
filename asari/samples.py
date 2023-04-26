@@ -55,6 +55,7 @@ class SimpleSample:
             self.list_mass_tracks = []
             
         self._mz_landmarks_ = flatten_tuplelist(self.anchor_mz_pairs)
+        self.rt_landmarks = []  # to populate at CMAP.calibrate_sample_RT
 
         # These are critical RT calibration functions, index mapping with the reference sample
         self.rt_cal_dict = None
@@ -84,6 +85,21 @@ class SimpleSample:
             sample_data = self._get_sample_data()
             list_mass_tracks = sample_data['list_mass_tracks']
             return list_mass_tracks
+
+
+    def get_rt_calibration_records(self):
+        '''
+        Returns a dictionary of sample_id, name, 
+        rt_landmarks (list of apex scan numbers for the peaks used in RT calibration), 
+        reverse_rt_cal_dict (key=reference scan number, value=sample specific scan number).
+        '''
+        return {
+            'sample_id': self.sample_id,
+            'name': self.name,
+            'rt_landmarks': self.rt_landmarks,
+            'reverse_rt_cal_dict': self.reverse_rt_cal_dict,
+        }
+
 
     def _get_sample_data(self):
         '''

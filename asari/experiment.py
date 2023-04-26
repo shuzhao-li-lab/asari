@@ -239,10 +239,40 @@ class ext_Experiment:
     def export_CMAP_pickle(self):
         '''
         Export main CMAP data and MassGrid to pickle, which can be used for visual data exploration.
+
+        Included in exported pickle:{
+            '_number_of_samples_': self.CMAP._number_of_samples_,
+            'rt_length': self.CMAP.rt_length,
+            'rt_reference_landmarks': [p['apex'] 
+                                       for p in self.CMAP.good_reference_landmark_peaks],
+            'rt_records': [sample.get_rt_calibration_records()
+                                        for sample in self.all_samples
+                                        ],
+            'dict_scan_rtime': self.CMAP.dict_scan_rtime,
+            'list_mass_tracks': self.CMAP.composite_mass_tracks,
+            'MassGrid': dict(self.CMAP.MassGrid),}
+
+        rt_records includes for each sample: {
+            'sample_id': self.sample_id,
+            'name': self.name,
+            'rt_landmarks': self.rt_landmarks,
+            'reverse_rt_cal_dict': self.reverse_rt_cal_dict,
+        }
+
+        Note
+        ----
+            RT calibration is exported to include sample.reverse_rt_cal_dict, 
+            i.e. {key=reference scan number, value=sample specific scan number}.
+            May add data throttle in the future. The file cmap.pickle can get big.
         '''
         _export = {
             '_number_of_samples_': self.CMAP._number_of_samples_,
             'rt_length': self.CMAP.rt_length,
+            'rt_reference_landmarks': [p['apex'] 
+                                       for p in self.CMAP.good_reference_landmark_peaks],
+            'rt_records': [sample.get_rt_calibration_records()
+                                        for sample in self.all_samples
+                                        ],
             'dict_scan_rtime': self.CMAP.dict_scan_rtime,
             'list_mass_tracks': self.CMAP.composite_mass_tracks,
             'MassGrid': dict(self.CMAP.MassGrid),

@@ -482,7 +482,8 @@ class CompositeMap:
         sample.reverse_rt_cal_dict : 
             dictionary from ref RT scan numbers to sample RT scan numbers. 
             Range matched. Only changed numbers are kept for efficiency.
-
+        sample.rt_landmarks : 
+            list of apex scan numbers for the peaks used in RT calibration.
             
         Note
         ----
@@ -513,6 +514,7 @@ class CompositeMap:
                     selected_reference_landmark_peaks.append(self.good_reference_landmark_peaks[jj])
 
         _NN, _CALIBRATED = len(good_landmark_peaks), False
+        sample.rt_landmarks = [p['apex'] for p in good_landmark_peaks]
         # only do RT calibration if MIN_PEAK_NUM is met
         if _NN >  MIN_PEAK_NUM:
             try:
@@ -558,6 +560,8 @@ class CompositeMap:
                     if Upeak:
                         Upeak.update({'ref_id_num': self._mz_landmarks_[ii]}) # as in MassGrid index
                         good_reference_landmark_peaks.append(Upeak)
+
+        self.reference_sample.rt_landmarks = [p['apex'] for p in good_reference_landmark_peaks]
 
         return good_reference_landmark_peaks
 
