@@ -109,7 +109,7 @@ def register_samples(list_input_files):
     '''
     Establish sample_id here, return sample_registry as a dictionary.
 
-    Paramters
+    Parameters
     ---------
     list_input_files: list[str]
         list of input filepaths, each representing a sample

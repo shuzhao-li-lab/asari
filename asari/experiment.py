@@ -146,8 +146,8 @@ class ext_Experiment:
         Export all files.
         Annotation of features to empirical compounds is done here.
 
-        Paramters
-        ---------
+        Parameters
+        ----------
         anno: bool, optional, default: True
             if true, generate annotation files, export CMAP pickle and do QC plot;
             else skip annotating.
@@ -305,7 +305,7 @@ class ext_Experiment:
         If greater than required_calibrate_threshold (default 2 ppm), 
         calibrate m/z values for the whole experiment by updating self.CMAP.FeatureList.
 
-        Paramters
+        Parameters
         ---------
         required_calibrate_treshold: float, optional, default: 0.000002
             if the mass shift exceeds this value, mass correction will be applied. 
