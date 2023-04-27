@@ -166,6 +166,40 @@ def find_a_good_peak(peakDict):
     good = [P for P in peakDict.values() if P['goodness_fitting'] > 0.9 and P['cSelectivity'] > 0.9]
     return good[0]
 
+def prepare_rt_alignment(cmap):
+    """this method prepares necessary dataframe for retention time alignment.
+
+    Parameters
+    ----------
+    cmap : dict
+        pickle information read include all we need for retention time alignment
+
+    Returns
+    -------
+    dataframe
+        pandas dataframe ready for holoview drawing
+     
+    """
+    sample_reference_list = [rt_record['reverse_rt_cal_dict'] for rt_record in cmap['rt_records']]
+    rt_length = cmap['rt_length']
+
+    for i, d in enumerate(sample_reference_list):
+        # imputate the equal key-value pair
+        missing_keys = {k: k for k in range(rt_length) if k not in d}
+        d.update(missing_keys)
+        
+        # sort the dicts by key & map scan number to rtime & calculate the deviation
+        deviation_dict = {cmap['dict_scan_rtime'][k]: cmap['dict_scan_rtime'][d[k]]-cmap['dict_scan_rtime'][k] for k in sorted(d)}
+
+        sample_reference_list[i] = deviation_dict
+
+    sample_name_list = [record['name'] for record in cmap['rt_records']]
+    deviation_df = pd.DataFrame(sample_reference_list).T
+    deviation_df.reset_index().rename(columns={'index':'rtime'})
+    # rename columns
+    deviation_df.columns = sample_name_list
+
+    return deviation_df
 
 #
 # Summary panel
@@ -181,38 +215,48 @@ def get_summary_panel(project_desc, peakDict, epdDict, Ftable):
             "</ul><ul>This Dashboard shows all features of varying measurement quality. We recommend to use the preferred feature table for data analysis.</ul>"
     
     description = pn.pane.HTML(html)
-    height = 240
+    height = 330
+    width = 1000
     num_bins = int(np.sqrt(Ftable.shape[0]))
     # Feature m/z distribution histogram
     mz_distribution = Ftable['mz'].hvplot.hist(bins=num_bins, tools=[], 
-                        height=height, alpha=0.7, color='gold', hover=False,
+                        width = width, height=height, alpha=0.7, color='gold', hover=False,
                         ylabel="Count", title="Feature distribution by m/z"
                         ).opts(toolbar=None)
     # eature distribution by RT scatterplot
     Ftable['peak_area_sqrt'] = np.sqrt(Ftable['peak_area'])
-    rt_distribution = Ftable.hvplot.scatter(x='rtime', y='peak_area_sqrt', tools=[], height=height, size=2, hover=False,
+    rt_distribution = Ftable.hvplot.scatter(x='rtime', y='peak_area_sqrt', tools=[], width=width, height=height, size=2, hover=False,
                         title="Feature distribution by RT").opts(toolbar=None)
     # quality metrics
     Ftable['log10(SNR)'] = np.log10(Ftable['snr']+1)
     SNR = Ftable['log10(SNR)'].hvplot.hist(bins=num_bins, tools=[], 
-                        height=height, alpha=0.7, color='green', hover=False, 
+                        width=width,height=height, alpha=0.7, color='green', hover=False, 
                         ylabel="Count", title="Signal to noise ratio"
                         ).opts(toolbar=None)
     PeakShape = Ftable['goodness_fitting'].hvplot.hist(bins=num_bins, tools=[], 
-                        height=height, alpha=0.7, color='grey', hover=False, 
+                        width=width,height=height, alpha=0.7, color='grey', hover=False, 
                         ylabel="Count", title="Peak shape"
                         ).opts(toolbar=None)
     cSel = Ftable['cSelectivity'].hvplot.hist(bins=num_bins, tools=[], 
-                        height=height, alpha=0.7, color='red', hover=False, 
+                        width=width,height=height, alpha=0.7, color='red', hover=False, 
                         ylabel="Count", title="Chromatographic Selectivity"
                         ).opts(toolbar=None)
+    
+    # hard cap for legend is 20
+    if_legend = cmap['_number_of_samples_'] <= 20
+    RTAlign = prepare_rt_alignment(cmap).hvplot.line(title="Retention Time Deviation vs Retention Time",xlabel="Retention Time(sec)", 
+                ylabel="Retention Time Deviation(sec)", width=width, height=height,hover=False).opts(
+                show_legend=if_legend, legend_opts=dict(
+                title='',label_text_font_size='8pt',spacing=-5, location=(5, (height/2-cmap['_number_of_samples_']*11)), padding=3), toolbar=None)
+    
 
     feature_distribution = pn.Tabs(
-        ("Feature m/z distribution histogram", mz_distribution),
-        ("Feature distribution by RT scatterplot", rt_distribution),
-        ("Signal to noise ratio", SNR),
-        ("Peak shape", PeakShape),
-        ("Chromatographic Selectivity", cSel),
+        ("Feature m/z distribution histogram", pn.Column(mz_distribution)),
+        ("Feature distribution by RT scatterplot", pn.Column(rt_distribution)),
+        ("Signal to noise ratio", pn.Column(SNR)),
+        ("Peak shape", pn.Column(PeakShape)),
+        ("Chromatographic Selectivity", pn.Column(cSel)),
+        ("Retention Time Alignment", pn.Column(RTAlign)),
         )
     return pn.Column(
                     description,
