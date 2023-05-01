@@ -204,7 +204,7 @@ def prepare_rt_alignment(cmap):
 #
 # Summary panel
 #
-def get_summary_panel(project_desc, peakDict, epdDict, Ftable):
+def get_summary_panel(project_desc, peakDict, epdDict, Ftable, cmap):
     '''
     Get a summary panel, returns a panel.Column of multiple tabs for summary metrics.
     '''
@@ -276,7 +276,7 @@ def dashboard(project_desc, cmap, epd, Ftable):
     a_good_peak = find_a_good_peak(peakDict)
     track2peaks = track_to_peaks(peakDict)
     rt_list = [cmap['dict_scan_rtime'][ii] for ii in range(cmap['rt_length'])]
-    summary = get_summary_panel(project_desc, peakDict, epdDict, Ftable)
+    summary = get_summary_panel(project_desc, peakDict, epdDict, Ftable, cmap)
 
     #
     # Feature browser
