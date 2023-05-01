@@ -311,7 +311,7 @@ def get_thousandth_bins(mzTree, mz_tolerance_ppm=5, min_timepoints=5, min_peak_h
 
 def rt_lowess_calibration(good_landmark_peaks, 
                           selected_reference_landmark_peaks, 
-                          sample_rt_numbers, reference_rt_numbers):
+                          sample_rt_numbers, reference_rt_numbers, sample_name, outdir):
     '''
     This is the alignment function of retention time between samples.
     Use LOWESS, Locally Weighted Scatterplot Smoothing, to create 
@@ -330,6 +330,8 @@ def rt_lowess_calibration(good_landmark_peaks,
         all scan numbers in this sample.
     reference_rt_numbers : list
         all scan numbers in the ref sample.
+    sample_name : str
+        sample's name
 
     Returns
     -------
@@ -374,6 +376,94 @@ def rt_lowess_calibration(good_landmark_peaks,
     ref_interpolated = [int(round(ii)) for ii in ref_interpolated]
     reverse_rt_cal_dict = dict(
         [(x,y) for x,y in zip(reference_rt_numbers, ref_interpolated) if x!=y and 0<=y<=sample_rt_bound] )
+        
+    return rt_cal_dict, reverse_rt_cal_dict
+
+def rt_lowess_calibration_debug(good_landmark_peaks, 
+                          selected_reference_landmark_peaks, 
+                          sample_rt_numbers, reference_rt_numbers, sample_name, outdir):
+    '''
+    This is the debug version of rt_lowess_calibration.
+
+    Parameters
+    ----------
+    good_landmark_peaks : list[peak]
+        landmark peaks selected from this working sample.
+        Landmark peaks are usually defined by 13C/12C patterns.
+    selected_reference_landmark_peaks : list[peak]
+        landmark peaks selected from the reference sample,
+        matched and equal-length to good_landmark_peaks.
+    sample_rt_numbers : list
+        all scan numbers in this sample.
+    reference_rt_numbers : list
+        all scan numbers in the ref sample.
+    sample_name : str
+        sample's name
+
+    Returns
+    -------
+    rt_cal_dict : dict
+        dictionary converting scan number in sample_rt_numbers to calibrated integer values.
+        Range matched. Only changed numbers are kept for efficiency.
+    reverse_rt_cal_dict : dict
+        from ref RT scan numbers to sample RT scan numbers. 
+        Range matched. Only changed numbers are kept for efficiency.
+    
+    Outputs
+        -------
+    A PDF file showing the LOWESS regression result.
+        
+    Note
+    ----
+        LOWESS method available in statsmodels.nonparametric.smoothers_lowess, v 0.12, 0.13+
+        https://www.statsmodels.org/stable/generated/statsmodels.nonparametric.smoothers_lowess.lowess.html    
+        But xvals have to be forced as float array until the fix is in new release.
+        See __hacked_lowess__.
+    '''
+    import matplotlib.pyplot as plt
+    import os
+
+    # force left and right ends, to prevent runaway curve functions
+    reference_rt_bound = max(reference_rt_numbers)
+    sample_rt_bound = max(sample_rt_numbers)
+    rt_rightend_ = 1.1 * sample_rt_bound
+    xx, yy = [-0.1 * sample_rt_bound,]*3, [-0.1 * sample_rt_bound,]*3
+    rt_cal = sorted([(x[0]['apex'], x[1]['apex']) for x in zip(good_landmark_peaks, 
+                                                               selected_reference_landmark_peaks)])
+
+    xx += [L[0] for L in rt_cal] + [rt_rightend_]*3
+    yy += [L[1] for L in rt_cal] + [rt_rightend_]*3
+    
+    # This requires statsmodels > v 0.12.
+    # float conversion on xvals is to bypass a bug in statsmodels, which was fixed today 2022-01-27
+    #lowess_predicted = lowess(yy, xx, frac= .2, it=1, xvals=np.array(sample_rt_numbers, dtype=float)) 
+    #
+    # downgrade now for compatibility to older statsmodels
+    lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=1, xvals=sample_rt_numbers)
+    interf = interpolate.interp1d(lowess_predicted, sample_rt_numbers, fill_value="extrapolate")
+    ref_interpolated = interf( reference_rt_numbers )
+    lowess_predicted = [int(round(ii)) for ii in lowess_predicted]
+    rt_cal_dict = dict( 
+        [(x,y) for x,y in zip(sample_rt_numbers, lowess_predicted) if x!=y and 0<=y<=reference_rt_bound] )
+
+    ref_interpolated = [int(round(ii)) for ii in ref_interpolated]
+    reverse_rt_cal_dict = dict(
+        [(x,y) for x,y in zip(reference_rt_numbers, ref_interpolated) if x!=y and 0<=y<=sample_rt_bound] )
+    
+    plt.figure()
+    # export result figures for lowess regression
+    # Create the scatter plot and line plot
+    plt.scatter(xx[3:-3], yy[3:-3], label='Landmark peaks', color='black', marker='o')
+    plt.plot(sample_rt_numbers, lowess_predicted, label='Alignment function', color='red', linestyle='-')
+
+    # Customize your plot
+    plt.xlabel('Sample Retention Time (sec)')
+    plt.ylabel('Reference Retention Time (sec)')
+    plt.title('Retention Time Alignment')
+    plt.legend()
+
+    # Save the figure as a PNG file
+    plt.savefig(os.path.join(outdir, 'export', sample_name + '_rtime_alignment_result.png'))
         
     return rt_cal_dict, reverse_rt_cal_dict
 

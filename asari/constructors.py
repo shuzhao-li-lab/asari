@@ -418,7 +418,14 @@ class CompositeMap:
             list_mass_tracks = SM.get_masstracks_and_anchors()
 
             if self.experiment.parameters['rt_align_on'] and not SM.is_reference:
-                self.calibrate_sample_RT(SM, list_mass_tracks, 
+                if self.experiment.parameters['debug']:
+                    self.calibrate_sample_RT(SM, list_mass_tracks, 
+                                        calibration_fuction=rt_lowess_calibration_debug,
+                                        cal_min_peak_height=cal_min_peak_height, 
+                                        MIN_PEAK_NUM=MIN_PEAK_NUM)
+                else:
+                    self.calibrate_sample_RT(SM, list_mass_tracks, 
+                                        calibration_fuction=rt_lowess_calibration, 
                                         cal_min_peak_height=cal_min_peak_height, 
                                         MIN_PEAK_NUM=MIN_PEAK_NUM)
 
@@ -520,7 +527,8 @@ class CompositeMap:
             try:
                 sample.rt_cal_dict, sample.reverse_rt_cal_dict = calibration_fuction( 
                                             good_landmark_peaks, selected_reference_landmark_peaks, 
-                                            sample.rt_numbers, self.reference_sample.rt_numbers, )
+                                            sample.rt_numbers, self.reference_sample.rt_numbers, sample.name,
+                                            self.experiment.parameters['outdir'])
                 _CALIBRATED = True
             except:         # ValueError:
                 pass
