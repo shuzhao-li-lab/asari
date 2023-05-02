@@ -22,6 +22,8 @@ Install
 
 - Or clone from source code: https://github.com/shuzhao-li/asari . One can run it as a Python module by calling Python interpreter. GitHub repo is often ahead of PyPi versions.
 
+- Requires Python 3.8+. Installation time ~ 5 seconds.
+
 Use 
 ===
 If installed from pip, one can run `asari` as a command in a terminal, followed by a subcommand for specific tasks.
@@ -193,7 +195,13 @@ Source code: https://github.com/shuzhao-li/asari
 
 Package Repository: https://pypi.org/project/asari-metabolomics/
 
-Related projects:
+Test data: https://github.com/shuzhao-li/data/tree/main/data
+
+Notebooks to reproduce publication figures: https://github.com/shuzhao-li/data/tree/main/notebooks
+
+
+Related projects
+================
 
 Mummichog: metabolomics pathway/network analysis
 
