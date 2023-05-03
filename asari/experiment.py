@@ -592,12 +592,17 @@ class ext_Experiment:
         """
         for K, V in dict_empCpds.items():
             matched_DB_shorts = match_result[K]['matched_DB_records_no_parentheses']
+            index = 0
             for db_short in matched_DB_shorts:
                 V['identity'].append({
                     'compounds':[r.split("$")[0] for r in db_short.split(";")],
-                    'names':[r.split("$")[1] for r in db_short.split(";")]
+                    'names':[r.split("$")[1] for r in db_short.split(";")],
+                    'neutral_formula':V['list_matches'][index][0].split("_")[0],
+                    'neutral_formula_mass':V['list_matches'][index][0].split("_")[1],
                 })
-        
+                index += 1
+
+            
         
 
 
