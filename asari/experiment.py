@@ -564,7 +564,7 @@ class ext_Experiment:
                     match_result[K]['matched_DB_records'] = [str(xx) for xx in list_matches]
                     match_result[K]['matched_DB_records_no_parentheses'] = [KCD.short_report_emp_cpd(xx[0]) for xx in list_matches]
         
-        return (match_result)
+        return match_result
 
     def refactor_empCpds_for_JSON_output(self, dict_empCpds, match_result):
         """refactor matched KCD result into 'identity' section.
@@ -574,20 +574,42 @@ class ext_Experiment:
         dict_empCpds : dict
             dictionary of empirical compounds, using interim_id as key, as seen in JMS.
         match_result : dict
-            result of matching KCD
+            result of matching KCD generated in function match_KCD().
 
         Outputs
         --------
             "identity": [
-            {'compounds': ['HMDB0000195'], 'names': ['Inosine'], 
-                    'score': 0.6, 'probability': null},
-            {'compounds': ['HMDB0000195', 'HMDB0000481'], 'names': ['Inosine', 'Allopurinol riboside'], 
-                    'score': 0.1, 'probability': null},
-            {'compounds': ['HMDB0000481'], 'names': ['Allopurinol riboside'], 
-                    'score': 0.1, 'probability': null},
-            {'compounds': ['HMDB0003040''], 'names': ['Arabinosylhypoxanthine'], 
-                    'score': 0.05, 'probability': null},
+            {
+                "compounds": [
+                    "HMDB0028693",
+                    "HMDB0029124"
+                ],
+                "names": [
+                    "Alanylmethionine",
+                    "Valylcysteine"
+                ],
+                "neutral_formula": "C8H16N2O3S",
+                "neutral_formula_mass": "220.088164"
+            },
+            {
+                "compounds": [
+                    "HMDB0028788",
+                    "HMDB0028966"
+                ],
+                "names": [
+                    "Cysteinyl-Valine",
+                    "Methionyl-Alanine"
+                ],
+                "neutral_formula": "C8H16N2O3S",
+                "neutral_formula_mass": "220.088163"
+            }
             ]
+        
+        Example
+        -------
+            db_short's format: '(HMDB0000670$Homo-L-arginine;HMDB0029416$L-Targinine)'
+            list_matches' format: '[('C7H12N2O4_188.079707', '', 1)]'
+
          
         """
         for K, V in dict_empCpds.items():
