@@ -206,12 +206,15 @@ class ext_Experiment:
         # Third, the remaining features unmatched to anything (orphans). Exported for potential downstream work.
         EED.dict_empCpds = self.append_orphans_to_epmCpds(EED.dict_empCpds)
 
-        self.export_peak_annotation(EED.dict_empCpds, self.KCD, 'Feature_annotation')
+
+        match_result = self.match_KCD(EED.dict_empCpds, self.KCD)
+        self.export_peak_annotation(EED.dict_empCpds, match_result, 'Feature_annotation')
 
         if self.sample_registry:                    # check because some subcommands may not have sample_registry
             self.select_unique_compound_features(EED.dict_empCpds)
         
         # export JSON
+        self.refactor_empCpds_for_JSON_output(EED.dict_empCpds, match_result)
         outfile = os.path.join(self.parameters['outdir'], 'Annotated_empricalCompounds.json')
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(EED.dict_empCpds, f, cls=NpEncoder, ensure_ascii=False, indent=2)
@@ -360,7 +363,7 @@ class ext_Experiment:
 
         return dict_empCpds
 
-    def export_peak_annotation(self, dict_empCpds, KCD, export_file_name_prefix):
+    def export_peak_annotation(self, dict_empCpds, match_result, export_file_name_prefix):
         '''
         Export feature annotation to tab delimited tsv file, where interim_id is empCpd id.
         
@@ -377,14 +380,11 @@ class ext_Experiment:
             \t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\
             \tname_1st_guess\tmatched_DB_shorts\tmatched_DB_records\n"
         
-        for _, V in dict_empCpds.items():
-            name_1st_guess, matched_DB_shorts, matched_DB_records = '', '', ''
-            if 'list_matches' in V:
-                list_matches = V['list_matches']
-                if list_matches:
-                    name_1st_guess = KCD.mass_indexed_compounds[list_matches[0][0]]['compounds'][0]['name']
-                    matched_DB_shorts = ", ".join([ "(" + KCD.short_report_emp_cpd(xx[0]) + ")"  for xx in list_matches])
-                    matched_DB_records = ", ".join([str(xx) for xx  in list_matches])
+        for K, V in dict_empCpds.items():
+
+            name_1st_guess = match_result[K]['name_1st_guess']
+            matched_DB_shorts = ", ".join(match_result[K]['matched_DB_shorts'])
+            matched_DB_records = ", ".join(match_result[K]['matched_DB_records'])
 
             for peak in V['MS1_pseudo_Spectra']:
                 s += '\t'.join([str(x) for x in [
@@ -527,3 +527,78 @@ class ext_Experiment:
         outfile = os.path.join(self.parameters['outdir'], 'project.json')
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(self.parameters, f, cls=NpEncoder, ensure_ascii=False, indent=2)
+
+
+    def match_KCD(self, dict_empCpds, KCD):
+        """match these empirical compounds to KCD.
+
+        Parameters
+        ----------
+        dict_empCpds : dict
+            dictionary of empirical compounds, using interim_id as key, as seen in JMS.
+        KCD : KnownCompoundDatabase
+            JMS class storing known compound information using for annotation
+
+        Returns
+        -------
+        dict
+            dict containing database matched records using in .tsv and .json output. 
+
+         
+        """
+        
+        match_result = {}
+        
+        for K, V in dict_empCpds.items():
+            match_result[K] = {
+                'name_1st_guess':"",
+                'matched_DB_shorts':"",
+                'matched_DB_records':"",
+                'matched_DB_records_no_parentheses':""
+            }
+            if 'list_matches' in V:
+                list_matches = V['list_matches']
+                if list_matches:
+                    match_result[K]['name_1st_guess'] = KCD.mass_indexed_compounds[list_matches[0][0]]['compounds'][0]['name']
+                    match_result[K]['matched_DB_shorts'] = [ "(" + KCD.short_report_emp_cpd(xx[0]) + ")"  for xx in list_matches]
+                    match_result[K]['matched_DB_records'] = [str(xx) for xx in list_matches]
+                    match_result[K]['matched_DB_records_no_parentheses'] = [KCD.short_report_emp_cpd(xx[0]) for xx in list_matches]
+        
+        return (match_result)
+
+    def refactor_empCpds_for_JSON_output(self, dict_empCpds, match_result):
+        """refactor matched KCD result into 'identity' section.
+
+        Parameters
+        ----------
+        dict_empCpds : dict
+            dictionary of empirical compounds, using interim_id as key, as seen in JMS.
+        match_result : dict
+            result of matching KCD
+
+        Outputs
+        --------
+            "identity": [
+            {'compounds': ['HMDB0000195'], 'names': ['Inosine'], 
+                    'score': 0.6, 'probability': null},
+            {'compounds': ['HMDB0000195', 'HMDB0000481'], 'names': ['Inosine', 'Allopurinol riboside'], 
+                    'score': 0.1, 'probability': null},
+            {'compounds': ['HMDB0000481'], 'names': ['Allopurinol riboside'], 
+                    'score': 0.1, 'probability': null},
+            {'compounds': ['HMDB0003040''], 'names': ['Arabinosylhypoxanthine'], 
+                    'score': 0.05, 'probability': null},
+            ]
+         
+        """
+        for K, V in dict_empCpds.items():
+            matched_DB_shorts = match_result[K]['matched_DB_records_no_parentheses']
+            for db_short in matched_DB_shorts:
+                V['identity'].append({
+                    'compounds':[r.split("$")[0] for r in db_short.split(";")],
+                    'names':[r.split("$")[1] for r in db_short.split(";")]
+                })
+        
+        
+
+
+
