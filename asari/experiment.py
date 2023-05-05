@@ -356,8 +356,8 @@ class ext_Experiment:
         # will need better tracking of empCpd ID; already used in jms.dbStructures new_id_start = len(self.dict_empCpds) + 10000
         new_id_start = len(dict_empCpds) + 100000
         for peak in orphans:
-            dict_empCpds[new_id_start] = {'interim_id': new_id_start,
-                    'neutral_formula_mass': '', 'neutral_formula': '',
+            dict_empCpds[new_id_start] = {'interim_id': str(new_id_start),
+                    'neutral_formula_mass': None, 'neutral_formula': None,
                     'MS1_pseudo_Spectra': [peak] }
             new_id_start += 1
 
