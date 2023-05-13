@@ -155,6 +155,8 @@ class ext_Experiment:
         self.CMAP.MassGrid.to_csv(
             os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
         if anno:
+            for peak in self.CMAP.FeatureList:
+                peak['id'] = str(peak['id_number'])
             self.export_CMAP_pickle()
             self.annotate()
             self.generate_qc_plot_pdf()
