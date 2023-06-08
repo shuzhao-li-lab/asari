@@ -14,8 +14,11 @@ gaussian_shape: 0.3
 min_intensity_threshold: 1000
 min_peak_height: 10000
 min_timepoints: 6
-prominence_window: 30
 rt_align_method: lowess
 rt_align_on: true
 rtime_tolerance: 50
 signal_noise_ratio: 5
+wlen: 25
+
+# this seems to not be used, replaced by wlen, will remove in future version
+prominence_window: 25

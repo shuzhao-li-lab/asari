@@ -76,6 +76,8 @@ def main(parameters=PARAMETERS):
             help='file of m/z list for targeted extraction')
     parser.add_argument('--database_mode', default='auto',
             help='determines how intermediates are stored, can be "ondisk" or "memory"')
+    parser.add_argument('--wlen', default=25, type=int,
+            help='determines the number of rt points used when calculating peak prominence')
     
     parser.add_argument('--autoheight', default=False,
             help='automatic determining min peak height')
@@ -117,6 +119,10 @@ def main(parameters=PARAMETERS):
         parameters['anno'] = booleandict[args.anno]
     if args.reference:
         parameters['reference'] = args.reference
+    if args.database_mode:
+        parameters['database_mode'] = args.database_mode
+    if args.wlen:
+        parameters['wlen'] = args.wlen
 
     if args.run == 'process':
         __run_process__(parameters, args)
