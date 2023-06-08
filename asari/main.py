@@ -74,7 +74,9 @@ def main(parameters=PARAMETERS):
             help='designated reference file for alignments')
     parser.add_argument('--target', 
             help='file of m/z list for targeted extraction')
-
+    parser.add_argument('--database_mode', default='auto',
+            help='determines how intermediates are stored, can be "ondisk" or "memory"')
+    
     parser.add_argument('--autoheight', default=False,
             help='automatic determining min peak height')
     parser.add_argument('--peak_area', default='sum',
