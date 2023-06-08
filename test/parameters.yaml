@@ -19,6 +19,3 @@ rt_align_on: true
 rtime_tolerance: 50
 signal_noise_ratio: 5
 wlen: 25
-
-# this seems to not be used, replaced by wlen, will remove in future version
-prominence_window: 25
