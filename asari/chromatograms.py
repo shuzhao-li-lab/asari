@@ -311,7 +311,7 @@ def get_thousandth_bins(mzTree, mz_tolerance_ppm=5, min_timepoints=5, min_peak_h
 
 def rt_lowess_calibration(good_landmark_peaks, 
                           selected_reference_landmark_peaks, 
-                          sample_rt_numbers, reference_rt_numbers, sample_name, outdir):
+                          sample_rt_numbers, reference_rt_numbers, num_iterations, sample_name, outdir):
     '''
     This is the alignment function of retention time between samples.
     Use LOWESS, Locally Weighted Scatterplot Smoothing, to create 
@@ -366,7 +366,7 @@ def rt_lowess_calibration(good_landmark_peaks,
     #lowess_predicted = lowess(yy, xx, frac= .2, it=1, xvals=np.array(sample_rt_numbers, dtype=float)) 
     #
     # downgrade now for compatibility to older statsmodels
-    lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=1, xvals=sample_rt_numbers)
+    lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=num_iterations, xvals=sample_rt_numbers)
     interf = interpolate.interp1d(lowess_predicted, sample_rt_numbers, fill_value="extrapolate")
     ref_interpolated = interf( reference_rt_numbers )
     lowess_predicted = [int(round(ii)) for ii in lowess_predicted]
@@ -381,7 +381,7 @@ def rt_lowess_calibration(good_landmark_peaks,
 
 def rt_lowess_calibration_debug(good_landmark_peaks, 
                           selected_reference_landmark_peaks, 
-                          sample_rt_numbers, reference_rt_numbers, sample_name, outdir):
+                          sample_rt_numbers, reference_rt_numbers, num_iterations, sample_name, outdir):
     '''
     This is the debug version of rt_lowess_calibration.
 
@@ -439,7 +439,7 @@ def rt_lowess_calibration_debug(good_landmark_peaks,
     #lowess_predicted = lowess(yy, xx, frac= .2, it=1, xvals=np.array(sample_rt_numbers, dtype=float)) 
     #
     # downgrade now for compatibility to older statsmodels
-    lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=1, xvals=sample_rt_numbers)
+    lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=num_iterations, xvals=sample_rt_numbers)
     interf = interpolate.interp1d(lowess_predicted, sample_rt_numbers, fill_value="extrapolate")
     ref_interpolated = interf( reference_rt_numbers )
     lowess_predicted = [int(round(ii)) for ii in lowess_predicted]
@@ -461,10 +461,9 @@ def rt_lowess_calibration_debug(good_landmark_peaks,
     plt.ylabel('Reference Retention Time (sec)')
     plt.title('Retention Time Alignment')
     plt.legend()
-
     # Save the figure as a PNG file
     plt.savefig(os.path.join(outdir, 'export', sample_name + '_rtime_alignment_result.png'))
-        
+    plt.show()
     return rt_cal_dict, reverse_rt_cal_dict
 
 

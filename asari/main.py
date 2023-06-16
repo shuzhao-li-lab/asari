@@ -78,7 +78,10 @@ def main(parameters=PARAMETERS):
             help='determines how intermediates are stored, can be "ondisk" or "memory"')
     parser.add_argument('--wlen', default=25, type=int,
             help='determines the number of rt points used when calculating peak prominence')
-    
+    parser.add_argument('--max_retention_shift', default=None,
+            help='alignment is attempted only using peak pairs differing by this value in seconds or fewer')
+    parser.add_argument('--num_lowess_iterations', type=int, default=1,
+            help='number of lowess iterations attempted during alignment')
     parser.add_argument('--autoheight', default=False,
             help='automatic determining min peak height')
     parser.add_argument('--peak_area', default='sum',
@@ -123,6 +126,10 @@ def main(parameters=PARAMETERS):
         parameters['database_mode'] = args.database_mode
     if args.wlen:
         parameters['wlen'] = args.wlen
+    if args.max_retention_shift:
+        parameters['max_retention_shift'] = float(args.max_retention_shift)
+    if args.num_lowess_iterations:
+        parameters['num_lowess_iterations'] = args.num_lowess_iterations
 
     if args.run == 'process':
         __run_process__(parameters, args)
