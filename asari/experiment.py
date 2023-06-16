@@ -83,6 +83,9 @@ class ext_Experiment:
             for k,v in self.sample_registry.items():
                 if os.path.basename(self.parameters['reference']) == os.path.basename(v['input_file']):
                     return k
+                elif os.path.basename(self.parameters['reference']) + ".mzML" == os.path.basename(v['input_file']):
+                    return k
+
         elif self.sample_registry:
             L = [(v['number_anchor_mz_pairs'], v['sample_id']) for v in self.sample_registry.values()]
             L.sort(reverse=True)
