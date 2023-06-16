@@ -359,8 +359,11 @@ class ext_Experiment:
         new_id_start = len(dict_empCpds) + 100000
         for peak in orphans:
             dict_empCpds[new_id_start] = {'interim_id': new_id_start,
-                    'neutral_formula_mass': '', 'neutral_formula': '',
-                    'MS1_pseudo_Spectra': [peak] }
+                    'neutral_formula_mass': '', 
+                    'neutral_formula': '',
+                    'MS1_pseudo_Spectra': [peak],
+                    'ion_relation': None,
+                    'modification': None}
             new_id_start += 1
 
         return dict_empCpds
