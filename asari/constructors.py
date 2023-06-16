@@ -537,8 +537,7 @@ class CompositeMap:
                         Upeak.update({'ref_id_num': ii})
                         good_landmark_peaks.append(Upeak)
                         selected_reference_landmark_peaks.append(self.good_reference_landmark_peaks[jj])
-        plt.scatter(X, Y)
-        plt.show()
+
         _NN, _CALIBRATED = len(good_landmark_peaks), False
         print(sample.name, _NN)
 
