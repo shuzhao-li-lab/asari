@@ -1,6 +1,5 @@
 import pickle
 from .mass_functions import flatten_tuplelist
-from .workflow import *
 
 class SimpleSample:
     '''
