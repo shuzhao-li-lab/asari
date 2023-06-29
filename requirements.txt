@@ -10,3 +10,5 @@ pyyaml
 panel
 holoviews
 hvplot
+seaborn
+matplotlib
