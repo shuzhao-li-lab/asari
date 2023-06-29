@@ -1,5 +1,6 @@
 __version__ = "1.11.6"
 
+'''
 import sys
 import importlib
 import pkgutil
@@ -23,3 +24,4 @@ def import_submodules(package_name):
         for loader, name, is_pkg in pkgutil.walk_packages(package.__path__)
     }
 __all__ = import_submodules(__name__).keys()
+'''
