@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.abspath(dir_path))
 project = 'asari'
 copyright = '2023, Shuzhao Li, Amnah Siddiqa, Maheshwor Thapa, Shujian Zheng'
 author = 'Shuzhao Li, Amnah Siddiqa, Maheshwor Thapa, Shujian Zheng'
-release = '1.11.1'
+release = '1.15.6'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
