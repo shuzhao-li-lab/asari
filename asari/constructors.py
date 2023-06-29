@@ -404,6 +404,12 @@ class CompositeMap:
 
         cal_min_peak_height = self.experiment.parameters['cal_min_peak_height']
         MIN_PEAK_NUM = self.experiment.parameters['peak_number_rt_calibration']
+        NUM_ITERATIONS = self.experiment.parameters['num_lowess_iterations']
+        if self.experiment.parameters['max_retention_shift'] is None:
+            MAX_RETENTION_SHIFT = np.inf
+        else:
+            MAX_RETENTION_SHIFT = self.experiment.parameters['max_retention_shift'] * 10
+
         self.good_reference_landmark_peaks = self.set_RT_reference(cal_min_peak_height)
         
         mzDict = dict(self.MassGrid['mz'])
@@ -422,12 +428,16 @@ class CompositeMap:
                     self.calibrate_sample_RT(SM, list_mass_tracks, 
                                         calibration_fuction=rt_lowess_calibration_debug,
                                         cal_min_peak_height=cal_min_peak_height, 
-                                        MIN_PEAK_NUM=MIN_PEAK_NUM)
+                                        MIN_PEAK_NUM=MIN_PEAK_NUM,
+                                        MAX_RETENTION_SHIFT=MAX_RETENTION_SHIFT,
+                                        NUM_ITERATIONS=NUM_ITERATIONS)
                 else:
                     self.calibrate_sample_RT(SM, list_mass_tracks, 
                                         calibration_fuction=rt_lowess_calibration, 
                                         cal_min_peak_height=cal_min_peak_height, 
-                                        MIN_PEAK_NUM=MIN_PEAK_NUM)
+                                        MIN_PEAK_NUM=MIN_PEAK_NUM,
+                                        MAX_RETENTION_SHIFT=MAX_RETENTION_SHIFT,
+                                        NUM_ITERATIONS=NUM_ITERATIONS)
 
             for k in mzlist:
                 ref_index = self.MassGrid[SM.name][k]
@@ -461,7 +471,9 @@ class CompositeMap:
                                 list_mass_tracks,
                                 calibration_fuction=rt_lowess_calibration, 
                                 cal_min_peak_height=100000,
-                                MIN_PEAK_NUM=15):
+                                MIN_PEAK_NUM=15,
+                                MAX_RETENTION_SHIFT=np.inf,
+                                NUM_ITERATIONS=1):
         '''
         Calibrate/align retention time per sample.
 
@@ -502,11 +514,12 @@ class CompositeMap:
             and the sample will be attached later without adjusting retention time.
             To consider to enforce good_landmark_peaks to cover RT range evenly in the future.
         '''
+        import matplotlib.pyplot as plt
         candidate_landmarks = [self.MassGrid[sample.name].values[
                                 p['ref_id_num']] for p in 
                                 self.good_reference_landmark_peaks] # contains NaN
         good_landmark_peaks, selected_reference_landmark_peaks = [], []
-
+        X, Y = [], []
         for jj in range(len(self.good_reference_landmark_peaks)):
             ii = candidate_landmarks[jj]
             if not pd.isna(ii):
@@ -515,23 +528,27 @@ class CompositeMap:
                 Upeak = quick_detect_unique_elution_peak(this_mass_track['intensity'], 
                             min_peak_height=cal_min_peak_height, 
                             min_fwhm=3, min_prominence_threshold_ratio=0.2)
+                
                 if Upeak:
-                    Upeak.update({'ref_id_num': ii})
-                    good_landmark_peaks.append(Upeak)
-                    selected_reference_landmark_peaks.append(self.good_reference_landmark_peaks[jj])
+                    rt_delta = Upeak['apex'] - self.good_reference_landmark_peaks[jj]['apex']
+                    X.append(Upeak['apex'])
+                    Y.append(rt_delta)
+                    if abs(rt_delta) < MAX_RETENTION_SHIFT:
+                        Upeak.update({'ref_id_num': ii})
+                        good_landmark_peaks.append(Upeak)
+                        selected_reference_landmark_peaks.append(self.good_reference_landmark_peaks[jj])
 
         _NN, _CALIBRATED = len(good_landmark_peaks), False
+        print(sample.name, _NN)
+
         sample.rt_landmarks = [p['apex'] for p in good_landmark_peaks]
         # only do RT calibration if MIN_PEAK_NUM is met
         if _NN >  MIN_PEAK_NUM:
-            try:
-                sample.rt_cal_dict, sample.reverse_rt_cal_dict = calibration_fuction( 
-                                            good_landmark_peaks, selected_reference_landmark_peaks, 
-                                            sample.rt_numbers, self.reference_sample.rt_numbers, sample.name,
-                                            self.experiment.parameters['outdir'])
-                _CALIBRATED = True
-            except:         # ValueError:
-                pass
+            sample.rt_cal_dict, sample.reverse_rt_cal_dict = calibration_fuction( 
+                                        good_landmark_peaks, selected_reference_landmark_peaks, 
+                                        sample.rt_numbers, self.reference_sample.rt_numbers, NUM_ITERATIONS, sample.name,
+                                        self.experiment.parameters['outdir'])
+            _CALIBRATED = True
         if not _CALIBRATED:
                 sample.rt_cal_dict, sample.reverse_rt_cal_dict =  {}, {}
                 print("    ~warning~ Faluire in retention time alignment (%d); %s is used without alignment." 
