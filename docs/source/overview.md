@@ -1,5 +1,7 @@
 Overview
 ========
+[![Documentation Status](https://readthedocs.org/projects/asari/badge/?version=latest)](https://asari.readthedocs.io/en/latest/?badge=latest)
+
 Trackable and scalable Python program for high-resolution LC-MS metabolomics data preprocessing, 
 
 - Taking advantage of high mass resolution to prioritize mass separation and alignment
@@ -11,14 +13,16 @@ Trackable and scalable Python program for high-resolution LC-MS metabolomics dat
 - Transparent, JSON centric data structures, easy to chain other tools
 
 Input data are centroied mzML files.
-We use [ThermoRawFileParser](https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
-Msconvert in [ProteoWizard](https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats.
+We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
+Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats.
 
 Install
 -------
 - From PyPi repository: `pip3 install asari-metabolomics`. Add `--upgrade` to update to new versions.
 
 - Or clone from source code: https://github.com/shuzhao-li/asari . One can run it as a Python module by calling Python interpreter. GitHub repo is often ahead of PyPi versions.
+
+- Requires Python 3.8+. Installation time ~ 5 seconds.
 
 Use 
 ---
@@ -76,13 +80,13 @@ A typical run on disk may generatae a directory like this
     ├── preferred_Feature_table.tsv
     └── project.json
 
-Asari generates two feature tables:
-    1. preferred_Feature_table.tsv
-    2. export/full_Feature_table.tsv
+The recommended feature table is `preferred_Feature_table.tsv`. 
 
-The recommended feature table for futher analyses is `preferred_Feature_table.tsv`. Only peaks passing user-provided (or default) parameters regarding signal-to-noise (snr) ratios and shape requirements will be reported in the `preferred_Feature_table.tsv` while `export/full_Feature_table.tsv` contains all detected features regardless of if they pass the snr or shape requirements. The default values for snr and shape requirements should be fine for most people. 
-
-Furthermore, even if a feature is only present in one sample, it will be reported, as we think this is important for applications like exposome and personalized medicine. The filtering decisions are left to end users.
+All peaks are kept in `export/full_Feature_table.tsv` if they meet signal (snr) and shape standards 
+(part of input parameters but default values are fine for most people). 
+That is, if a feature is only present in one sample, it will be reported, 
+as we think this is important for applications like exposome and personalized medicine. 
+The filtering decisions are left to end users.
 
 The `pickle` folder keeps intermediate files during processing.
 They are removed after the processing by default, to save disk space.
@@ -93,7 +97,7 @@ Dashboard
 ---------
 After data are processed, users can use `asari viz --input process_result_dir` to launch a dashboard to inspect data, where 'process_result_dir' refers to the result folder. The dashboard uses these files under the result folder: 'project.json', 'export/cmap.pickle', 'export/epd.pickle' and 'export/full_Feature_table.tsv'. Thus, one can move around the folder, but modification of these files is not a good idea. Please note that pickle files are for internal use, and one should not trust pickle files from other people.
  
-![viz_screen_shot](_static/viz_screen_shot20220518.png)
+![viz_screen_shot](docs/source/_static/viz_screen_shot20220518.png)
 
 
 Parameters
@@ -104,14 +108,14 @@ Most modern instruments are fine with 5 ppm, but one may want to change if neede
 Default ionization mode is `pos`. Change to `neg` if needed, by specifying `--mode neg` in command line.
 
 Users can supply a custom parameter file `xyz.yaml`, via `--parameters xyz.yaml` in command line.
-A template YAML file can be found at `doc/parameters.yaml`.
+A template YAML file can be found at `test/parameters.yaml`.
 
 When the above methods overlap, command line arguments take priority.
 That is, commandline overwrites `xyz.yaml`, which overwrites default asari parameters in `defaul_parameters.py`. 
 
 Algorithms
 ----------
-Basic data concepts follow <https://github.com/shuzhao-li/metDataModel>, organized as
+Basic data concepts follow https://github.com/shuzhao-li/metDataModel, organized as
 
     ├── Experiment
        ├── Sample
@@ -148,7 +152,6 @@ Step-by-step algorithms are explained in doc/README.md.
 
 This package uses `mass2chem`, `khipu` and `JMS` for mass search and annotation functions.
 
-
 Performance
 -----------
 Asari is designed to run > 1000 samples on a laptop computer. The performance is achieved via
@@ -168,7 +171,7 @@ Future improvement can be made by implementing some functions, e.g. chromatogram
 
 Docker image
 ------------
-At <https://hub.docker.com/r/shuzhao/asari>.
+At https://hub.docker.com/r/shuzhao/asari.
 
 This image includes mono and ThermoRawFileParser, which converts Thermo .raw files to .mzML files.
 
@@ -187,18 +190,32 @@ In the container, ThermoRawFileParser is under `/usr/local/thermo/`.
 
 Links
 -----
-Source code: <https://github.com/shuzhao-li/asari>
+Source code: [https://github.com/shuzhao-li/asari](https://github.com/shuzhao-li/asari)
 
-Package Repository: <https://pypi.org/project/asari-metabolomics/>
+Package Repository: [https://pypi.org/project/asari-metabolomics/](https://github.com/shuzhao-li/asari)
 
-Related projects:
+Test data: [https://github.com/shuzhao-li/data/tree/main/data](https://github.com/shuzhao-li/asari)
 
-Mummichog: metabolomics pathway/network analysis
+Notebooks to reproduce publication figures: [https://github.com/shuzhao-li/data/tree/main/notebooks](https://github.com/shuzhao-li/asari)
 
-metDataModel: data models for metabolomics
+How accurate are my m/z values?
+-------------------------------
+The mass tracks are scaffolds to assemble data. Very close m/z values may not be distinguished on a mass track. For example, when mass tracks are constructed for 5 ppm resolution, two m/z values of 3 ppm apart will be reported on the same mass track. This leads to a situation where the m/z values are not optimal. Asari is designed for reliable information retrieval. If the data are processed under 5 ppm, the information can be retrieved by 5 ppm. The true m/z values will be recovered via annotation, if the features are resolved by LC, when asari features are matched to annotation libraries.
 
-mass2chem: common utilities in interpreting mass spectrometry data, annotation
+As discussed in the manuscript, ppm is not perfect in modeling mass resolution and is not constant for all m/z ranges. It is a practical tool we currently work with. If two compounds are not resolved by LC and their m/z values are 4 ppm apart, asari processing by 5 ppm will treat them as one feature. If the mass resolution is justified, one can run asari using, for instance, 3 ppm. The default workflow in asari does not fine-tune the m/z values, because the split m/z peaks from centroiding are difficult to distinguish from real m/z peaks. We leave the fine-tuning to annotation or targeted extraction workflow.
 
-khipu: a Python library for generalized, low-level annotation of MS metabolomics
+We thank reviewer #1 for valuable discussions on this topic.
 
-JMS: Json's Metabolite Services
+
+Related projects
+----------------
+
+[Mummichog](https://github.com/shuzhao-li/mummichog): metabolomics pathway/network analysis
+
+[metDataModel](https://github.com/shuzhao-li/metDataModel): data models for metabolomics
+
+[mass2chem](https://github.com/shuzhao-li/mass2chem): common utilities in interpreting mass spectrometry data, annotation
+
+[khipu](https://github.com/shuzhao-li-lab/khipu): a Python library for generalized, low-level annotation of MS metabolomics
+
+[JMS](https://github.com/shuzhao-li/JMS): Json's Metabolite Services
