@@ -108,7 +108,7 @@ Most modern instruments are fine with 5 ppm, but one may want to change if neede
 Default ionization mode is `pos`. Change to `neg` if needed, by specifying `--mode neg` in command line.
 
 Users can supply a custom parameter file `xyz.yaml`, via `--parameters xyz.yaml` in command line.
-A template YAML file can be found at `doc/parameters.yaml`.
+A template YAML file can be found at `test/parameters.yaml`.
 
 When the above methods overlap, command line arguments take priority.
 That is, commandline overwrites `xyz.yaml`, which overwrites default asari parameters in `defaul_parameters.py`. 
@@ -151,7 +151,6 @@ Selectivity is tracked for
 Step-by-step algorithms are explained in doc/README.md.
 
 This package uses `mass2chem`, `khipu` and `JMS` for mass search and annotation functions.
-
 
 Performance
 ===========
@@ -198,6 +197,14 @@ Package Repository: https://pypi.org/project/asari-metabolomics/
 Test data: https://github.com/shuzhao-li/data/tree/main/data
 
 Notebooks to reproduce publication figures: https://github.com/shuzhao-li/data/tree/main/notebooks
+
+How accurate are my m/z values?
+===============================
+The mass tracks are scaffolds to assemble data. Very close m/z values may not be distinguished on a mass track. For example, when mass tracks are constructed for 5 ppm resolution, two m/z values of 3 ppm apart will be reported on the same mass track. This leads to a situation where the m/z values are not optimal. Asari is designed for reliable information retrieval. If the data are processed under 5 ppm, the information can be retrieved by 5 ppm. The true m/z values will be recovered via annotation, if the features are resolved by LC, when asari features are matched to annotation libraries.
+
+As discussed in the manuscript, ppm is not perfect in modeling mass resolution and is not constant for all m/z ranges. It is a practical tool we currently work with. If two compounds are not resolved by LC and their m/z values are 4 ppm apart, asari processing by 5 ppm will treat them as one feature. If the mass resolution is justified, one can run asari using, for instance, 3 ppm. The default workflow in asari does not fine-tune the m/z values, because the split m/z peaks from centroiding are difficult to distinguish from real m/z peaks. We leave the fine-tuning to annotation or targeted extraction workflow.
+
+We thank reviewer #1 for valuable discussions on this topic.
 
 
 Related projects
