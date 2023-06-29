@@ -8,10 +8,11 @@ Annotation is facilitated by jms-metabolite-services, mass2chem.
 '''
 import time
 import multiprocessing as mp
-
+import os
 import pymzml
+import pickle
 
-from .experiment import *
+from .experiment import ext_Experiment
 from .chromatograms import extract_massTracks_ 
 from .mass_functions import *
 
