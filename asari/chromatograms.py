@@ -463,7 +463,6 @@ def rt_lowess_calibration_debug(good_landmark_peaks,
     plt.legend()
     # Save the figure as a PNG file
     plt.savefig(os.path.join(outdir, 'export', sample_name + '_rtime_alignment_result.png'))
-    plt.show()
     return rt_cal_dict, reverse_rt_cal_dict
 
 
