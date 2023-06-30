@@ -10,7 +10,7 @@ import numpy as np
 from scipy.signal import find_peaks 
 from scipy.ndimage import uniform_filter1d
 
-from mass2chem.search import *
+from mass2chem.search import build_centurion_tree_mzlist
 
 
 def flatten_tuplelist(L):

@@ -4,9 +4,15 @@ Functions for subcommand `analyze`
 
 import random
 import pymzml
+import numpy as np
+
 from .chromatograms import extract_massTracks_ 
 from .experiment import ext_Experiment
-from .mass_functions import *
+from .mass_functions import flatten_tuplelist
+
+from mass2chem.search import find_mzdiff_pairs_from_masstracks
+
+
 
 def analyze_single_sample(infile, 
             mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000,

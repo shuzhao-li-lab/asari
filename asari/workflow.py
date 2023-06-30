@@ -14,7 +14,9 @@ import pickle
 
 from .experiment import ext_Experiment
 from .chromatograms import extract_massTracks_ 
-from .mass_functions import *
+
+from mass2chem.search import find_mzdiff_pairs_from_masstracks
+
 
 # -----------------------------------------------------------------------------
 # main workflow for `process`

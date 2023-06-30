@@ -3,7 +3,7 @@ import sys
 import json
 import pickle
 
-from mass2chem.search import *
+# from mass2chem.search import *
 # jms-metabolite-services
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 

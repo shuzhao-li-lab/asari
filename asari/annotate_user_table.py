@@ -1,8 +1,15 @@
 '''
 Functions for subcommand `annotate`
 '''
-from .experiment import *
-from .mass_functions import *
+import json
+
+from .experiment import (ext_Experiment,
+                         ExperimentalEcpdDatabase, 
+                         adduct_search_patterns, 
+                         adduct_search_patterns_neg, 
+                         isotope_search_patterns)
+from .default_parameters import extended_adducts
+from .json_encoder import NpEncoder
 
 from jms.io import read_table_to_peaks
 

@@ -1,8 +1,12 @@
 import argparse
 from yaml import load, Loader
+import multiprocessing as mp
 
 from asari import __version__
-from .workflow import *
+from .workflow import (get_mz_list, 
+                       process_project, 
+                       process_xics, 
+                       read_project_dir)
 from .default_parameters import PARAMETERS
 
 booleandict = {'T': True, 'F': False, 1: True, 0: False, 

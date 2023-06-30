@@ -7,7 +7,8 @@ import numpy as np
 from scipy.signal import detrend, find_peaks 
 from scipy.optimize import curve_fit 
 
-from .chromatograms import *
+from .chromatograms import (smooth_moving_average, 
+                            smooth_lowess)
 
 # -----------------------------------------------------------------------------
 # multicore processing for peak detection

@@ -1,4 +1,5 @@
-from jms.search import *
+from jms.search import (build_centurion_tree,
+                        find_all_matches_centurion_indexed_list)
 
 def get_featureList(infile, start_row=1, mz_col=0, rt_col=1, sep='\t'):
     '''Read features from infile and return a list of json peaks.

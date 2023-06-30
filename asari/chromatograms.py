@@ -10,10 +10,11 @@ from operator import itemgetter
 import numpy as np
 
 from scipy import interpolate
-from scipy.ndimage import uniform_filter1d, maximum_filter1d
+from scipy.ndimage import uniform_filter1d
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
-from .mass_functions import check_close_mzs, nn_cluster_by_mz_seeds
+from .mass_functions import (check_close_mzs, 
+                             nn_cluster_by_mz_seeds)
 
 INTENSITY_DATA_TYPE = np.int64
 # int32 uses less memory - for large data one can check if int32 is safe, 
