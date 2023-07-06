@@ -244,11 +244,12 @@ def get_summary_panel(project_desc, peakDict, epdDict, Ftable, cmap):
                         ).opts(toolbar=None)
     
     # hard cap for legend is 20
-    if_legend = cmap['_number_of_samples_'] <= 50
-    RTAlign = prepare_rt_alignment(cmap).hvplot.line(title="Retention Time Deviation vs Retention Time",xlabel="Retention Time (sec)",
-                ylabel="Retention Time Deviation (sec)", width=width, height=2000,hover=False).opts(
-                show_legend=True, legend_opts=dict(
-                title='',label_text_font_size='8pt'), toolbar=None)
+    if_legend = cmap['_number_of_samples_'] <= 20
+    RTAlign = prepare_rt_alignment(cmap).hvplot.line(title="Retention Time Deviation vs Retention Time",xlabel="Retention Time (sec)", 
+                ylabel="Retention Time Deviation (sec)", width=width, height=height,hover=False).opts(
+                show_legend=if_legend, legend_opts=dict(
+                title='',label_text_font_size='8pt',spacing=-5, location=(5, (height/2-cmap['_number_of_samples_']*11)), padding=3), toolbar=None)
+    
     
 
     feature_distribution = pn.Tabs(
