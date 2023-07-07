@@ -1,1 +1,1 @@
-from asari.main import main
+from .main import main
