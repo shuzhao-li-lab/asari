@@ -44,7 +44,7 @@ PARAMETERS = {
     'peak_number_rt_calibration': 15,   # minimal number of selected high-quality peaks required for RT calibration. 
                                         # Samples with fewer selected peaks are dropped out.
     'max_retention_shift': None,        # landmark peak pairs with a retention time greater than this are not used for RT calibration
-    'num_lowess_iterations': 1,         # number of lowess iterations to perform for RT calibration, higher values take longer but less sensitive to outliers
+    'num_lowess_iterations': 3,         # number of lowess iterations to perform for RT calibration, higher values take longer but less sensitive to outliers
     # Number of samples dictates workflow 
     'project_sample_number_small': 10,  # 10
     
