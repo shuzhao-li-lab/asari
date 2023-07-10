@@ -3,14 +3,9 @@ import sys
 import json
 import pickle
 
-# from mass2chem.search import *
-# jms-metabolite-services
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
-from .default_parameters import adduct_search_patterns, \
-                                adduct_search_patterns_neg, \
-                                    isotope_search_patterns, \
-                                        extended_adducts
+from .default_parameters import adduct_search_patterns, adduct_search_patterns_neg, isotope_search_patterns, extended_adducts
 
 from .mass_functions import all_mass_paired_mapping
 from .constructors import CompositeMap

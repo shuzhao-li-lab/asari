@@ -8,12 +8,66 @@ from .workflow import (get_mz_list,
                        process_xics, 
                        read_project_dir)
 from .default_parameters import PARAMETERS
+from .dashboard import read_project, dashboard
+from .analyze import estimate_min_peak_height, analyze_single_sample
+from .annotate_user_table import annotate_user_featuretable
 
-booleandict = {'T': True, 'F': False, 1: True, 0: False, 
-                   'True': True, 'False': False, 'TRUE': True, 'FALSE': False, 'true': True, 'false': False,
-                    }
+booleandict = {
+    'T': True, 
+    'F': False, 
+    1: True, 
+    0: False, 
+    'True': True, 
+    'False': False, 
+    'TRUE': True, 
+    'FALSE': False, 
+    'true': True, 
+    'false': False
+    }
 
 PARAMETERS['asari_version'] = __version__
+
+def __run_process__(parameters, args):
+    
+    # main process function
+    list_input_files = read_project_dir(args.input)
+    if not list_input_files:
+        print("No valid mzML files are found in the input directory :(")
+    else:
+        if args.autoheight:
+            try:
+                parameters['min_peak_height'] = estimate_min_peak_height(list_input_files)
+            except ValueError as err:
+                print("Problems with input files: {0}. Back to default min_peak_height.".format(err))
+        parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
+        process_project(list_input_files, parameters )
+
+def process(parameters, args):
+    __run_process__(parameters, args)
+
+def analyze(parameters, args):
+    analyze_single_sample(args.input, parameters=parameters)
+
+def xic(parameters, args):
+    list_input_files = read_project_dir(args.input)
+    process_xics(list_input_files, parameters)
+
+def extract(parameters, args):
+    mzlist = get_mz_list(args.target)
+    print("Retrieved %d target mz values from %s.\n" %(len(mzlist), args.target))
+    parameters['target'] = mzlist
+    __run_process__(parameters, args)
+
+def annotate(parameters, args):
+    annotate_user_featuretable(args.input, parameters=parameters, rtime_tolerance=2)
+
+def join(parameters, args):
+    print("NOT IMPLEMENTED")
+
+def viz(parameters, args):
+    datadir = args.input
+    project_desc, cmap, epd, Ftable = read_project(datadir)
+    dashboard(project_desc, cmap, epd, Ftable)
 
 def main(parameters=PARAMETERS):
     '''
@@ -34,22 +88,7 @@ def main(parameters=PARAMETERS):
         of the asari processing. The parameters can be seen in default_parameters.py. Command line arguments
         will override any defaults and any values provided in the parameters.json file. 
     '''
-    def __run_process__(parameters, args):
-        
-        # main process function
-        list_input_files = read_project_dir(args.input)
-        if not list_input_files:
-            print("No valid mzML files are found in the input directory :(")
-        else:
-            if args.autoheight:
-                from .analyze import estimate_min_peak_height
-                try:
-                    parameters['min_peak_height'] = estimate_min_peak_height(list_input_files)
-                except ValueError as err:
-                    print("Problems with input files: {0}. Back to default min_peak_height.".format(err))
 
-            parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
-            process_project( list_input_files,  parameters )
 
     print("\n\n~~~~~~~ Hello from Asari (%s) ~~~~~~~~~\n" %__version__)
 
@@ -69,7 +108,6 @@ def main(parameters=PARAMETERS):
             help='output directory')
     parser.add_argument('-j', '--project', 
             help='project name')
-
     parser.add_argument('-p', '--parameters', 
             help='Custom paramter file in YAML. Use parameters.yaml as template.')
     parser.add_argument('-c', '--cores', type=int, 
@@ -136,41 +174,25 @@ def main(parameters=PARAMETERS):
         parameters['num_lowess_iterations'] = args.num_lowess_iterations
 
     if args.run == 'process':
-        __run_process__(parameters, args)
-
+        process(parameters, args)
     elif args.run == 'analyze':
         # analyze a single sample file to get descriptions
-        from .analyze import analyze_single_sample
-        analyze_single_sample(args.input, parameters=parameters)
-
+        analyze(parameters, args)
     elif args.run == 'xic':
         # Get XICs (mass tracks) from a folder of centroid mzML files.
-        list_input_files = read_project_dir(args.input)
-        process_xics(list_input_files, parameters)
-
+        xic(parameters, args)
     elif args.run == 'extract':
         # targeted extraction from a file designated by --target
-        mzlist = get_mz_list(args.target)
-        print("Retrieved %d target mz values from %s.\n" %(len(mzlist), args.target))
-        parameters['target'] = mzlist
-        __run_process__(parameters, args)
-
+        extract(parameters, args)
     elif args.run == 'annotate':
         # Annotate a user supplied feature table
-        from .annotate_user_table import annotate_user_featuretable
-        annotate_user_featuretable(args.input, parameters=parameters, rtime_tolerance=2)
-
+        annotate(parameters, args)
     elif args.run == 'join':
         # input a list of directoreis, each a result of asari process
-        pass
-
+        join(parameters, args)
     elif args.run == 'viz':
         # launch data dashboard
-        datadir = args.input
-        from .dashboard import read_project, dashboard
-        project_desc, cmap, epd, Ftable = read_project(datadir)
-        dashboard(project_desc, cmap, epd, Ftable)
-
+        viz(parameters, args)
     else:
         print("Expecting one of the subcommands: analyze, process, xic, annotate, join, viz.")
 
