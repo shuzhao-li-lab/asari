@@ -132,8 +132,8 @@ def main(parameters=PARAMETERS):
             help='keep all intermediate pickle files, ondisk mode only.')
     parser.add_argument('--anno', default=True, 
             help='perform default annotation after processing data')
-    parser.add_argument('--debug', default=False, 
-            help='Toggle on debug mode')
+    parser.add_argument('--debug_rtime_align', default=False, 
+            help='Toggle on debug mode for retention alignment: output align figures and reference features.')
 
     args = parser.parse_args()
 
@@ -144,7 +144,7 @@ def main(parameters=PARAMETERS):
         )
     parameters['multicores'] = min(mp.cpu_count(), parameters['multicores'])
     parameters['input'] = args.input
-    parameters['debug'] = booleandict[args.debug]
+    parameters['debug_rtime_align'] = booleandict[args.debug_rtime_align]
     
     if args.mode:
         parameters['mode'] = args.mode
