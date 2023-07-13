@@ -429,12 +429,16 @@ class CompositeMap:
         for k in mzlist: 
             _comp_dict[k] = basetrack.copy()
 
+        # add to export mz and rtime of good reference landmarks
+        if self.experiment.parameters['debug_rtime_align']:
+            self.export_reference_sample()
+
         for SM in self.experiment.all_samples:
             print("   ", SM.name)
             list_mass_tracks = SM.get_masstracks_and_anchors()
 
             if self.experiment.parameters['rt_align_on'] and not SM.is_reference:
-                if self.experiment.parameters['debug']:
+                if self.experiment.parameters['debug_rtime_align']:
                     self.calibrate_sample_RT(SM, list_mass_tracks, 
                                         calibration_fuction=rt_lowess_calibration_debug,
                                         cal_min_peak_height=cal_min_peak_height, 
@@ -524,12 +528,11 @@ class CompositeMap:
             and the sample will be attached later without adjusting retention time.
             To consider to enforce good_landmark_peaks to cover RT range evenly in the future.
         '''
-        import matplotlib.pyplot as plt
+
         candidate_landmarks = [self.MassGrid[sample.name].values[
                                 p['ref_id_num']] for p in 
                                 self.good_reference_landmark_peaks] # contains NaN
         good_landmark_peaks, selected_reference_landmark_peaks = [], []
-        X, Y = [], []
         for jj in range(len(self.good_reference_landmark_peaks)):
             ii = candidate_landmarks[jj]
             if not pd.isna(ii):
@@ -541,8 +544,6 @@ class CompositeMap:
                 
                 if Upeak:
                     rt_delta = Upeak['apex'] - self.good_reference_landmark_peaks[jj]['apex']
-                    X.append(Upeak['apex'])
-                    Y.append(rt_delta)
                     if abs(rt_delta) < MAX_RETENTION_SHIFT:
                         Upeak.update({'ref_id_num': ii})
                         good_landmark_peaks.append(Upeak)
@@ -763,3 +764,39 @@ class CompositeMap:
             fList.append( peak_area )
 
         return fList
+    
+    def export_reference_sample(self):
+        """Write mz and retention time of "good" ions to csv in reference sample
+
+        Results
+        -------
+        mz,rtime
+        84.04437446594238,196.3507106869998
+        85.04770363867283,197.100775215
+        90.05493021011353,160.75314731200018
+        100.11204060912132,18.757312656
+        101.11540949344635,19.138889808
+        104.9922667145729,147.4066373920002
+        105.99559181928635,147.7856911519998
+        112.09949165582657,255.0619356640002
+        114.06613251566887,74.11716273600001
+        ......
+
+        The file name would be reference sample name + _mz_rtime_landmarks under export dir
+         
+        """
+        # extendable. could add height and other params
+        mz_landmarks = [self.MassGrid['mz'].values[
+                        p['ref_id_num']] for p in 
+                        self.good_reference_landmark_peaks] 
+        rtime_landmarks = [self.dict_scan_rtime[p['apex']] for p in 
+                        self.good_reference_landmark_peaks]
+        reference_sample_name = self.reference_sample.name
+        import os
+        import csv
+        # example: batch14_MT_20210808_087_mz_rtime_landmarks.csv
+        referece_path = os.path.join(self.experiment.parameters['outdir'], 'export', reference_sample_name + '_mz_rtime_landmarks.csv')
+        with open(referece_path, 'w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(["mz", "rtime"])  #  headers
+            writer.writerows(zip(mz_landmarks, rtime_landmarks)) 
