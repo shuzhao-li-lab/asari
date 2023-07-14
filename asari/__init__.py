@@ -1,4 +1,4 @@
-__version__ = "1.11.6"
+__version__ = "1.11.7"
 
 from . import analyze
 from . import annotate_user_table
