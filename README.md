@@ -1,6 +1,7 @@
 Asari
 =====
 [![Documentation Status](https://readthedocs.org/projects/asari/badge/?version=latest)](https://asari.readthedocs.io/en/latest/?badge=latest)
+[![DOI](https://img.shields.io/badge/DOI-doi.org%2F10.1038%2Fs41467--023--39889--1-blue)](https://doi.org/10.1038/s41467-023-39889-1)
 
 Trackable and scalable Python program for high-resolution LC-MS metabolomics data preprocessing, 
 
