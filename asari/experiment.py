@@ -139,7 +139,7 @@ class ext_Experiment:
         self.CMAP.build_composite_tracks()
         self.CMAP.global_peak_detection()
 
-    def export_all(self, anno=True):
+    def export_all(self, anno=True, full_dump=True):
         '''
         Export all files.
         Annotation of features to empirical compounds is done here.
@@ -158,6 +158,8 @@ class ext_Experiment:
             self.export_CMAP_pickle()
             self.annotate()
             self.generate_qc_plot_pdf()
+        if full_dump:
+            pickle.dump(self, open(os.path.join(self.parameters['outdir'], 'export', 'experiment.pickle'), 'wb'))
         self.export_feature_tables()
         self.export_log()
 
