@@ -158,8 +158,63 @@ class ext_Experiment:
             self.export_CMAP_pickle()
             self.annotate()
             self.generate_qc_plot_pdf()
+        pickle.dump(self, open(os.path.join(self.parameters['outdir'], 'export', 'experiment.json'), 'wb'))
         self.export_feature_tables()
         self.export_log()
+
+    def export_readme(self):
+        '''
+        Write the readme to output directory. This should copy a file in the future but for now the text will be in 
+        a block string.
+        '''
+
+        README_txt = '''
+
+        This directory contains the outputs from a run of asari on a set of mz_ML files.
+    
+        DIRECTORY
+        ├── Annotated_empricalCompounds.json
+        ├── Feature_annotation.tsv
+        ├── export
+        │   ├── _mass_grid_mapping.csv
+        │   ├── cmap.pickle
+        │   ├── full_Feature_table.tsv
+        │   └── unique_compound__Feature_table.tsv
+        ├── pickle
+        │   ├── Blank_20210803_003.pickle
+        │   ├── ...
+        ├── preferred_Feature_table.tsv
+        └── project.json
+
+        Annotated_empiricalCompounds.json is the set of empirical compounds detected in the experiment
+        annotated with the specified annotation sources. 
+
+        Feature_annotation is similar and is each feature with its annotation as determined from the 
+        empirical compounds. 
+
+        The export folder contains a variety of intermediates that may not be of immediate use in a 
+        general analysis. 
+        
+        The cmap.pickle is the composite map object for the experiment. This can be useful in later analyses.
+        
+        The full_Feature_table.tsv contains ALL the features detected in the experiment, including low quality
+        features. This can be useful if your feature of interest is not in the preferred table, which you should
+        use by default for downstream analyses. Although the distinction between low and high quality features
+        is arbitrary, not all low quality features are expected to be 'real' or well-quantified.
+
+        The unique_compound__Feature_table.tsv is a deduplicated feature table (MORE DETAIL NEEDED HERE)
+
+        The pickle directory stores intermediates needed during processing, such as extracted mass tracks. Unless
+        specified by the user, this directory will be removed after processing.
+
+        preferred_Feature_table.tsv contains the 'high quality' features based on peak shape and goodness fitting.
+        This is the table you should use for downstream analyses by default. 
+
+        project.json stores the parameters used to perform the analysis.
+        '''
+
+        with open(os.path.join(self.parameters['outdir'], 'export', self.parameters['processing_readme'])) as readme_fh:
+            readme_fh.write(README_txt)
 
     def annotate(self):
         '''
