@@ -26,14 +26,16 @@ PARAMETERS = {
                                         # Low selectivity regions will be still inspected to determine the true number of features
 
     # chromatogram and peak parameters
-    'min_timepoints': 6,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
-    'signal_noise_ratio': 2,            # peak height at least x fold over local noise
-    'min_intensity_threshold': 1000,    # minimal intensity for mass track extraction, filtering baseline
+    'min_timepoints': 6,                 # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
+    'signal_noise_ratio': 2,             # peak height at least x fold over local noise
+    'min_intensity_threshold': 1000,     # minimal intensity for mass track extraction, filtering baseline
     'min_peak_height': 100000,           # minimal peak height.
-    'wlen': 25,                         # window size for evaluating prominence in peaks. Important to resolve clustered narrow peaks.
-    'autoheight': False,                # min_peak_height can be estimated automatically by setting autoheight on in CLI  
-    'gaussian_shape': 0.5,              # min cutoff of goodness of fitting to Gauss model
-    'peak_area': 'sum',                 # `sum` for simple sum, `auc` for area under the curve, `gauss` for gaussian
+    'wlen': 25,                          # window size for evaluating prominence in peaks. Important to resolve clustered narrow peaks.
+    'autoheight': False,                 # min_peak_height can be estimated automatically by setting autoheight on in CLI  
+    'cal_autoheight_mode': 'multiplier', # mode for calculating min reference peak height in autoheight mode
+    'cal_autoheight_multiplier': 10,     # when the cal_autoheight_mode is multiplier, use this value to multiply the min peak height
+    'gaussian_shape': 0.5,               # min cutoff of goodness of fitting to Gauss model
+    'peak_area': 'sum',                  # `sum` for simple sum, `auc` for area under the curve, `gauss` for gaussian
     
     # retention time alignment
     'reference': 'auto',

@@ -30,13 +30,15 @@ PARAMETERS['asari_version'] = __version__
 def __run_process__(parameters, args):
     
     # main process function
-    list_input_files = read_project_dir(args.input)
+    list_input_files = read_project_dir(args.input)[:5]
     if not list_input_files:
         print("No valid mzML files are found in the input directory :(")
     else:
         if args.autoheight:
             try:
                 parameters['min_peak_height'] = estimate_min_peak_height(list_input_files)
+                if parameters['cal_autoheight_mode'] == 'multiplier':
+                    parameters['cal_min_peak_height'] = parameters['cal_autoheight_multiplier'] * parameters['min_peak_height']
             except ValueError as err:
                 print("Problems with input files: {0}. Back to default min_peak_height.".format(err))
         parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
@@ -62,12 +64,108 @@ def annotate(parameters, args):
     annotate_user_featuretable(args.input, parameters=parameters, rtime_tolerance=2)
 
 def join(parameters, args):
-    print("NOT IMPLEMENTED")
+    import time
+    import os
+    import pickle
+    import json
+    from collections import namedtuple
+    from . import samples
+    from . import constructors
+    from . import experiment
+    from . import workflow
+
+    parameters['outdir'] = './testing/'
+    os.makedirs(parameters['outdir'])
+    workflow.create_export_folders(parameters, "now")
+
+    project_desc_1, cmap_1, epd_1, Ftable_1 = read_project(args.input)
+    project_desc_2, cmap_2, epd_2, Ftable_2 = read_project(args.input2)
+
+    sample_registry = {sid: sample for sid, sample in enumerate([cmap_1, cmap_2])}
+
+    mock_extracts = {
+        i: [
+            'passed',
+            'passed',
+            None,
+            x['dict_scan_rtime'].keys(),
+            x['dict_scan_rtime'].values(),
+            [z for z in x['list_mass_tracks'].values()],
+            workflow.find_mzdiff_pairs_from_masstracks([z for z in x['list_mass_tracks'].values()]),
+            {
+                'sample_id': i,
+                'input_file': None,
+                'ion_mode': 'pos'
+            }
+        ] for i, x in enumerate([cmap_1, cmap_2])
+    }
+
+    exit()
+
+    sample_registry = {sid: sample for sid, sample in enumerate([mt1, mt2])}
+    parameters['database_mode'] = 'memory'
+
+    time_stamp = [str(x) for x in time.localtime()[1:6]]
+    parameters['time_stamp'] = ':'.join(time_stamp)
+    time_stamp = ''.join(time_stamp)
+    print(cmap_1.keys())
+
+
+    #for sid, sam in sample_registry.items():
+    #    sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'
+    #        ], sam['max_scan_number'], sam['list_scan_numbers'], sam['list_retention_time'
+    #        ], sam['track_mzs'
+    #        ], sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'
+    #        ], sam['sample_data'] = 
+
+
+    exit()
+    
+    exp1 = pickle.load(open(os.path.join(os.path.abspath(args.input), "export", "experiment.json"), 'rb'))
+    exp2 = pickle.load(open(os.path.join(os.path.abspath(args.input2), "export", "experiment.json"), 'rb'))
+    combined_sample_registry = {}
+    for k,v in exp1.sample_registry.items():
+        v['data_location'] = os.path.join(os.path.abspath('/'.join(args.input.split('/')[:-2])), v['data_location'])
+        combined_sample_registry[len(combined_sample_registry)] = v
+    for k,v in exp2.sample_registry.items():
+        v['data_location'] = os.path.join(os.path.abspath('/'.join(args.input2.split('/')[:-2])), v['data_location'])
+        combined_sample_registry[len(combined_sample_registry)] = v
+
+    parameters['min_prominence_threshold'] = int( 1 )
+    exp3 = experiment.ext_Experiment(combined_sample_registry, parameters)
+    exp3.CMAP = constructors.CompositeMap(exp3)
+    for sample in exp1.all_samples:
+        sample.data_location = os.path.join(os.path.abspath('/'.join(args.input.split('/')[:-2])), sample.data_location)
+    for sample in exp2.all_samples:
+        sample.data_location = os.path.join(os.path.abspath('/'.join(args.input2.split('/')[:-2])), sample.data_location)
+
+    exp3.all_samples = exp1.all_samples + exp2.all_samples
+
+
+
+    MG1 = exp1.CMAP.MassGridObj
+    MG1.MassGrid.to_csv("MG1.tsv", sep="\t")
+    MG2 = exp2.CMAP.MassGridObj
+    MG2.MassGrid.to_csv("MG2.tsv", sep="\t")
+    MG1.experiment = exp3
+    MG2.experiment = exp3
+    MG1.join(MG2)
+    exp3.CMAP.MassGridObj = MG1
+    exp3.CMAP.MassGrid = MG1.MassGrid
+    exp3.CMAP._mz_landmarks_ = MG1._mz_landmarks_
+    exp3.CMAP.build_composite_tracks()
+    exp3.CMAP.global_peak_detection()
+    exp3.export_all()
 
 def viz(parameters, args):
     datadir = args.input
     project_desc, cmap, epd, Ftable = read_project(datadir)
     dashboard(project_desc, cmap, epd, Ftable)
+    
+def combine_project_descriptions(project_desc_1, project_desc_2, args):
+    return {}
+
+
 
 def main(parameters=PARAMETERS):
     '''
@@ -104,6 +202,8 @@ def main(parameters=PARAMETERS):
             help='mass precision in ppm (part per million), same as mz_tolerance_ppm')
     parser.add_argument('-i', '--input', 
             help='input directory of mzML files to process, or a single file to analyze')
+    parser.add_argument('-i2', '--input2', 
+                        help='input_file_2')
     parser.add_argument('-o', '--output', 
             help='output directory')
     parser.add_argument('-j', '--project', 
@@ -144,6 +244,7 @@ def main(parameters=PARAMETERS):
         )
     parameters['multicores'] = min(mp.cpu_count(), parameters['multicores'])
     parameters['input'] = args.input
+    parameters['input2'] = args.input2
     parameters['debug_rtime_align'] = booleandict[args.debug_rtime_align]
     
     if args.mode:
