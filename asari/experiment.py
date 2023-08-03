@@ -73,25 +73,32 @@ class ext_Experiment:
         using the sample of most number_anchor_mz_pairs.
         This assumes the sample of most good m/z values has a good coverage of features.
         '''
-        if self.parameters['reference']:
-            # match file name; k is sm['sample_id']
-            for k,v in self.sample_registry.items():
-                if os.path.basename(self.parameters['reference']) == os.path.basename(v['input_file']):
-                    return k
-                elif os.path.basename(self.parameters['reference']) + ".mzML" == os.path.basename(v['input_file']):
-                    return k
-
-        elif self.sample_registry:
-            L = [(v['number_anchor_mz_pairs'], v['sample_id']) for v in self.sample_registry.values()]
-            L.sort(reverse=True)
-            ref = self.sample_registry[L[0][1]]
-            self.parameters['reference'] = ref['input_file']
-            print("\n    The reference sample is:\n    ||* %s *||\n" %ref['name'])
-            print("Max reference retention time is %4.2f at scan number %d.\n" %(
-                max(ref['list_retention_time']), ref['max_scan_number']))
-            return ref['sample_id']
+        reference_sample_id = None
+        if self.parameters['reference'.lower()] in {'auto', 'manual'}:
+            if self.sample_registry:
+                L = [(v['number_anchor_mz_pairs'], v['sample_id'], v['name']) for v in self.sample_registry.values()]
+                L.sort(reverse=True)
+                if self.parameters['reference'].lower() == 'auto':
+                    reference_sample_id = L[0][1]
+                else: 
+                    for i, (num_anchors, sample_id, name) in enumerate(L):
+                        print(i, " - ", name, " : ", num_anchors)
+                    choice_index = int(input("Specify index for refernce sample the push enter: "))
+                    reference_sample_id = L[choice_index][1]
+            else:
+                raise Exception("no samples in sample registry")
         else:
-            return None
+            user_specified_reference = os.path.basename(self.parameters['reference']).rstrip(".mzML")
+            name_index_map = {os.path.basename(v['input_file']).rstrip(".mzML"): v['sample_id'] for v in self.sample_registry.values()}
+            if user_specified_reference in name_index_map:
+                reference_sample_id = name_index_map[user_specified_reference]
+            else:
+                raise Exception(user_specified_reference + " not found in sample registry")
+        reference_sample = self.sample_registry[reference_sample_id]
+        self.parameters['reference'] = reference_sample['input_file']
+        print("\n    The reference sample is:\n    ||* %s *||\n" %reference_sample['name'])
+        print("Max reference retention time is %4.2f at scan number %d.\n" %(max(reference_sample['list_retention_time']), reference_sample['max_scan_number']))
+        return reference_sample['sample_id']
         
     def get_valid_sample_ids(self):
         '''

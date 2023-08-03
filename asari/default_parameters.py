@@ -36,7 +36,7 @@ PARAMETERS = {
     'peak_area': 'sum',                 # `sum` for simple sum, `auc` for area under the curve, `gauss` for gaussian
     
     # retention time alignment
-    'reference': None,
+    'reference': 'auto',
     'rt_align_method': 'lowess',        # 'lowess', 'tolerance', or to implement           
     'rt_align_on': True,                # False to bypass retention time alignment
     'rtime_tolerance': 50,              # feature rtime shift threshold under 10 seconds; or 10% of rtime   
@@ -53,6 +53,9 @@ PARAMETERS = {
     'mass_grid_mapping': "_mass_grid_mapping.csv",
     'annotation_filename': "Annotation_table.tsv",
     'json_empricalCompounds': "_empCpd_json.json",
+    'processing_readme': "README.md",
+
+
     # for annotation
     'check_isotope_ratio': False,
 
