@@ -1,6 +1,7 @@
 import argparse
 from yaml import load, Loader
 import multiprocessing as mp
+import time 
 
 from asari import __version__
 from .workflow import (get_mz_list, 
@@ -30,7 +31,7 @@ PARAMETERS['asari_version'] = __version__
 def __run_process__(parameters, args):
     
     # main process function
-    list_input_files = read_project_dir(args.input)[:5]
+    list_input_files = read_project_dir(args.input)
     if not list_input_files:
         print("No valid mzML files are found in the input directory :(")
     else:
@@ -75,87 +76,114 @@ def join(parameters, args):
     from . import workflow
 
     parameters['outdir'] = './testing/'
+    parameters['time_stamp'] = "now"
+    parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
     os.makedirs(parameters['outdir'])
-    workflow.create_export_folders(parameters, "now")
+    workflow.create_export_folders(parameters)
 
-    project_desc_1, cmap_1, epd_1, Ftable_1 = read_project(args.input)
-    project_desc_2, cmap_2, epd_2, Ftable_2 = read_project(args.input2)
+    project_desc_1, cmap_1, epd_1, Ftable_1, map_1 = read_project(args.input)
+    project_desc_2, cmap_2, epd_2, Ftable_2, map_2 = read_project(args.input2)
 
-    sample_registry = {sid: sample for sid, sample in enumerate([cmap_1, cmap_2])}
 
-    mock_extracts = {
-        i: [
-            'passed',
-            'passed',
-            None,
-            x['dict_scan_rtime'].keys(),
-            x['dict_scan_rtime'].values(),
-            [z for z in x['list_mass_tracks'].values()],
-            workflow.find_mzdiff_pairs_from_masstracks([z for z in x['list_mass_tracks'].values()]),
-            {
-                'sample_id': i,
-                'input_file': None,
-                'ion_mode': 'pos'
-            }
-        ] for i, x in enumerate([cmap_1, cmap_2])
-    }
+    exp_1 = pickle.load(open(os.path.join(args.input, "export/experiment.json"), 'rb'))
+    exp_2 = pickle.load(open(os.path.join(args.input2, "export/experiment.json"), 'rb'))
 
-    exit()
+    #print(project_desc_1)
+    #exit()
 
-    sample_registry = {sid: sample for sid, sample in enumerate([mt1, mt2])}
     parameters['database_mode'] = 'memory'
-
     time_stamp = [str(x) for x in time.localtime()[1:6]]
     parameters['time_stamp'] = ':'.join(time_stamp)
     time_stamp = ''.join(time_stamp)
-    print(cmap_1.keys())
+
+    sample_registry = {ii: {'sample_id': ii, 'input_file': file, 'name': 'cmap_' + str(ii)} for ii, file in enumerate([cmap_1, cmap_2])}
+    mock_extracts = {
+        i: {
+            'status:mzml_parsing': 'passed',
+            "status:eic": 'passed',
+            'data_location': None,
+            'max_scan_number': max(list(x['dict_scan_rtime'].keys())),
+            'list_scan_numbers': list(x['dict_scan_rtime'].keys()),
+            'list_retention_time': list(x['dict_scan_rtime'].values()),
+            'track_mzs': [(z['mz'], z['id_number']) for z in list(x['list_mass_tracks'].values())],
+            'number_anchor_mz_pairs': len(workflow.find_mzdiff_pairs_from_masstracks([z for z in x['list_mass_tracks'].values()])),
+            'anchor_mz_pairs': workflow.find_mzdiff_pairs_from_masstracks([z for z in x['list_mass_tracks'].values()]),
+            'composite_of': [exp_1, exp_2][i],
+            'sample_mapping': [map_1, map_2][i],
+            'sample_data': {
+                'sample_id': i,
+                'input_file': None,
+                'ion_mode': 'pos',
+                'max_scan_number': max(x['dict_scan_rtime'].keys()),
+                'list_mass_tracks': [z for z in x['list_mass_tracks'].values()],
+                'anchor_mz_pairs': workflow.find_mzdiff_pairs_from_masstracks([z for z in x['list_mass_tracks'].values()]),
+                'number_anchor_mz_pairs': len(workflow.find_mzdiff_pairs_from_masstracks([z for z in x['list_mass_tracks'].values()]))
+            },
+         } for i, x in enumerate([cmap_1, cmap_2])
+    }
+
+    for sid, sam in sample_registry.items():
+        sam.update(mock_extracts[sid])
+
+    join_exp = experiment.ext_Experiment(sample_registry, parameters)
+    join_exp.process_all()
+    join_exp.export_all()
+    flist = []
+
+    import pandas as pd
+    df = []
+    for ii, peak in enumerate(join_exp.CMAP.FeatureList):
+        row = dict(peak)
+        for cmap in join_exp.all_samples:
+            corr_l_base = cmap.reverse_rt_cal_dict.get(peak['left_base'], peak['left_base'])
+            corr_r_base = cmap.reverse_rt_cal_dict.get(peak['right_base'], peak['right_base'])
+            join_track_number = join_exp.CMAP.MassGrid[cmap.name][peak['parent_masstrack_id']]
+            if not pd.isna(join_track_number):
+                join_track_number = int(join_track_number)
+                for sample in cmap.composite_of.all_samples:
+                    sample_track_number = cmap.sample_mapping[sample.name][join_track_number]
+                    if not pd.isna(sample_track_number):
+                        mass_tracks = sample.get_masstracks_and_anchors()
+                        mass_track = mass_tracks[int(sample_track_number)]
+                        left_base = sample.reverse_rt_cal_dict.get(corr_l_base, corr_l_base)
+                        right_base = sample.reverse_rt_cal_dict.get(corr_r_base, corr_r_base)
+                        peak_area = mass_track['intensity'][left_base: right_base+1].sum()
+                        row[sample.name] = peak_area
+                    else:
+                        row[sample.name] = None
+        df.append(row)
+    ft = pd.DataFrame(df)
+    ft.to_csv('./new_ftable.tsv', sep="\t")
 
 
-    #for sid, sam in sample_registry.items():
-    #    sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'
-    #        ], sam['max_scan_number'], sam['list_scan_numbers'], sam['list_retention_time'
-    #        ], sam['track_mzs'
-    #        ], sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'
-    #        ], sam['sample_data'] = 
+
+                    #sample_dat = pickle.load(open(os.path.join("./pickles", sample + ".pickle"), 'rb'))
+                    #sample_track_number = cmap['sample_mapping'][sample][join_track_number]
+                    #if not pd.isna(sample_track_number):
+                    #    list_mass_tracks = sample_dat['list_mass_tracks']
+                    #    mass_track = list_mass_tracks[int(sample_track_number)]
 
 
-    exit()
-    
-    exp1 = pickle.load(open(os.path.join(os.path.abspath(args.input), "export", "experiment.json"), 'rb'))
-    exp2 = pickle.load(open(os.path.join(os.path.abspath(args.input2), "export", "experiment.json"), 'rb'))
-    combined_sample_registry = {}
-    for k,v in exp1.sample_registry.items():
-        v['data_location'] = os.path.join(os.path.abspath('/'.join(args.input.split('/')[:-2])), v['data_location'])
-        combined_sample_registry[len(combined_sample_registry)] = v
-    for k,v in exp2.sample_registry.items():
-        v['data_location'] = os.path.join(os.path.abspath('/'.join(args.input2.split('/')[:-2])), v['data_location'])
-        combined_sample_registry[len(combined_sample_registry)] = v
-
-    parameters['min_prominence_threshold'] = int( 1 )
-    exp3 = experiment.ext_Experiment(combined_sample_registry, parameters)
-    exp3.CMAP = constructors.CompositeMap(exp3)
-    for sample in exp1.all_samples:
-        sample.data_location = os.path.join(os.path.abspath('/'.join(args.input.split('/')[:-2])), sample.data_location)
-    for sample in exp2.all_samples:
-        sample.data_location = os.path.join(os.path.abspath('/'.join(args.input2.split('/')[:-2])), sample.data_location)
-
-    exp3.all_samples = exp1.all_samples + exp2.all_samples
+                    #    print(join_track_number)
+                    #    print("\t", int(sample_track_number))
 
 
 
-    MG1 = exp1.CMAP.MassGridObj
-    MG1.MassGrid.to_csv("MG1.tsv", sep="\t")
-    MG2 = exp2.CMAP.MassGridObj
-    MG2.MassGrid.to_csv("MG2.tsv", sep="\t")
-    MG1.experiment = exp3
-    MG2.experiment = exp3
-    MG1.join(MG2)
-    exp3.CMAP.MassGridObj = MG1
-    exp3.CMAP.MassGrid = MG1.MassGrid
-    exp3.CMAP._mz_landmarks_ = MG1._mz_landmarks_
-    exp3.CMAP.build_composite_tracks()
-    exp3.CMAP.global_peak_detection()
-    exp3.export_all()
+
+
+
+    #for ii, ft in enumerate([Ftable_1, Ftable_2]):
+    #    for parent_mass_track in ft['parent_masstrack_id']:
+    #        new_track_number = join_exp.CMAP.MassGrid['cmap_' + str(ii)][parent_mass_track]
+    #        if not pd.isna(new_track_number):
+    #            try: 
+    #                mass_track = 
+        
+
+
+
+    #join_exp.export_all()
+
 
 def viz(parameters, args):
     datadir = args.input
@@ -186,7 +214,6 @@ def main(parameters=PARAMETERS):
         of the asari processing. The parameters can be seen in default_parameters.py. Command line arguments
         will override any defaults and any values provided in the parameters.json file. 
     '''
-
 
     print("\n\n~~~~~~~ Hello from Asari (%s) ~~~~~~~~~\n" %__version__)
 
@@ -246,7 +273,9 @@ def main(parameters=PARAMETERS):
     parameters['input'] = args.input
     parameters['input2'] = args.input2
     parameters['debug_rtime_align'] = booleandict[args.debug_rtime_align]
-    
+    parameters['time_stamp'] = '_'.join([str(x) for x in time.localtime()[1:6]])
+
+
     if args.mode:
         parameters['mode'] = args.mode
     if args.ppm:

@@ -44,19 +44,18 @@ def read_project(datadir, load_sample_limit=20):
         pandas dataframe of feature table. Truncated if samples more than load_sample_limit.
     '''
     datadir = os.path.abspath(datadir)
-    project_desc = json.load(open(os.path.join(datadir, 'project.json')))
+    project_desc = None #json.load(open(os.path.join(datadir, 'project.json')))
     cmap = pickle.load( open(os.path.join(datadir, 'export', 'cmap.pickle'), 'rb') )
     # xics, mz_dict, massgrid = reformat_cmap()
 
     epd = pickle.load( open(os.path.join(datadir, 'export', 'epd.pickle'), 'rb') )
-    if 'number_of_samples' in project_desc and project_desc['number_of_samples'] > load_sample_limit:
-        Ftable = pd.read_csv( os.path.join(datadir, 'export', 'full_Feature_table.tsv'), 
-                                sep='\t', index_col=0, header=0, usecols=range(10 + load_sample_limit) )
-    else:
-        Ftable = pd.read_csv( os.path.join(datadir, 'export', 'full_Feature_table.tsv'), 
-                                sep='\t', index_col=0, header=0 )
+    Ftable = pd.read_csv( os.path.join(datadir, 'export', 'full_Feature_table.tsv'), 
+                            sep='\t', index_col=0, header=0 )
+    mapping = pd.read_csv(os.path.join(datadir, 'export', '_mass_grid_mapping.csv'), index_col=0, header=0)
 
-    return project_desc, cmap, epd, Ftable
+
+
+    return project_desc, cmap, epd, Ftable, mapping
 
 def plot_xic(xics, mz_dict, track_id):
     '''

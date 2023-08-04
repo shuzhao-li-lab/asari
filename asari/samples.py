@@ -47,6 +47,14 @@ class SimpleSample:
         self.anchor_mz_pairs = registry['anchor_mz_pairs']
         self.rt_numbers = registry['list_scan_numbers']
         self.list_retention_time = registry['list_retention_time']
+        if 'sample_mapping' in registry:
+            self.sample_mapping = registry['sample_mapping']
+        else:
+            self.sample_mapping = None
+        if 'composite_of' in registry:
+            self.composite_of = registry['composite_of']
+        else:
+            self.composite_of = None
 
         if self.database_mode == 'memory':
             self.list_mass_tracks = registry['sample_data']['list_mass_tracks']
