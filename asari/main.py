@@ -65,135 +65,101 @@ def annotate(parameters, args):
     annotate_user_featuretable(args.input, parameters=parameters, rtime_tolerance=2)
 
 def join(parameters, args):
-    import time
     import os
     import pickle
-    import json
-    from collections import namedtuple
-    from . import samples
+    import pandas as pd
+    import uuid
+    from . import workflow
     from . import constructors
     from . import experiment
-    from . import workflow
 
-    parameters['outdir'] = './testing/'
-    parameters['time_stamp'] = "now"
-    parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
-    os.makedirs(parameters['outdir'])
+    
+    projects = []
+    for x in parameters['to_join']:
+        p_desc, cmap, epd, ftable, p_map = read_project(x)
+        exp = pickle.load(open(os.path.join(x, "export/experiment.json"), 'rb'))
+        projects.append({"experiment": exp, 
+                         "cmap": cmap, 
+                         "project": p_desc,
+                         "emp_cpd": epd,
+                         "ftable": ftable,
+                         "mapping": p_map,
+                         "input_file": x
+                        })
     workflow.create_export_folders(parameters)
-
-    project_desc_1, cmap_1, epd_1, Ftable_1, map_1 = read_project(args.input)
-    project_desc_2, cmap_2, epd_2, Ftable_2, map_2 = read_project(args.input2)
-
-
-    exp_1 = pickle.load(open(os.path.join(args.input, "export/experiment.json"), 'rb'))
-    exp_2 = pickle.load(open(os.path.join(args.input2, "export/experiment.json"), 'rb'))
-
-    #print(project_desc_1)
-    #exit()
-
+    parameters['min_peak_height'] = min([x["experiment"].parameters["min_peak_height"] for x in projects])
+    parameters['min_prominence_threshold'] = min([x["experiment"].parameters["min_prominence_threshold"] for x in projects])
     parameters['database_mode'] = 'memory'
-    time_stamp = [str(x) for x in time.localtime()[1:6]]
-    parameters['time_stamp'] = ':'.join(time_stamp)
-    time_stamp = ''.join(time_stamp)
 
-    sample_registry = {ii: {'sample_id': ii, 'input_file': file, 'name': 'cmap_' + str(ii)} for ii, file in enumerate([cmap_1, cmap_2])}
-    mock_extracts = {
-        i: {
+    
+    sample_registry = {}
+    mock_extracts = {}
+    for ii, x in enumerate(projects):
+        sample_registry[ii] = {
+            "sample_id": ii,
+            "input_file": x['input_file'],
+            "name": uuid.uuid1()
+        }
+        dict_scan_rtime = x["cmap"]["dict_scan_rtime"]
+        list_scan_times = list(dict_scan_rtime.keys())
+        list_mass_tracks = list(x["cmap"]["list_mass_tracks"].values())
+        anchor_mz_pairs = workflow.find_mzdiff_pairs_from_masstracks(list_mass_tracks)
+        print("EXP: ", x['experiment'].all_samples)
+        mock_extracts[ii] = {
             'status:mzml_parsing': 'passed',
-            "status:eic": 'passed',
+            'status:eic': 'passed',
             'data_location': None,
-            'max_scan_number': max(list(x['dict_scan_rtime'].keys())),
-            'list_scan_numbers': list(x['dict_scan_rtime'].keys()),
-            'list_retention_time': list(x['dict_scan_rtime'].values()),
-            'track_mzs': [(z['mz'], z['id_number']) for z in list(x['list_mass_tracks'].values())],
-            'number_anchor_mz_pairs': len(workflow.find_mzdiff_pairs_from_masstracks([z for z in x['list_mass_tracks'].values()])),
-            'anchor_mz_pairs': workflow.find_mzdiff_pairs_from_masstracks([z for z in x['list_mass_tracks'].values()]),
-            'composite_of': [exp_1, exp_2][i],
-            'sample_mapping': [map_1, map_2][i],
+            'max_scan_number': max(list_scan_times),
+            'list_scan_numbers': list_scan_times,
+            'list_retention_time': list(dict_scan_rtime.values()),
+            'track_mzs': [(z['mz'], z['id_number']) for z in list_mass_tracks],
+            'anchor_mz_pairs': anchor_mz_pairs,
+            'number_anchor_mz_pairs': len(anchor_mz_pairs),
+            'composite_of': x['experiment'],
+            'sample_mapping': x['mapping'],
             'sample_data': {
-                'sample_id': i,
+                'sample_id': ii,
                 'input_file': None,
-                'ion_mode': 'pos',
-                'max_scan_number': max(x['dict_scan_rtime'].keys()),
-                'list_mass_tracks': [z for z in x['list_mass_tracks'].values()],
-                'anchor_mz_pairs': workflow.find_mzdiff_pairs_from_masstracks([z for z in x['list_mass_tracks'].values()]),
-                'number_anchor_mz_pairs': len(workflow.find_mzdiff_pairs_from_masstracks([z for z in x['list_mass_tracks'].values()]))
-            },
-         } for i, x in enumerate([cmap_1, cmap_2])
-    }
+                'ion_mode': x['experiment'].mode,
+                'max_scan_number': max(list_scan_times),
+                'list_mass_tracks': list_mass_tracks, 
+                'anchor_mz_pairs': anchor_mz_pairs,
+                'number_anchor_mz_pairs': len(anchor_mz_pairs)
+            }
+        }
+        sample_registry[ii].update(mock_extracts[ii])
 
-    for sid, sam in sample_registry.items():
-        sam.update(mock_extracts[sid])
-
-    join_exp = experiment.ext_Experiment(sample_registry, parameters)
-    join_exp.process_all()
-    join_exp.export_all()
-    flist = []
-
-    import pandas as pd
-    df = []
-    for ii, peak in enumerate(join_exp.CMAP.FeatureList):
+    meta_exp = experiment.ext_Experiment(sample_registry, parameters)
+    meta_exp.process_all()
+    #meta_exp.export_all()
+    meta_ft = []
+    for ii, peak in enumerate(meta_exp.CMAP.FeatureList):
         row = dict(peak)
-        for cmap in join_exp.all_samples:
-            corr_l_base = cmap.reverse_rt_cal_dict.get(peak['left_base'], peak['left_base'])
-            corr_r_base = cmap.reverse_rt_cal_dict.get(peak['right_base'], peak['right_base'])
-            join_track_number = join_exp.CMAP.MassGrid[cmap.name][peak['parent_masstrack_id']]
-            if not pd.isna(join_track_number):
-                join_track_number = int(join_track_number)
-                for sample in cmap.composite_of.all_samples:
-                    sample_track_number = cmap.sample_mapping[sample.name][join_track_number]
+        for meta_sample in meta_exp.all_samples:
+            meta_l_base = meta_sample.reverse_rt_cal_dict.get(peak['left_base'], peak['left_base'])
+            meta_r_base = meta_sample.reverse_rt_cal_dict.get(peak['right_base'], peak['right_base'])
+            meta_track_number = meta_exp.CMAP.MassGrid[meta_sample.name][peak['parent_masstrack_id']]
+            if not pd.isna(meta_track_number):
+                meta_track_number = int(meta_track_number)
+                for sample in meta_sample.composite_of.all_samples:
+                    sample_track_number = meta_sample.sample_mapping[sample.name][meta_track_number]
                     if not pd.isna(sample_track_number):
-                        mass_tracks = sample.get_masstracks_and_anchors()
-                        mass_track = mass_tracks[int(sample_track_number)]
-                        left_base = sample.reverse_rt_cal_dict.get(corr_l_base, corr_l_base)
-                        right_base = sample.reverse_rt_cal_dict.get(corr_r_base, corr_r_base)
-                        peak_area = mass_track['intensity'][left_base: right_base+1].sum()
-                        row[sample.name] = peak_area
+                        sample_mass_tracks = sample.get_masstracks_and_anchors()
+                        sample_mass_track = sample_mass_tracks[int(sample_track_number)]
+                        sample_left_base = sample.reverse_rt_cal_dict.get(meta_l_base, meta_l_base)
+                        sample_right_base = sample.reverse_rt_cal_dict.get(meta_r_base, meta_r_base)
+                        sample_peak_area = sample_mass_track['intensity'][sample_left_base: sample_right_base+1].sum()
+                        row[sample.name] = sample_peak_area
                     else:
                         row[sample.name] = None
-        df.append(row)
-    ft = pd.DataFrame(df)
-    ft.to_csv('./new_ftable.tsv', sep="\t")
-
-
-
-                    #sample_dat = pickle.load(open(os.path.join("./pickles", sample + ".pickle"), 'rb'))
-                    #sample_track_number = cmap['sample_mapping'][sample][join_track_number]
-                    #if not pd.isna(sample_track_number):
-                    #    list_mass_tracks = sample_dat['list_mass_tracks']
-                    #    mass_track = list_mass_tracks[int(sample_track_number)]
-
-
-                    #    print(join_track_number)
-                    #    print("\t", int(sample_track_number))
-
-
-
-
-
-
-    #for ii, ft in enumerate([Ftable_1, Ftable_2]):
-    #    for parent_mass_track in ft['parent_masstrack_id']:
-    #        new_track_number = join_exp.CMAP.MassGrid['cmap_' + str(ii)][parent_mass_track]
-    #        if not pd.isna(new_track_number):
-    #            try: 
-    #                mass_track = 
-        
-
-
-
-    #join_exp.export_all()
-
+        meta_ft.append(row)
+    meta_ft = pd.DataFrame(meta_ft)
+    meta_ft.to_csv('./new_ftable.tsv', sep="\t")
 
 def viz(parameters, args):
     datadir = args.input
     project_desc, cmap, epd, Ftable = read_project(datadir)
     dashboard(project_desc, cmap, epd, Ftable)
-    
-def combine_project_descriptions(project_desc_1, project_desc_2, args):
-    return {}
-
-
 
 def main(parameters=PARAMETERS):
     '''
@@ -227,6 +193,8 @@ def main(parameters=PARAMETERS):
             help='mode of ionization, pos or neg')
     parser.add_argument('--ppm', default=5, type=int, 
             help='mass precision in ppm (part per million), same as mz_tolerance_ppm')
+    parser.add_argument('--to_join', '--list', nargs='+',
+            help='experiments to join')
     parser.add_argument('-i', '--input', 
             help='input directory of mzML files to process, or a single file to analyze')
     parser.add_argument('-i2', '--input2', 
@@ -272,6 +240,7 @@ def main(parameters=PARAMETERS):
     parameters['multicores'] = min(mp.cpu_count(), parameters['multicores'])
     parameters['input'] = args.input
     parameters['input2'] = args.input2
+    parameters['to_join'] = args.to_join
     parameters['debug_rtime_align'] = booleandict[args.debug_rtime_align]
     parameters['time_stamp'] = '_'.join([str(x) for x in time.localtime()[1:6]])
 
