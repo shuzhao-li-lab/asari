@@ -7,7 +7,8 @@ from asari import __version__
 from .workflow import (get_mz_list, 
                        process_project, 
                        process_xics, 
-                       read_project_dir)
+                       read_project_dir,
+                       join_projects)
 from .default_parameters import PARAMETERS
 from .dashboard import read_project, dashboard
 from .analyze import estimate_min_peak_height, analyze_single_sample
@@ -37,7 +38,7 @@ def __run_process__(parameters, args):
     else:
         if args.autoheight:
             try:
-                parameters['min_peak_height'] = estimate_min_peak_height(list_input_files)
+                parameters['min_peak_height'] = estimate_min_peak_height(list_input_files, cores_to_use=parameters['multicores'], num_files_to_use=parameters['multicores'])
                 if parameters['cal_autoheight_mode'] == 'multiplier':
                     parameters['cal_min_peak_height'] = parameters['cal_autoheight_multiplier'] * parameters['min_peak_height']
             except ValueError as err:
@@ -65,96 +66,7 @@ def annotate(parameters, args):
     annotate_user_featuretable(args.input, parameters=parameters, rtime_tolerance=2)
 
 def join(parameters, args):
-    import os
-    import pickle
-    import pandas as pd
-    import uuid
-    from . import workflow
-    from . import constructors
-    from . import experiment
-
-    
-    projects = []
-    for x in parameters['to_join']:
-        p_desc, cmap, epd, ftable, p_map = read_project(x)
-        exp = pickle.load(open(os.path.join(x, "export/experiment.json"), 'rb'))
-        projects.append({"experiment": exp, 
-                         "cmap": cmap, 
-                         "project": p_desc,
-                         "emp_cpd": epd,
-                         "ftable": ftable,
-                         "mapping": p_map,
-                         "input_file": x
-                        })
-    workflow.create_export_folders(parameters)
-    parameters['min_peak_height'] = min([x["experiment"].parameters["min_peak_height"] for x in projects])
-    parameters['min_prominence_threshold'] = min([x["experiment"].parameters["min_prominence_threshold"] for x in projects])
-    parameters['database_mode'] = 'memory'
-
-    
-    sample_registry = {}
-    mock_extracts = {}
-    for ii, x in enumerate(projects):
-        sample_registry[ii] = {
-            "sample_id": ii,
-            "input_file": x['input_file'],
-            "name": uuid.uuid1()
-        }
-        dict_scan_rtime = x["cmap"]["dict_scan_rtime"]
-        list_scan_times = list(dict_scan_rtime.keys())
-        list_mass_tracks = list(x["cmap"]["list_mass_tracks"].values())
-        anchor_mz_pairs = workflow.find_mzdiff_pairs_from_masstracks(list_mass_tracks)
-        print("EXP: ", x['experiment'].all_samples)
-        mock_extracts[ii] = {
-            'status:mzml_parsing': 'passed',
-            'status:eic': 'passed',
-            'data_location': None,
-            'max_scan_number': max(list_scan_times),
-            'list_scan_numbers': list_scan_times,
-            'list_retention_time': list(dict_scan_rtime.values()),
-            'track_mzs': [(z['mz'], z['id_number']) for z in list_mass_tracks],
-            'anchor_mz_pairs': anchor_mz_pairs,
-            'number_anchor_mz_pairs': len(anchor_mz_pairs),
-            'composite_of': x['experiment'],
-            'sample_mapping': x['mapping'],
-            'sample_data': {
-                'sample_id': ii,
-                'input_file': None,
-                'ion_mode': x['experiment'].mode,
-                'max_scan_number': max(list_scan_times),
-                'list_mass_tracks': list_mass_tracks, 
-                'anchor_mz_pairs': anchor_mz_pairs,
-                'number_anchor_mz_pairs': len(anchor_mz_pairs)
-            }
-        }
-        sample_registry[ii].update(mock_extracts[ii])
-
-    meta_exp = experiment.ext_Experiment(sample_registry, parameters)
-    meta_exp.process_all()
-    #meta_exp.export_all()
-    meta_ft = []
-    for ii, peak in enumerate(meta_exp.CMAP.FeatureList):
-        row = dict(peak)
-        for meta_sample in meta_exp.all_samples:
-            meta_l_base = meta_sample.reverse_rt_cal_dict.get(peak['left_base'], peak['left_base'])
-            meta_r_base = meta_sample.reverse_rt_cal_dict.get(peak['right_base'], peak['right_base'])
-            meta_track_number = meta_exp.CMAP.MassGrid[meta_sample.name][peak['parent_masstrack_id']]
-            if not pd.isna(meta_track_number):
-                meta_track_number = int(meta_track_number)
-                for sample in meta_sample.composite_of.all_samples:
-                    sample_track_number = meta_sample.sample_mapping[sample.name][meta_track_number]
-                    if not pd.isna(sample_track_number):
-                        sample_mass_tracks = sample.get_masstracks_and_anchors()
-                        sample_mass_track = sample_mass_tracks[int(sample_track_number)]
-                        sample_left_base = sample.reverse_rt_cal_dict.get(meta_l_base, meta_l_base)
-                        sample_right_base = sample.reverse_rt_cal_dict.get(meta_r_base, meta_r_base)
-                        sample_peak_area = sample_mass_track['intensity'][sample_left_base: sample_right_base+1].sum()
-                        row[sample.name] = sample_peak_area
-                    else:
-                        row[sample.name] = None
-        meta_ft.append(row)
-    meta_ft = pd.DataFrame(meta_ft)
-    meta_ft.to_csv('./new_ftable.tsv', sep="\t")
+    join_projects(parameters['to_join'], parameters)
 
 def viz(parameters, args):
     datadir = args.input
@@ -197,8 +109,6 @@ def main(parameters=PARAMETERS):
             help='experiments to join')
     parser.add_argument('-i', '--input', 
             help='input directory of mzML files to process, or a single file to analyze')
-    parser.add_argument('-i2', '--input2', 
-                        help='input_file_2')
     parser.add_argument('-o', '--output', 
             help='output directory')
     parser.add_argument('-j', '--project', 
@@ -237,9 +147,8 @@ def main(parameters=PARAMETERS):
         parameters.update(
             load(open(args.parameters).read(), Loader=Loader)
         )
-    parameters['multicores'] = min(mp.cpu_count(), parameters['multicores'])
+    parameters['multicores'] = mp.cpu_count() if parameters['multicores'] == -1 else min(mp.cpu_count(), parameters['multicores'])
     parameters['input'] = args.input
-    parameters['input2'] = args.input2
     parameters['to_join'] = args.to_join
     parameters['debug_rtime_align'] = booleandict[args.debug_rtime_align]
     parameters['time_stamp'] = '_'.join([str(x) for x in time.localtime()[1:6]])
@@ -250,7 +159,7 @@ def main(parameters=PARAMETERS):
     if args.ppm:
         parameters['mz_tolerance_ppm'] = args.ppm
     if args.cores:
-        parameters['multicores'] = min(mp.cpu_count(), args.cores)
+        parameters['multicores'] = mp.cpu_count() if parameters['multicores'] == -1 else min(mp.cpu_count(), parameters['multicores'])
     if args.project:
         parameters['project_name'] = args.project
     if args.output:

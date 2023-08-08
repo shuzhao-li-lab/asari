@@ -17,7 +17,7 @@ PARAMETERS = {
     'database_mode': 'auto',            # `auto` determined on sample number 
                                         # 'ondisk', 'memory' (run in memory, only small studies), 
                                         # 'mongo' (MongoDB, requiring installation of DB server, to implement)
-    'multicores': 4,                    # number of cores allowed in parallel processing
+    'multicores': -1,                    # number of cores allowed in parallel processing
 
     # mass parameters
     'mode': 'pos',                      # ionization mode
@@ -71,6 +71,20 @@ PARAMETERS = {
                                           # otherwise they are chosen automatically
     # 'project_sample_number_large': 1000, # not used now
     # 
+    'feature_table_fields': 
+        {
+        'id_number': None,
+        'mz': 4,
+        'rtime': 2,
+        'rtime_left_base': 2,
+        'rtime_right_base': 2 ,
+        'parent_masstrack_id': None ,
+        'peak_area': 2,
+        'cSelectivity': 2 ,
+        'goodness_fitting': 2 ,
+        'snr': 1,
+        #'detection_counts': 1,
+        }
     }
     
 

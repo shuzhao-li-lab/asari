@@ -1,5 +1,8 @@
 import pickle
+import pandas as pd
+import numpy as np
 from .mass_functions import flatten_tuplelist
+from .peaks import get_gaussian_peakarea_on_intensity_list, peak_area_sum, peak_area_auc
 
 class SimpleSample:
     '''
@@ -10,7 +13,13 @@ class SimpleSample:
     Function to get mass tracks from a mzML file is in workflow.process_project and batch_EIC_from_samples_.
     Peaks and empCpds are determined in constructors.CompositeMap.
     '''
-    def __init__(self, registry={}, experiment=None, database_mode='ondisk', mode='pos', is_reference=False):
+    peak_area_mode_map = {
+        "auc": peak_area_auc,
+        "gauss": get_gaussian_peakarea_on_intensity_list,
+        "sum": peak_area_sum
+    }
+
+    def __init__(self, registry, experiment=None, is_reference=False):
         '''
         Build a lightweight sample class.
 
@@ -34,65 +43,113 @@ class SimpleSample:
         is not checked during MassGrid construction. But it is checked during DB annotation.
         '''
         self.experiment = experiment
-        self.mode = mode
-        self.database_mode = database_mode 
         self.is_reference = is_reference 
-
-        self.input_file = registry['input_file']
-        self.name = registry['name']
-        self.sample_id = registry['sample_id']
-        self.data_location = registry['data_location']
-        self.track_mzs = registry['track_mzs']
-        self.max_scan_number = registry['max_scan_number']
-        self.anchor_mz_pairs = registry['anchor_mz_pairs']
-        self.rt_numbers = registry['list_scan_numbers']
-        self.list_retention_time = registry['list_retention_time']
-        if 'sample_mapping' in registry:
-            self.sample_mapping = registry['sample_mapping']
-        else:
-            self.sample_mapping = None
-        if 'composite_of' in registry:
-            self.composite_of = registry['composite_of']
-        else:
-            self.composite_of = None
-
-        if self.database_mode == 'memory':
-            self.list_mass_tracks = registry['sample_data']['list_mass_tracks']
-        else:
-            self.list_mass_tracks = []
-            
-        self._mz_landmarks_ = flatten_tuplelist(self.anchor_mz_pairs)
+        self.registry = registry
         self.rt_landmarks = []  # to populate at CMAP.calibrate_sample_RT
+
+        self.__list_mass_tracks = None
+
 
         # These are critical RT calibration functions, index mapping with the reference sample
         self.rt_cal_dict = None
         self.reverse_rt_cal_dict = None
         # placeholder
         self.mz_calibration_function = None
-                                   
 
-    def get_masstracks_and_anchors(self):
-        '''
-        Retrieve list_mass_tracks for this sample if not alrady in memory.
+    @property
+    def input_file(self):
+        return self.registry['input_file']
+        
+    @property
+    def name(self):
+        return self.registry['name']
+    
+    @property
+    def sample_id(self):
+        return self.registry['sample_id']
+    
+    @property
+    def data_location(self):
+        return self.registry['data_location']
+    
+    @property
+    def track_mzs(self):
+        return self.registry['track_mzs']
+    
+    @property
+    def max_scan_number(self):
+        return self.registry['max_scan_number']
+    
+    @property
+    def anchor_mz_pairs(self):
+        return self.registry['anchor_mz_pairs']
 
-        Returns
-        ------- 
-        A list of all mass tracks in this sample.
+    @property
+    def rt_numbers(self):
+        return self.registry['list_scan_numbers']
+    
+    @property
+    def list_retention_time(self):
+        return self.registry['list_retention_time']
 
-        Note
-        ----
-        Mass tracks are the bulk of data per sample, stored dependent on database_mode.
-        list_mass_tracks is accessed twice in this version of asari:
-        1) RT calibration and building composite map
-        2) extraction of peak areas for features
-        '''
-        if self.list_mass_tracks:     # important, this is used to check if in memory
-            return self.list_mass_tracks
+    @property
+    def sample_mapping(self):
+        if 'sample_mapping' in self.registry:
+            return self.registry['sample_mapping']
         else:
-            sample_data = self._get_sample_data()
-            list_mass_tracks = sample_data['list_mass_tracks']
-            return list_mass_tracks
+            return None
 
+    @property
+    def database_mode(self):
+        return self.experiment.database_mode
+
+    @property
+    def composite_of(self):
+        if 'composite_of' in self.registry:
+            return self.registry['composite_of']
+        else:
+            return None
+
+    @property
+    def list_mass_tracks(self):
+        if self.__list_mass_tracks is None and self.database_mode != "memory":
+            return self._get_sample_data()['list_mass_tracks']
+        elif self.__list_mass_tracks is None and self.database_mode == "memory":
+            self.__list_mass_tracks = self.registry['sample_data']['list_mass_tracks']
+        return self.__list_mass_tracks
+    
+    @property
+    def _mz_landmarks_(self):
+        return flatten_tuplelist(self.anchor_mz_pairs)
+    
+    @property
+    def mode(self):
+        return self.experiment.mode
+    
+    @property
+    def peak_area_mode(self):
+        return self.experiment.peak_area_mode
+
+    def release_memory(self):
+        if self.mode == 'ondisk':
+            self.__list_mass_tracks = None
+
+    def calc_peak_area(self, mass_track_id, left_base, right_base):
+        if self.composite_of is None:
+            if pd.isna(mass_track_id):
+                return {self.name: 0}
+            else:
+                return {self.name: self.peak_area_mode_map[self.peak_area_mode](self.list_mass_tracks[mass_track_id]['intensity'], left_base, right_base)}
+        else:
+            return {k: v for d in [x.calc_peak_area(mass_track_id, left_base, right_base) for x in self.composite_of] for k, v in d.items()}
+        
+    @property
+    def all_nested_samples(self):
+        if self.composite_of is None:
+            return [self.name]
+        else:
+            return [j for i in [x.all_nested_samples for x in self.composite_of] for j in i]
+        
 
     def get_rt_calibration_records(self):
         '''
@@ -107,7 +164,6 @@ class SimpleSample:
             'reverse_rt_cal_dict': self.reverse_rt_cal_dict,
         }
 
-
     def _get_sample_data(self):
         '''
         Wrapper of _retrieve_from_disk function.
@@ -120,7 +176,10 @@ class SimpleSample:
             elif: self.database_mode == 'firebase': 
                 return self.retrieve_from_db()
         '''
-        return self._retrieve_from_disk()
+        mode_method_map = {
+            "ondisk": self._retrieve_from_disk,
+            }
+        return mode_method_map[self.database_mode]()
 
     def _retrieve_from_disk(self):
         '''
@@ -129,25 +188,3 @@ class SimpleSample:
         with open(self.data_location, 'rb') as f:
             sample_data = pickle.load(f)
         return sample_data
-
-    def push_to_db(self, cursor):
-        '''
-        Placeholder.
-
-        Parameters
-        ----------
-        cursor - database cursor instance
-            cursor to interact with database
-        '''
-        pass
-
-    def retrieve_from_db(self, cursor):
-        '''
-        Placeholder.
-
-        Parameters
-        ----------
-        cursor - database cursor instance
-            cursor to interact with database
-        '''
-        pass

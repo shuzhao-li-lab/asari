@@ -6,6 +6,8 @@ import multiprocessing as mp
 import numpy as np
 from scipy.signal import detrend, find_peaks 
 from scipy.optimize import curve_fit 
+from scipy.ndimage import maximum_filter1d
+
 
 from .chromatograms import (smooth_moving_average, 
                             smooth_lowess)
@@ -39,17 +41,19 @@ def batch_deep_detect_elution_peaks(list_mass_tracks, number_of_scans, parameter
     --------
     stats_detect_elution_peaks
     '''
-    with mp.Manager() as manager:
-        shared_list = manager.list()
-        iters = iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters, shared_list)
-        with mp.Pool( parameters['multicores'] ) as pool:
-            # call peak detection function here
-            pool.starmap( stats_detect_elution_peaks, iters )
+    #FeatureList = []
+    #with mp.Pool(parameters['multicores']) as pool:
+    #    iters = iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters)
+    #    for x in pool.starmap(stats_detect_elution_peaks, 
+    features = []
+    with mp.Pool(parameters['multicores']) as pool:
+        iters = iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters)
+        for peaks in pool.map(stats_detect_elution_peaks, iters):
+            if peaks:
+                features.extend(peaks)
+    return list(features)
 
-        FeatureList = list(shared_list)
-    return FeatureList
-
-def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters, shared_list):
+def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters):
     '''
     Generate iterables for multiprocess.starmap for running elution peak detection.
 
@@ -74,34 +78,22 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
         wlen, snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold, 
         shared_list), ...]
     '''
-    iters = []
-    min_peak_height = parameters['min_peak_height']
-    min_prominence_threshold = parameters['min_prominence_threshold']
-    min_intensity_threshold = parameters['min_intensity_threshold']
-    min_fwhm = round( 0.5 * parameters['min_timepoints'] )
-    snr = parameters['signal_noise_ratio']
-    peakshape = parameters['gaussian_shape']
-    wlen = parameters['wlen']            # divided window to the left and to right
-    min_prominence_ratio = 0.05
-    iteration = False                    # a 2nd round of peak detection if enough remaining datapoints
-    for mass_track in list_mass_tracks:
-        if mass_track['intensity'].max() > min_peak_height:
-            iters.append(
-                (mass_track, number_of_scans, min_peak_height, min_fwhm, min_prominence_threshold,
-                wlen, snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold, 
-                shared_list)
-            )
-    return iters
-
+    
+    return [
+        {
+            "mass_track": mass_track,
+            "number_of_scans": number_of_scans,
+            "parameters": parameters,
+            "min_prominence_ratio": 0.05,
+            "iteration": False
+        } for mass_track in list_mass_tracks if mass_track['intensity'].max() > parameters['min_peak_height']
+    ]
 
 # -----------------------------------------------------------------------------
 # Statistics guided peak detection
 # -----------------------------------------------------------------------------
 
-def stats_detect_elution_peaks(mass_track, number_of_scans, 
-                min_peak_height, min_fwhm, min_prominence_threshold,
-                wlen, snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold,
-                shared_list):
+def stats_detect_elution_peaks(peak_detect_param):
     '''
     Statistics guided peak detection. 
     This is the main method in asari for detecting elution peaks on a mass track.
@@ -157,11 +149,17 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
     SNR is computed on local noise (average of up to 100 nonpeak data points on each side of a peak).
     '''
     list_json_peaks, list_peaks = [], []
-    list_scans = np.arange(number_of_scans)
+    list_scans = np.arange(peak_detect_param["number_of_scans"])
+    mass_track = peak_detect_param['mass_track']
+    min_fwhm = round( 0.5 * peak_detect_param['parameters']['min_timepoints'] )
+    number_of_scans = peak_detect_param['number_of_scans']
     _baseline_, noise_level, scaling_factor, min_prominence_threshold, list_intensity \
         = audit_mass_track(
-                mass_track['intensity'], min_fwhm, min_intensity_threshold, 
-                min_peak_height, min_prominence_threshold
+                mass_track['intensity'], 
+                min_fwhm, 
+                peak_detect_param['parameters']['min_intensity_threshold'], 
+                peak_detect_param['parameters']['min_peak_height'], 
+                peak_detect_param['parameters']['min_prominence_threshold']
                 )       
     # # get ROIs by separation/filtering with noise_level, allowing 2 gap
     __selected_scans__ = list_scans[list_intensity > noise_level]
@@ -183,9 +181,16 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
                     R = extend_ROI(R, number_of_scans)
                 list_intensity_roi = list_intensity[R]
                 peaks = detect_evaluate_peaks_on_roi( 
-                            list_intensity_roi, R, 
-                            min_peak_height, min_fwhm, min_prominence_threshold, wlen,
-                            snr, peakshape, min_prominence_ratio, noise_level
+                            list_intensity_roi, 
+                            R, 
+                            peak_detect_param['parameters']['min_peak_height'], 
+                            min_fwhm,
+                            min_prominence_threshold, 
+                            peak_detect_param['parameters']['wlen'],
+                            peak_detect_param['parameters']['signal_noise_ratio'],
+                            peak_detect_param['parameters']['gaussian_shape'],
+                            peak_detect_param['min_prominence_ratio'], 
+                            noise_level
                     )
                 list_json_peaks += peaks
 
@@ -201,13 +206,15 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
                 peak['height'] = scaling_factor * peak['height'] + _baseline_
                 __height = min(peak['height'], 99999999)        # cap upper limit and avoid INF 
                 peak['snr'] = int(__height/compute_noise_by_flanks(
-                                    peak, mass_track['intensity'], noise_data_points, 
-                                    min_intensity_threshold, noise_level)) 
-                if peak['snr'] >= snr:
+                                    peak, 
+                                    mass_track['intensity'], 
+                                    noise_data_points, 
+                                    peak_detect_param['parameters']['min_intensity_threshold'], 
+                                    noise_level)) 
+                if peak['snr'] >= peak_detect_param['parameters']['signal_noise_ratio']:
                     peak['height'] = int(peak['height'])
                     list_peaks.append(peak)
-
-    shared_list += list_peaks
+    return list_peaks
 
 def compute_noise_by_flanks(peak, 
                             list_intensity, 
@@ -572,6 +579,12 @@ def evaluate_gaussian_peak_on_intensity_list(intensity_list, height, apex, left,
 
     return goodness_fitting, sigma
 
+def peak_area_auc(track_intensity, left_base, right_base):
+    return maximum_filter1d(track_intensity[left_base: right_base+1], size=2, mode='constant').sum()
+
+def peak_area_sum(track_intensity, left_base, right_base):
+    return track_intensity[left_base: right_base+1].sum()
+
 
 def get_gaussian_peakarea_on_intensity_list(intensity_list, left, right):
     '''
@@ -782,8 +795,7 @@ def cleanup_peak_cluster(cluster_peaks):
         return cluster_peaks
     elif len(cluster_peaks) == 2:
         [peak1, peak2] = cluster_peaks
-        bases = list(set([peak1['left_base'], peak1['right_base'], 
-                          peak2['left_base'], peak2['right_base']]))
+        bases = list(set([peak1['left_base'], peak1['right_base'], peak2['left_base'], peak2['right_base']]))
         bases.sort()
         peak1['left_base'], peak1['right_base'] = bases[:2]
         peak2['left_base'], peak2['right_base'] = bases[-2:]
