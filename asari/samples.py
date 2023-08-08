@@ -1,8 +1,10 @@
 import pickle
 import pandas as pd
 import numpy as np
+import psutil
 from .mass_functions import flatten_tuplelist
 from .peaks import get_gaussian_peakarea_on_intensity_list, peak_area_sum, peak_area_auc
+
 
 class SimpleSample:
     '''
@@ -19,6 +21,9 @@ class SimpleSample:
         "sum": peak_area_sum
     }
 
+    cache = {}
+    sample_size_estimate = 0
+    measured = set()
     def __init__(self, registry, experiment=None, is_reference=False):
         '''
         Build a lightweight sample class.
@@ -112,11 +117,24 @@ class SimpleSample:
 
     @property
     def list_mass_tracks(self):
-        if self.__list_mass_tracks is None and self.database_mode != "memory":
-            return self._get_sample_data()['list_mass_tracks']
-        elif self.__list_mass_tracks is None and self.database_mode == "memory":
-            self.__list_mass_tracks = self.registry['sample_data']['list_mass_tracks']
-        return self.__list_mass_tracks
+        if self.database_mode == "memory":
+            return self.registry['sample_data']['list_mass_tracks']
+        elif self.database_mode == "auto":
+            if self.name in self.cache:
+                return SimpleSample.cache[self.name]
+            if self.name not in SimpleSample.measured:
+                f1 = psutil.Process().memory_info().rss
+                x = self._get_sample_data()['list_mass_tracks']
+                f2 = psutil.Process().memory_info().rss
+                SimpleSample.sample_size_estimate = max(2*(f2-f1), SimpleSample.sample_size_estimate)
+                SimpleSample.measured.add(self.name)
+            if psutil.virtual_memory().free > SimpleSample.sample_size_estimate * 10:
+                SimpleSample.cache[self.name] = self._get_sample_data()['list_mass_tracks']
+                return SimpleSample.cache[self.name]
+            else:
+                return self._get_sample_data()['list_mass_track']
+        elif self.database_mode == "ondisk":
+            return self._get_sample_data()['list_mass_track']
     
     @property
     def _mz_landmarks_(self):
