@@ -627,14 +627,10 @@ def nn_cluster_by_mz_seeds(bin_data_tuples, mz_tolerance, presorted=True):
     '''
     mz_seeds = identify_mass_peaks(bin_data_tuples, mz_tolerance, presorted)
     if mz_seeds:
-        _NN = len(mz_seeds)
-        # clusters = [[]] * _NN # see problem in Note
-        clusters = []
-        for x in mz_seeds:
-            clusters.append([])
+        clusters = [[] for _ in mz_seeds]
         # assign cluster number by nearest distance to a seed
         for x in bin_data_tuples:
-            deltas = sorted([(abs(x[0] - mz_seeds[ii]), ii) for ii in range(_NN)])
+            deltas = sorted([(abs(x[0] - mz_seeds[ii]), ii) for ii in range(len(mz_seeds))])
             clusters[deltas[0][1]].append(x)
     else:
         clusters = [C for C in gap_divide_mz_cluster(bin_data_tuples, mz_tolerance)]
