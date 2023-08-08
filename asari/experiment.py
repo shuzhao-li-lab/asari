@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import pickle
+import pandas as pd
 
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
@@ -37,6 +38,7 @@ class ext_Experiment:
     
     Default asari work flow is in `ext_Experiment.process_all`.
     '''
+
     def __init__(self, sample_registry, parameters):
         '''
         This is the overall container for all data in an experiment/project.
@@ -54,19 +56,98 @@ class ext_Experiment:
         Major class attributes including self.number_of_samples, number_scans, reference_sample_id.
         '''
         self.sample_registry = sample_registry
-        self.valid_sample_ids = self.get_valid_sample_ids()
-        self.number_of_samples = len(self.valid_sample_ids)
-        self.number_scans = self.get_max_scan_number(sample_registry)
+        self.parameters = parameters
+
         self.all_samples = self.all_sample_instances = []
 
-        self.parameters = parameters
-        self.output_dir = parameters['outdir']
-        self.mode = parameters['mode']
-        self.mz_tolerance_ppm = self.parameters['mz_tolerance_ppm']
-        self.check_isotope_ratio = self.parameters['check_isotope_ratio']
-        self.database_mode = parameters['database_mode']
-        self.reference_sample_id = self.get_reference_sample_id()
-        
+        self.__number_scans = None
+        self.__valid_sample_ids = None
+        self.__reference_sample_id = None
+        self.__reference = None
+
+    # these properties are wrappers around the parameters dict, this exists so that 
+    # experiment data members and parameters do not get out of sync.
+    
+    @property
+    def valid_sample_ids(self):
+        if self.__valid_sample_ids is None:
+            self.__valid_sample_ids = self.get_valid_sample_ids()
+        return self.__valid_sample_ids
+    
+    @property
+    def number_of_samples(self):
+        return len(self.valid_sample_ids)
+    
+    @property
+    def number_scans(self):
+        if self.__number_scans is None:
+            self.__number_scans = self.get_max_scan_number()
+        return self.__number_scans
+    
+    @property
+    def output_dir(self):
+        return self.parameters['outdir']
+    
+    @property
+    def mode(self):
+        return self.parameters['mode']
+    
+    @property
+    def mz_tolerance_ppm(self):
+        return self.parameters['mz_tolerance_ppm']
+    
+    @property
+    def check_isotope_ratio(self):
+        return self.parameters['check_isotope_ratio']
+    
+    @property
+    def reference_sample_id(self):
+        if self.__reference_sample_id is None:
+            self.__reference_sample_id = self.get_reference_sample_id()
+        return self.__reference_sample_id
+    
+    @property
+    def min_peak_height(self):
+        return self.parameters['min_peak_height']
+    
+    @property
+    def min_prominence_threshold(self):
+        return self.parameters['min_prominence_threshold']
+    
+    @property
+    def database_mode(self):
+        return self.parameters['database_mode']
+    
+    @property
+    def reference(self):
+        if self.__reference is None:
+            return self.parameters['reference']
+        else:
+            return self.__reference
+    
+    @property
+    def rt_align(self):
+        return self.parameters['rt_align_on']
+    
+    @property
+    def mass_grid_mapping(self):
+        return self.parameters['mass_grid_mapping']
+    
+    @property
+    def peak_area_mode(self):
+        return self.parameters['peak_area']
+    
+    @property
+    def project_sample_number_small(self):
+        return self.parameters['project_sample_number_small']
+    
+    @property
+    def all_nested_samples(self):
+        return [j for i in [x.all_nested_samples for x in self.all_samples] for j in i]
+    
+    def set_reference(self, reference):
+        self.__reference = reference
+
     def get_reference_sample_id(self):
         '''
         get_reference_sample_id either by user specification, or
@@ -74,30 +155,31 @@ class ext_Experiment:
         This assumes the sample of most good m/z values has a good coverage of features.
         '''
         reference_sample_id = None
-        if self.parameters['reference'.lower()] in {'auto', 'manual'}:
+        if self.reference.lower() in {'auto', 'manual'}:
             if self.sample_registry:
                 L = [(v['number_anchor_mz_pairs'], v['sample_id'], v['name']) for v in self.sample_registry.values()]
                 L.sort(reverse=True)
-                if self.parameters['reference'].lower() == 'auto':
+                if self.reference.lower() == 'auto':
                     reference_sample_id = L[0][1]
                 else: 
-                    for i, (num_anchors, sample_id, name) in enumerate(L):
+                    for i, (num_anchors, _, name) in enumerate(L):
                         print(i, " - ", name, " : ", num_anchors)
                     choice_index = int(input("Specify index for refernce sample the push enter: "))
                     reference_sample_id = L[choice_index][1]
             else:
                 raise Exception("no samples in sample registry")
         else:
-            user_specified_reference = os.path.basename(self.parameters['reference']).rstrip(".mzML")
+            user_specified_reference = os.path.basename(self.reference).rstrip(".mzML")
             name_index_map = {os.path.basename(v['input_file']).rstrip(".mzML"): v['sample_id'] for v in self.sample_registry.values()}
             if user_specified_reference in name_index_map:
                 reference_sample_id = name_index_map[user_specified_reference]
             else:
                 raise Exception(user_specified_reference + " not found in sample registry")
         reference_sample = self.sample_registry[reference_sample_id]
-        self.parameters['reference'] = reference_sample['input_file']
+        print(reference_sample)
         print("\n    The reference sample is:\n    ||* %s *||\n" %reference_sample['name'])
         print("Max reference retention time is %4.2f at scan number %d.\n" %(max(reference_sample['list_retention_time']), reference_sample['max_scan_number']))
+        self.set_reference(reference_sample['input_file'])
         return reference_sample['sample_id']
         
     def get_valid_sample_ids(self):
@@ -106,7 +188,7 @@ class ext_Experiment:
         '''
         return [k for k,v in self.sample_registry.items() if v['status:eic'] == 'passed']
 
-    def get_max_scan_number(self, sample_registry):
+    def get_max_scan_number(self):
         '''
         Return max scan number among samples, or None if no valid sample.
 
@@ -116,9 +198,8 @@ class ext_Experiment:
             a dict that maps sample IDs to sample data
         '''
 
-        # todo - why does this function need to take sample_registry as an external argument vs. self.sample_registry?
-        if sample_registry:
-            return max([sample_registry[k]['max_scan_number'] for k in self.valid_sample_ids]) + 1
+        if self.sample_registry:
+            return max([self.sample_registry[k]['max_scan_number'] for k in self.valid_sample_ids]) + 1
         else:
             return None
 
@@ -141,7 +222,7 @@ class ext_Experiment:
         '''
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
-        if not self.parameters['rt_align_on']:
+        if not self.rt_align:
             self.CMAP.mock_rentention_alignment()
         self.CMAP.build_composite_tracks()
         self.CMAP.global_peak_detection()
@@ -157,17 +238,16 @@ class ext_Experiment:
             if true, generate annotation files, export CMAP pickle and do QC plot;
             else skip annotating.
         '''
-        self.CMAP.MassGrid.to_csv(
-            os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
+        self.CMAP.MassGrid.to_csv(os.path.join(self.output_dir, 'export', self.mass_grid_mapping) )
         if anno:
             for peak in self.CMAP.FeatureList:
                 peak['id'] = str(peak['id_number'])
             self.export_CMAP_pickle()
             self.annotate()
             self.generate_qc_plot_pdf()
-        pickle.dump(self, open(os.path.join(self.parameters['outdir'], 'export', 'experiment.json'), 'wb'))
+        pickle.dump(self, open(os.path.join(self.output_dir, 'export', 'experiment.json'), 'wb'))
         self.export_feature_tables()
-        self.export_log()
+        #self.export_log()
 
     def export_readme(self):
         '''
@@ -219,8 +299,8 @@ class ext_Experiment:
 
         project.json stores the parameters used to perform the analysis.
         '''
-
-        with open(os.path.join(self.parameters['outdir'], 'export', self.parameters['processing_readme'])) as readme_fh:
+        #todo - rewrite this to not use processing readme in the parameters
+        with open(os.path.join(self.output_dir, 'export', self.parameters['processing_readme'])) as readme_fh:
             readme_fh.write(README_txt)
 
     def annotate(self):
@@ -274,12 +354,12 @@ class ext_Experiment:
             self.select_unique_compound_features(EED.dict_empCpds)
         
         # export JSON
-        outfile = os.path.join(self.parameters['outdir'], 'Annotated_empricalCompounds.json')
+        outfile = os.path.join(self.output_dir, 'Annotated_empricalCompounds.json')
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(EED.dict_empCpds, f, cls=NpEncoder, ensure_ascii=False, indent=2)
 
         # export pickle
-        outfile = os.path.join(self.parameters['outdir'], 'export', 'epd.pickle')
+        outfile = os.path.join(self.output_dir, 'export', 'epd.pickle')
         with open(outfile, 'wb') as f:
             pickle.dump(EED.dict_empCpds, f, pickle.HIGHEST_PROTOCOL)
 
@@ -293,7 +373,7 @@ class ext_Experiment:
             from .qc import asari_qc_plot
             # using prefilter CMAP.FeatureTable
             asari_qc_plot(self.CMAP.FeatureTable,
-                          outfile=os.path.join(self.parameters['outdir'], 'export', outfile))
+                          outfile=os.path.join(self.output_dir, 'export', outfile))
 
         except ImportError:
             print("[QC plot] cannot import matplotlib, skipping.")
@@ -328,18 +408,15 @@ class ext_Experiment:
             May add data throttle in the future. The file cmap.pickle can get big.
         '''
         _export = {
-            '_number_of_samples_': self.CMAP._number_of_samples_,
+            '_number_of_samples_': self.CMAP.number_of_samples,
             'rt_length': self.CMAP.rt_length,
-            'rt_reference_landmarks': [p['apex'] 
-                                       for p in self.CMAP.good_reference_landmark_peaks],
-            'rt_records': [sample.get_rt_calibration_records()
-                                        for sample in self.all_samples
-                                        ],
+            'rt_reference_landmarks': [p['apex'] for p in self.CMAP.good_reference_landmark_peaks],
+            'rt_records': [sample.get_rt_calibration_records() for sample in self.all_samples],
             'dict_scan_rtime': self.CMAP.dict_scan_rtime,
             'list_mass_tracks': self.CMAP.composite_mass_tracks,
             'MassGrid': dict(self.CMAP.MassGrid),
         }
-        outfile = os.path.join(self.parameters['outdir'], 'export', 'cmap.pickle')
+        outfile = os.path.join(self.output_dir, 'export', 'cmap.pickle')
         with open(outfile, 'wb') as f:
             pickle.dump(_export, f, pickle.HIGHEST_PROTOCOL)
 
@@ -458,7 +535,7 @@ class ext_Experiment:
                     V['neutral_formula'], V['neutral_formula_mass'],
                     name_1st_guess, matched_DB_shorts, matched_DB_records]]) + "\n"
 
-        outfile = os.path.join(self.parameters['outdir'], export_file_name_prefix + '.tsv')
+        outfile = os.path.join(self.output_dir, export_file_name_prefix + '.tsv')
         with open(outfile, encoding='utf-8', mode='w') as O:
             O.write(s)
 
@@ -495,6 +572,50 @@ class ext_Experiment:
                     interim_id, V['neutral_formula'], best_peak.get('ion_relation', '')
                 )
 
+    def export_meta_feature_table(self, _snr=2, _peak_shape=0.7, _cSelectivity=0.7):
+        raw_meta_ft = []
+        sample_intensity_blank = {sample_name: 0 for sample_name in self.all_nested_samples}
+        for _, peak in enumerate(self.CMAP.FeatureList):
+            row = {
+                key: round(peak[key], round_int) if round_int else peak[key] for key, round_int in self.parameters['feature_table_fields'].items()
+            }
+            sample_intensities = self.calc_peak_area(peak['parent_masstrack_id'], peak['left_base'], peak['right_base'])
+            row['detection_counts'] = len([x for x in sample_intensities.values() if not pd.isna(x) and x > 0])
+            row.update(sample_intensity_blank)
+            row.update(self.calc_peak_area(peak['parent_masstrack_id'], peak['left_base'], peak['right_base']))
+            raw_meta_ft.append(row)
+        raw_meta_ft_df = pd.DataFrame(raw_meta_ft)
+        outfile = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
+        raw_meta_ft_df.to_csv(outfile, index=False, sep="\t")
+        print("\nFeature table (%d x %d) was written to %s." %(raw_meta_ft_df.shape[0], self.number_of_samples, outfile))
+
+        preferred_meta_ft_df = raw_meta_ft_df[raw_meta_ft_df['detection_counts'] > 0]
+        preferred_meta_ft_df = preferred_meta_ft_df[preferred_meta_ft_df['snr']>_snr]
+        preferred_meta_ft_df = preferred_meta_ft_df[preferred_meta_ft_df['goodness_fitting']>_peak_shape]
+        preferred_meta_ft_df = preferred_meta_ft_df[preferred_meta_ft_df['cSelectivity']>_cSelectivity]
+        outfile = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
+        preferred_meta_ft_df.to_csv(outfile, index=False, sep="\t")
+        print("Filtered Feature table (%d x %d) was written to %s.\n" %(preferred_meta_ft_df.shape[0], self.number_of_samples, outfile))
+
+        outfile = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['mz_rt_features'])
+        mz_rt_only = pd.DataFrame()
+        mz_rt_only['feature_id'] = preferred_meta_ft_df['feature_id']
+        mz_rt_only['mz'] = preferred_meta_ft_df['mz']
+        mz_rt_only['rtime'] = preferred_meta_ft_df['rtime']
+        mz_rt_only.to_csv(outfile, index=False, sep="\t")
+
+
+    def calc_peak_area(self, mass_track_id, left_base, right_base):
+        peak_areas = {}
+        for sample in self.all_samples:
+            sample_mapped_track_number = self.CMAP.MassGrid[sample.name][mass_track_id]
+            if not pd.isna(sample_mapped_track_number):
+                sample_mapped_left_base = sample.reverse_rt_cal_dict.get(left_base, left_base)
+                sample_mapped_right_base = sample.reverse_rt_cal_dict.get(right_base, right_base)
+                peak_areas.update(sample.calc_peak_area(sample_mapped_track_number, sample_mapped_left_base, sample_mapped_right_base))
+        return peak_areas    
+
+
     def export_feature_tables(self, _snr=2, _peak_shape=0.7, _cSelectivity=0.7):
         '''
         To export multiple features tables. 
@@ -521,6 +642,7 @@ class ext_Experiment:
         3. unique compound table under `outdir/export/`
         4. dependent on `target` extract option, a targeted_extraction table under `outdir`. 
         '''
+        
         good_samples = [sample.name for sample in self.all_samples] 
         filtered_FeatureTable = self.CMAP.FeatureTable[good_samples]                       
         # non zero counts
