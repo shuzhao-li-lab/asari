@@ -11,19 +11,23 @@
 # 
 
 PARAMETERS = {
-    'project_name': 'asari_project',
-    'outdir': 'output',
-    'pickle': False,
-    'database_mode': 'smart',            # `auto` determined on sample number 
-                                        # 'ondisk', 'memory' (run in memory, only small studies), 
-                                        # 'mongo' (MongoDB, requiring installation of DB server, to implement)
-    'multicores': -1,                    # number of cores allowed in parallel processing
+    # processing parameters
+
+    'project_name': 'asari_project',     # added to the output directory name
+    'outdir': 'output',                  # the name of the output director
+    'pickle': False,                     # if true, keep intermediate pickle files for future processing
+    'database_mode': 'smart',            # 'ondisk' use local storage as backing store for intermediates (e.g., XICs)
+                                         # 'memory' use RAM as backing store for intermediates 
+                                         # 'auto'   used 'ondisk' or 'memory' based number of samples
+                                         # 'smart'  use all available memory minus 2GB as backing store dynamically
+    'multicores': -1,                    # number of cores allowed in parallel processing, -1 uses all available cores
+    'project_sample_number_small': 10,   # below this value, memory is used as backing store AND mass grid is built pairwise
 
     # mass parameters
-    'mode': 'pos',                      # ionization mode
-    'mass_range': (50, 2000),
-    'mz_tolerance_ppm': 5,              # ppm, high selectivity meaning no overlap neighbors to confuse; 
-                                        # Low selectivity regions will be still inspected to determine the true number of features
+    'mode': 'pos',                       # ionization mode
+    'mass_range': (50, 2000),            # masses outside of this range are discarded
+    'mz_tolerance_ppm': 5,               # ppm, high selectivity meaning no overlap neighbors to confuse; 
+                                         # Low selectivity regions will be still inspected to determine the true number of features
 
     # chromatogram and peak parameters
     'min_timepoints': 6,                 # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
@@ -39,16 +43,14 @@ PARAMETERS = {
     
     # retention time alignment
     'reference': 'auto',
-    'rt_align_method': 'lowess',        # 'lowess', 'tolerance', or to implement           
-    'rt_align_on': True,                # False to bypass retention time alignment
-    'rtime_tolerance': 50,              # feature rtime shift threshold under 10 seconds; or 10% of rtime   
-    'cal_min_peak_height': 100000,      # minimal peak height required for peaks used for RT calibration
-    'peak_number_rt_calibration': 15,   # minimal number of selected high-quality peaks required for RT calibration. 
-                                        # Samples with fewer selected peaks are dropped out.
-    'max_retention_shift': None,        # landmark peak pairs with a retention time greater than this are not used for RT calibration
-    'num_lowess_iterations': 3,         # number of lowess iterations to perform for RT calibration, higher values take longer but less sensitive to outliers
-    # Number of samples dictates workflow 
-    'project_sample_number_small': 10,  # 10
+    'rt_align_method': 'lowess',         # 'lowess', 'tolerance', or to implement           
+    'rt_align_on': True,                 # False to bypass retention time alignment
+    'rtime_tolerance': 50,               # feature rtime shift threshold under 10 seconds; or 10% of rtime   
+    'cal_min_peak_height': 100000,       # minimal peak height required for peaks used for RT calibration
+    'peak_number_rt_calibration': 10,    # minimal number of selected high-quality peaks required for RT calibration. 
+                                         # Samples with fewer selected peaks are dropped out.
+    'max_retention_shift': None,         # landmark peak pairs with a retention time greater than this are not used for RT calibration
+    'num_lowess_iterations': 3,          # number of lowess iterations to perform for RT calibration, higher values take longer but less sensitive to outliers
     
     # default output names
     'output_feature_table': 'Feature_table.tsv',

@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import psutil
 import time
+import functools
+from .LRU_cache import lru_cache
 from .mass_functions import flatten_tuplelist
 from .peaks import get_gaussian_peakarea_on_intensity_list, peak_area_sum, peak_area_auc
 
@@ -52,7 +54,8 @@ class SimpleSample:
         self.rt_landmarks = []  # to populate at CMAP.calibrate_sample_RT
 
         self.__list_mass_tracks = None
-
+        self.__mz_landmarks = None
+        self.__retrieve_mode = None
 
         # These are critical RT calibration functions, index mapping with the reference sample
         self.rt_cal_dict = None
@@ -117,26 +120,29 @@ class SimpleSample:
             return self.registry['composite_of']
         else:
             return None
+    
+    @property
+    def reserved_memory(self):
+        return self.experiment.parameters['reserve_memory'] * 1024**3
 
     @property
     def list_mass_tracks(self):
-        if self.database_mode == "memory":
-            return self.registry['sample_data']['list_mass_tracks']
-        elif self.database_mode == "smart":
-            if self.name in SimpleSample.cache:
-                return SimpleSample.cache[self.name]
-            else:
-                if psutil.virtual_memory().available - 2 * 1024**3 > self.mem_footprint:
-                    SimpleSample.cache[self.name] = self._get_sample_data()['list_mass_tracks']
-                    return SimpleSample.cache[self.name]
-                else:
-                    return self._get_sample_data()['list_mass_tracks']
+        if self.database_mode == "smart":
+            return self.list_mass_tracks_smart()
         elif self.database_mode == "ondisk":
             return self._get_sample_data()['list_mass_tracks']
+        elif self.database_mode == "memory":
+            return self.registry['sample_data']['list_mass_tracks']
+
+    @lru_cache(use_memory_up_to=2 * 1024**3)
+    def list_mass_tracks_smart(self):
+        return self._get_sample_data()['list_mass_tracks']
     
     @property
     def _mz_landmarks_(self):
-        return flatten_tuplelist(self.anchor_mz_pairs)
+        if self.__mz_landmarks is None:
+            self.__mz_landmarks = flatten_tuplelist(self.anchor_mz_pairs)
+        return self.__mz_landmarks
     
     @property
     def mode(self):
