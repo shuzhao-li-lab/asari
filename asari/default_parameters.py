@@ -14,7 +14,7 @@ PARAMETERS = {
     'project_name': 'asari_project',
     'outdir': 'output',
     'pickle': False,
-    'database_mode': 'auto',            # `auto` determined on sample number 
+    'database_mode': 'smart',            # `auto` determined on sample number 
                                         # 'ondisk', 'memory' (run in memory, only small studies), 
                                         # 'mongo' (MongoDB, requiring installation of DB server, to implement)
     'multicores': -1,                    # number of cores allowed in parallel processing
@@ -56,6 +56,7 @@ PARAMETERS = {
     'annotation_filename': "Annotation_table.tsv",
     'json_empricalCompounds': "_empCpd_json.json",
     'processing_readme': "README.md",
+    'mz_rt_features': 'features.tsv',
 
 
     # for annotation
@@ -83,7 +84,6 @@ PARAMETERS = {
         'cSelectivity': 2 ,
         'goodness_fitting': 2 ,
         'snr': 1,
-        #'detection_counts': 1,
         }
     }
     

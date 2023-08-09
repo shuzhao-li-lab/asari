@@ -11,6 +11,7 @@ import numpy as np
 
 from scipy import interpolate
 from scipy.ndimage import uniform_filter1d
+import statsmodels
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
 from .mass_functions import (check_close_mzs, 
@@ -19,6 +20,11 @@ from .mass_functions import (check_close_mzs,
 INTENSITY_DATA_TYPE = np.int64
 # int32 uses less memory - for large data one can check if int32 is safe, 
 # i.e. under 2E9, or transform data
+
+use_hacked_lowess = True
+if statsmodels.__version_tuple__[0] > 0 or statsmodels.__version_tuple__[0] == 0 and statsmodels.__version_tuple__[1] > 12:
+    use_hacked_lowess = True
+
 
 # -----------------------------------------------------------------------------
 # mass Tracks
@@ -367,7 +373,10 @@ def rt_lowess_calibration(good_landmark_peaks,
     #lowess_predicted = lowess(yy, xx, frac= .2, it=1, xvals=np.array(sample_rt_numbers, dtype=float)) 
     #
     # downgrade now for compatibility to older statsmodels
-    lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=num_iterations, xvals=sample_rt_numbers)
+    if use_hacked_lowess:
+        lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=num_iterations, xvals=sample_rt_numbers)
+    else:
+        lowess_predicted = lowess(yy, xx, frac= .2, it=num_iterations, xvals=sample_rt_numbers)
     interf = interpolate.interp1d(lowess_predicted, sample_rt_numbers, fill_value="extrapolate")
     ref_interpolated = interf( reference_rt_numbers )
     lowess_predicted = [int(round(ii)) for ii in lowess_predicted]
@@ -440,7 +449,10 @@ def rt_lowess_calibration_debug(good_landmark_peaks,
     #lowess_predicted = lowess(yy, xx, frac= .2, it=1, xvals=np.array(sample_rt_numbers, dtype=float)) 
     #
     # downgrade now for compatibility to older statsmodels
-    lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=num_iterations, xvals=sample_rt_numbers)
+    if use_hacked_lowess:
+        lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=num_iterations, xvals=sample_rt_numbers)
+    else:
+        lowess_predicted = lowess(yy, xx, frac= .2, it=num_iterations, xvals=sample_rt_numbers)
     interf = interpolate.interp1d(lowess_predicted, sample_rt_numbers, fill_value="extrapolate")
     ref_interpolated = interf( reference_rt_numbers )
     lowess_predicted = [int(round(ii)) for ii in lowess_predicted]

@@ -2,6 +2,7 @@ import pickle
 import pandas as pd
 import numpy as np
 import psutil
+import time
 from .mass_functions import flatten_tuplelist
 from .peaks import get_gaussian_peakarea_on_intensity_list, peak_area_sum, peak_area_auc
 
@@ -22,8 +23,6 @@ class SimpleSample:
     }
 
     cache = {}
-    sample_size_estimate = 0
-    measured = set()
     def __init__(self, registry, experiment=None, is_reference=False):
         '''
         Build a lightweight sample class.
@@ -96,7 +95,11 @@ class SimpleSample:
     @property
     def list_retention_time(self):
         return self.registry['list_retention_time']
-
+    
+    @property
+    def mem_footprint(self):
+        return self.registry['mem_footprint']
+    
     @property
     def sample_mapping(self):
         if 'sample_mapping' in self.registry:
@@ -119,22 +122,17 @@ class SimpleSample:
     def list_mass_tracks(self):
         if self.database_mode == "memory":
             return self.registry['sample_data']['list_mass_tracks']
-        elif self.database_mode == "auto":
-            if self.name in self.cache:
-                return SimpleSample.cache[self.name]
-            if self.name not in SimpleSample.measured:
-                f1 = psutil.Process().memory_info().rss
-                x = self._get_sample_data()['list_mass_tracks']
-                f2 = psutil.Process().memory_info().rss
-                SimpleSample.sample_size_estimate = max(2*(f2-f1), SimpleSample.sample_size_estimate)
-                SimpleSample.measured.add(self.name)
-            if psutil.virtual_memory().free > SimpleSample.sample_size_estimate * 10:
-                SimpleSample.cache[self.name] = self._get_sample_data()['list_mass_tracks']
+        elif self.database_mode == "smart":
+            if self.name in SimpleSample.cache:
                 return SimpleSample.cache[self.name]
             else:
-                return self._get_sample_data()['list_mass_track']
+                if psutil.virtual_memory().available - 2 * 1024**3 > self.mem_footprint:
+                    SimpleSample.cache[self.name] = self._get_sample_data()['list_mass_tracks']
+                    return SimpleSample.cache[self.name]
+                else:
+                    return self._get_sample_data()['list_mass_tracks']
         elif self.database_mode == "ondisk":
-            return self._get_sample_data()['list_mass_track']
+            return self._get_sample_data()['list_mass_tracks']
     
     @property
     def _mz_landmarks_(self):
@@ -147,10 +145,6 @@ class SimpleSample:
     @property
     def peak_area_mode(self):
         return self.experiment.peak_area_mode
-
-    def release_memory(self):
-        if self.mode == 'ondisk':
-            self.__list_mass_tracks = None
 
     def calc_peak_area(self, mass_track_id, left_base, right_base):
         if self.composite_of is None:
@@ -197,6 +191,7 @@ class SimpleSample:
         mode_method_map = {
             "ondisk": self._retrieve_from_disk,
             }
+        mode_method_map['smart'] = mode_method_map['ondisk']
         return mode_method_map[self.database_mode]()
 
     def _retrieve_from_disk(self):
