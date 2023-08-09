@@ -121,13 +121,13 @@ def main(parameters=PARAMETERS):
             help='designated reference file for alignments')
     parser.add_argument('--target', 
             help='file of m/z list for targeted extraction')
-    parser.add_argument('--database_mode', default='auto',
+    parser.add_argument('--database_mode', default='smart',
             help='determines how intermediates are stored, can be "ondisk" or "memory"')
     parser.add_argument('--wlen', default=25, type=int,
             help='determines the number of rt points used when calculating peak prominence')
     parser.add_argument('--max_retention_shift', default=None,
             help='alignment is attempted only using peak pairs differing by this value in seconds or fewer')
-    parser.add_argument('--num_lowess_iterations', type=int, default=1,
+    parser.add_argument('--num_lowess_iterations', type=int, default=3,
             help='number of lowess iterations attempted during alignment')
     parser.add_argument('--autoheight', default=False,
             help='automatic determining min peak height')
