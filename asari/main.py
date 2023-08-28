@@ -38,7 +38,8 @@ def __run_process__(parameters, args):
     else:
         if args.autoheight:
             try:
-                parameters['min_peak_height'] = estimate_min_peak_height(list_input_files, cores_to_use=parameters['multicores'], num_files_to_use=parameters['multicores'])
+                #parameters['min_peak_height'] = 200
+                parameters['min_peak_height'] = estimate_min_peak_height(list_input_files, cores_to_use=parameters['multicores'], num_files_to_use=5)
                 if parameters['cal_autoheight_mode'] == 'multiplier':
                     parameters['cal_min_peak_height'] = parameters['cal_autoheight_multiplier'] * parameters['min_peak_height']
             except ValueError as err:
@@ -70,7 +71,8 @@ def join(parameters, args):
 
 def viz(parameters, args):
     datadir = args.input
-    project_desc, cmap, epd, Ftable = read_project(datadir)
+    project_desc, cmap, epd, Ftable, _ = read_project(datadir)
+    print(project_desc)
     dashboard(project_desc, cmap, epd, Ftable)
 
 def main(parameters=PARAMETERS):
@@ -139,6 +141,10 @@ def main(parameters=PARAMETERS):
             help='perform default annotation after processing data')
     parser.add_argument('--debug_rtime_align', default=False, 
             help='Toggle on debug mode for retention alignment: output align figures and reference features.')
+    parser.add_argument('--standards', default=None,
+            help='If provided, retention time align against these standards')
+    parser.add_argument('--alignment_mode', default="data-driven",
+            help="Determines the ordering of various alignment steps")
 
     args = parser.parse_args()
 
@@ -152,6 +158,8 @@ def main(parameters=PARAMETERS):
     parameters['to_join'] = args.to_join
     parameters['debug_rtime_align'] = booleandict[args.debug_rtime_align]
     parameters['time_stamp'] = '_'.join([str(x) for x in time.localtime()[1:6]])
+    parameters['standard_file'] = args.standards
+    parameters['alignment_mode'] = args.alignment_mode
 
 
     if args.mode:

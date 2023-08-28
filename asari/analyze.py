@@ -5,6 +5,7 @@ Functions for subcommand `analyze`
 import random
 import pymzml
 import numpy as np
+import multiprocessing as mp
 
 from .chromatograms import extract_massTracks_ 
 from .experiment import ext_Experiment
@@ -43,7 +44,7 @@ def analyze_single_sample(infile,
     EE = ext_Experiment({}, parameters)
     EE.load_annotation_db()
     mass_accuracy_ratio = EE.KCD.evaluate_mass_accuracy_ratio(mz_landmarks, mode, mz_tolerance_ppm=10)
-    # print("  Mass accuracy is estimated as %2.1f ppm." %(mass_accuracy_ratio*1000000))
+    print("  Mass accuracy is estimated as %2.1f ppm." %(mass_accuracy_ratio*1000000))
     print("\n")
 
 
@@ -161,7 +162,7 @@ def get_file_masstrack_stats(infile,
 
 def estimate_min_peak_height(list_input_files, 
             mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=500,
-            num_files_to_use=3):
+            num_files_to_use=-1, cores_to_use=None):
     '''
     Compute estimated min peak height. This gets min peak height from the andmark tracks in each file,
     which is the min of the mass tracks with paired 13C/12C pattern (based on m/z diff only).
@@ -186,22 +187,30 @@ def estimate_min_peak_height(list_input_files,
     int, an estimated parameter for min peak_height as half of the min verified landmark peaks.
     '''
     estimated = []
-    if len(list_input_files) <= num_files_to_use:
+    if len(list_input_files) <= num_files_to_use or num_files_to_use == -1:
         selected = list_input_files
     else:
         selected = random.sample(list_input_files, num_files_to_use)
     print("Estimating parameter for min peak_height based on ", selected)
-    for infile in selected:
-        try:
-            mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(infile,
-                        mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
-                        # not all above parameters are used or relevant
-            estimated.append(min_peak_height_)
-        except:
-            print("Error in analyzing ", infile)
-    recommended = int(0.5 * np.median(estimated))
-    print("Estimated parameter for min peak_height is %d \n" %recommended)
-    return recommended
+    
+    if cores_to_use:
+        workers = mp.Pool(cores_to_use)
+        results = workers.starmap(get_file_masstrack_stats, [[infile, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height] for infile in selected])
+        recommended = int(0.5 * np.median([result[2] for result in results]))
+        print("Estimated parameter for min peak_height is %d \n" %recommended)
+        return recommended
+    else:
+        for infile in selected:
+            try:
+                _, _, min_peak_height_ = get_file_masstrack_stats(infile,mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
+                            # not all above parameters are used or relevant
+                estimated.append(min_peak_height_)
+            except:
+                print("Error in analyzing ", infile)
+        recommended = int(np.median(estimated))
+        #recommended = int(0.5 * np.median(estimated))
+        print("Estimated parameter for min peak_height is %d \n" %recommended)
+        return recommended
 
 def ext_estimate_min_peak_height(list_input_files, 
             mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=500,

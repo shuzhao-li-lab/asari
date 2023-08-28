@@ -1,9 +1,5 @@
 import pickle
 import pandas as pd
-import numpy as np
-import psutil
-import time
-import functools
 from .LRU_cache import lru_cache
 from .mass_functions import flatten_tuplelist
 from .peaks import get_gaussian_peakarea_on_intensity_list, peak_area_sum, peak_area_auc
@@ -24,7 +20,6 @@ class SimpleSample:
         "sum": peak_area_sum
     }
 
-    cache = {}
     def __init__(self, registry, experiment=None, is_reference=False):
         '''
         Build a lightweight sample class.
@@ -62,6 +57,7 @@ class SimpleSample:
         self.reverse_rt_cal_dict = None
         # placeholder
         self.mz_calibration_function = None
+        self.rt_mapping = {}
 
     @property
     def input_file(self):
@@ -127,16 +123,23 @@ class SimpleSample:
 
     @property
     def list_mass_tracks(self):
+        mass_tracks = None
         if self.database_mode == "smart":
-            return self.list_mass_tracks_smart()
+            mass_tracks = self.list_mass_tracks_smart()
         elif self.database_mode == "ondisk":
-            return self._get_sample_data()['list_mass_tracks']
+            mass_tracks = self._get_sample_data()['list_mass_tracks']
         elif self.database_mode == "memory":
-            return self.registry['sample_data']['list_mass_tracks']
+            mass_tracks = self.registry['sample_data']['list_mass_tracks']
+        if type(mass_tracks) is dict:
+            return list(mass_tracks.values())   
+        return mass_tracks
 
-    @lru_cache(use_memory_up_to=2 * 1024**3)
+    @lru_cache(use_memory_up_to=8 * 1024**3)
     def list_mass_tracks_smart(self):
-        return self._get_sample_data()['list_mass_tracks']
+        mass_tracks = self._get_sample_data()['list_mass_tracks']
+        if type(mass_tracks) is dict:
+            return list(mass_tracks.values())
+        return mass_tracks
     
     @property
     def _mz_landmarks_(self):
@@ -161,13 +164,32 @@ class SimpleSample:
         else:
             return {k: v for d in [x.calc_peak_area(mass_track_id, left_base, right_base) for x in self.composite_of] for k, v in d.items()}
         
+    def calc_peak_areas(self, peaks):
+        if self.composite_of is None:
+            areas = []
+            for p in peaks:
+                if p[0] is None or pd.isna(p[0]):
+                    areas.append(0)
+                else:
+                    mass_tracks = self.list_mass_tracks
+                    areas.append(self.peak_area_mode_map[self.peak_area_mode](mass_tracks[p[0]]['intensity'], p[1], p[2]))
+            return {self.name: areas}
+        else:
+            return {k: v for d in [x.calc_peak_areas(peaks) for x in self.composite_of] for k,v in d.items()}
+
     @property
     def all_nested_samples(self):
         if self.composite_of is None:
             return [self.name]
         else:
             return [j for i in [x.all_nested_samples for x in self.composite_of] for j in i]
-        
+    
+    @property
+    def all_nested_sample_instances(self):
+        if self.composite_of is None:
+            return [self]
+        else:
+            return [j for i in [x.all_nested_sample_instances for x in self.composite_of] for j in i]
 
     def get_rt_calibration_records(self):
         '''
@@ -181,6 +203,16 @@ class SimpleSample:
             'rt_landmarks': self.rt_landmarks,
             'reverse_rt_cal_dict': self.reverse_rt_cal_dict,
         }
+    
+    def map_rtime_to_scan_number(self, rtime):
+        best_match = (999999, None)
+        for scan_rtime, scan_no in zip(self.list_retention_time, self.rt_numbers):
+            if abs(rtime - scan_rtime) < best_match[0]:
+                best_match = (abs(rtime - scan_rtime), scan_no)
+        return best_match[1]
+
+    def scan_time_to_rtime(self, scan_no):
+        return dict(zip(self.rt_numbers, self.list_retention_time))[scan_no]
 
     def _get_sample_data(self):
         '''

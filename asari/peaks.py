@@ -652,7 +652,8 @@ def lowess_smooth_track(list_intensity, number_of_scans):
 def quick_detect_unique_elution_peak(intensity_track, 
                             min_peak_height=100000, 
                             min_fwhm=3, 
-                            min_prominence_threshold_ratio=0.2
+                            min_prominence_threshold_ratio=0.2,
+                            all_peaks=False
                             ):
     '''
     Quick peak detection, only looking for a high peak with high prominence.
@@ -676,18 +677,29 @@ def quick_detect_unique_elution_peak(intensity_track,
     '''
     max_intensity = intensity_track.max()
     prominence = min_prominence_threshold_ratio * max_intensity
-    unique_peak = None
     if max_intensity > min_peak_height:
         peaks, properties = find_peaks(
             intensity_track, height=min_peak_height, width=min_fwhm, 
             prominence=prominence
             ) 
-        if peaks.size == 1:
+        if peaks.size == 1 and all_peaks is False:
             unique_peak = {
                 'apex': peaks[0], 
                 'height': properties['peak_heights'][0], # not used now
             }
-    return unique_peak
+            return unique_peak
+        elif all_peaks: 
+            to_return = []
+            for i, peak in enumerate(peaks):
+                to_return.append(
+                    {
+                        'apex': peak,
+                        'height': properties['peak_heights'][i],
+                        'left_base': properties['left_bases'][i],
+                        'right_base': properties['right_bases'][i]
+                    }
+                )
+            return to_return
 
 def check_overlap_peaks(list_peaks):
     '''

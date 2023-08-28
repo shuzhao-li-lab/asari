@@ -314,7 +314,7 @@ def get_thousandth_bins(mzTree, mz_tolerance_ppm=5, min_timepoints=5, min_peak_h
 
 # -----------------------------------------------------------------------------
 # retention time alignment
-# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------    
 
 def rt_lowess_calibration(good_landmark_peaks, 
                           selected_reference_landmark_peaks, 
@@ -389,6 +389,7 @@ def rt_lowess_calibration(good_landmark_peaks,
         
     return rt_cal_dict, reverse_rt_cal_dict
 
+
 def rt_lowess_calibration_debug(good_landmark_peaks, 
                           selected_reference_landmark_peaks, 
                           sample_rt_numbers, reference_rt_numbers, num_iterations, sample_name, outdir):
@@ -437,13 +438,16 @@ def rt_lowess_calibration_debug(good_landmark_peaks,
     reference_rt_bound = max(reference_rt_numbers)
     sample_rt_bound = max(sample_rt_numbers)
     rt_rightend_ = 1.1 * sample_rt_bound
-    xx, yy = [-0.1 * sample_rt_bound,]*3, [-0.1 * sample_rt_bound,]*3
-    rt_cal = sorted([(x[0]['apex'], x[1]['apex']) for x in zip(good_landmark_peaks, 
-                                                               selected_reference_landmark_peaks)])
+    #xx, yy = [-0.1 * sample_rt_bound,]*3, [-0.1 * sample_rt_bound,]*3
+    xx = [0]
+    yy = [0]
 
-    xx += [L[0] for L in rt_cal] + [rt_rightend_]*3
-    yy += [L[1] for L in rt_cal] + [rt_rightend_]*3
-    
+    rt_cal = sorted([(x[0]['apex'], x[1]['apex']) for x in zip(good_landmark_peaks,  selected_reference_landmark_peaks)])
+
+    xx += [L[0] for L in rt_cal]  + [sample_rt_bound]*1
+    yy += [L[1] for L in rt_cal]  + [sample_rt_bound]*1
+    print(xx, yy)
+
     # This requires statsmodels > v 0.12.
     # float conversion on xvals is to bypass a bug in statsmodels, which was fixed today 2022-01-27
     #lowess_predicted = lowess(yy, xx, frac= .2, it=1, xvals=np.array(sample_rt_numbers, dtype=float)) 
@@ -468,14 +472,15 @@ def rt_lowess_calibration_debug(good_landmark_peaks,
     # Create the scatter plot and line plot
     plt.scatter(xx[3:-3], yy[3:-3], label='Landmark peaks', color='black', marker='o')
     plt.plot(sample_rt_numbers, lowess_predicted, label='Alignment function', color='red', linestyle='-')
-
+    #plt.show()
     # Customize your plot
     plt.xlabel('Sample Retention Time (sec)')
     plt.ylabel('Reference Retention Time (sec)')
     plt.title('Retention Time Alignment')
     plt.legend()
     # Save the figure as a PNG file
-    plt.savefig(os.path.join(outdir, 'export', sample_name + '_rtime_alignment_result.png'))
+    plt.savefig(os.path.join(outdir, 'export', str(sample_name) + '_rtime_alignment_result.png'))
+    #plt.show()
     return rt_cal_dict, reverse_rt_cal_dict
 
 
@@ -485,33 +490,11 @@ def __hacked_lowess__(yy, xx, frac, it, xvals):
     Not checking possible range error.
     The bug was reported and fixed in newer Statsmodel, thus this can be phased out in future.
     '''
+    print("here")
     lxy = lowess(yy, xx, frac, it)
     newx, newy = list(zip(*lxy))
     interf = interpolate.interp1d(newx, newy)
     return interf(xvals)
-
-
-def savitzky_golay_spline(good_landmark_peaks, selected_reference_landmark_peaks, sample_rt_numbers, reference_rt_numbers):
-    '''
-    Placeholder.
-    Modified Savitzky-Golay filter followed by spline fitting - pls follow format in rt_lowess.
-    Because our data are not equally spaced, sav-gol method may produce undesired errors.
-    # UnivariateSpline can't handle redundant values -
-    spl = UnivariateSpline(xx, yy, )
-    sample.rt_calibration_function = spl
-    # rt_remap_dict will be used for index mapping to the reference sample; 
-    for ii in sample.rt_numbers:
-        sample.rt_remap_dict[ii] = round(spl(ii), None)
-    '''
-    pass
-
-def dwt_rt_calibrate(good_landmark_peaks, selected_reference_landmark_peaks, sample_rt_numbers, reference_rt_numbers):
-    '''
-    Placeholder.
-    Not implemented.
-    '''
-    pass
-
 
 def remap_intensity_track(intensity_track, new, rt_cal_dict):
     '''

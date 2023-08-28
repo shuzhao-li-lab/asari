@@ -44,7 +44,7 @@ def read_project(datadir, load_sample_limit=20):
         pandas dataframe of feature table. Truncated if samples more than load_sample_limit.
     '''
     datadir = os.path.abspath(datadir)
-    project_desc = None #json.load(open(os.path.join(datadir, 'project.json')))
+    project_desc = json.load(open(os.path.join(datadir, 'project.json')))
     cmap = pickle.load( open(os.path.join(datadir, 'export', 'cmap.pickle'), 'rb') )
     # xics, mz_dict, massgrid = reformat_cmap()
 
@@ -208,6 +208,9 @@ def get_summary_panel(project_desc, peakDict, epdDict, Ftable, cmap):
     '''
     Get a summary panel, returns a panel.Column of multiple tabs for summary metrics.
     '''
+    if 'outdir' not in project_desc or project_desc['outdir'] is None:
+        project_desc['outdir'] = ''
+
     desc0 = "Project retrieved from %s, %d features and %d empirical compounds." %(project_desc['outdir'],
                     len(peakDict), len(epdDict)
                     )
@@ -244,10 +247,10 @@ def get_summary_panel(project_desc, peakDict, epdDict, Ftable, cmap):
     
     # hard cap for legend is 20
     if_legend = cmap['_number_of_samples_'] <= 20
-    RTAlign = prepare_rt_alignment(cmap).hvplot.line(title="Retention Time Deviation vs Retention Time",xlabel="Retention Time (sec)", 
-                ylabel="Retention Time Deviation (sec)", width=width, height=height,hover=False).opts(
-                show_legend=if_legend, legend_opts=dict(
-                title='',label_text_font_size='8pt',spacing=-5, location=(5, (height/2-cmap['_number_of_samples_']*11)), padding=3), toolbar=None)
+    #RTAlign = prepare_rt_alignment(cmap).hvplot.line(title="Retention Time Deviation vs Retention Time",xlabel="Retention Time (sec)", 
+    #            ylabel="Retention Time Deviation (sec)", width=width, height=height,hover=False).opts(
+    #            show_legend=if_legend, legend_opts=dict(
+    #            title='',label_text_font_size='8pt',spacing=-5, location=(5, (height/2-cmap['_number_of_samples_']*11)), padding=3), toolbar=None)
     
     
 
@@ -257,7 +260,7 @@ def get_summary_panel(project_desc, peakDict, epdDict, Ftable, cmap):
         ("Signal to noise ratio", pn.Column(SNR)),
         ("Peak shape", pn.Column(PeakShape)),
         ("Chromatographic Selectivity", pn.Column(cSel)),
-        ("Retention Time Alignment", pn.Column(RTAlign)),
+        #("Retention Time Alignment", pn.Column(RTAlign)),
         )
     return pn.Column(
                     description,

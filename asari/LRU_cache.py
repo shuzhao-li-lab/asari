@@ -161,8 +161,7 @@ def lru_cache(maxsize=128, typed=False, use_memory_up_to=False):
                         last = root[PREV]
                         link = [last, root, key, result]
                         last[NEXT] = root[PREV] = cache[key] = link
-                        full = (psutil.virtual_memory().available
-                                < use_memory_up_to)
+                        full = (psutil.virtual_memory().available < use_memory_up_to)
                     misses += 1
                 return result
 
