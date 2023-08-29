@@ -3,6 +3,7 @@ import sys
 import json
 import pickle
 import pandas as pd
+import numpy as np
 
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
@@ -39,7 +40,7 @@ class ext_Experiment:
     Default asari work flow is in `ext_Experiment.process_all`.
     '''
 
-    def __init__(self, sample_registry, parameters):
+    def __init__(self, sample_registry, parameters, meta_experiment=None):
         '''
         This is the overall container for all data in an experiment/project.
 
@@ -64,6 +65,7 @@ class ext_Experiment:
         self.__valid_sample_ids = None
         self.__reference_sample_id = None
         self.__reference = None
+        self.meta_experiment = meta_experiment
 
     # these properties are wrappers around the parameters dict, this exists so that 
     # experiment data members and parameters do not get out of sync.
@@ -116,7 +118,10 @@ class ext_Experiment:
     
     @property
     def database_mode(self):
-        return self.parameters['database_mode']
+        if self.meta_experiment:
+            return self.meta_experiment.database_mode
+        else:
+            return self.parameters['database_mode']
     
     @property
     def reference(self):
@@ -145,6 +150,56 @@ class ext_Experiment:
     def all_nested_samples(self):
         return [j for i in [x.all_nested_samples for x in self.all_samples] for j in i]
     
+    @property
+    def all_nested_sample_instances(self):
+        return [j for i in [x.all_nested_sample_instances for x in self.all_samples] for j in i]
+    
+    @property
+    def alignment_mode(self):
+        if self.meta_experiment:
+            return self.meta_experiment.alignment_mode
+        else:
+            return self.parameters['alignment_mode']
+        
+    @property
+    def reference_standards(self):
+        if self.meta_experiment:
+            return self.meta_experiment.reference_standards
+        else:
+            return self.parameters['standard_file']
+        
+    @property
+    def cal_min_peak_height(self):
+        if self.meta_experiment:
+            return self.meta_experiment.cal_min_peak_height
+        else:
+            return self.parameters["cal_min_peak_height"]
+
+    @property
+    def MIN_PEAK_NUM(self):
+        if self.meta_experiment:
+            return self.meta_experiment.MIN_PEAK_NUM
+        else:
+            return self.parameters['peak_number_rt_calibration']
+        
+    @property
+    def NUM_ITERATIONS(self):
+        if self.meta_experiment:
+            return self.meta_experiment.NUM_ITERATIONS
+        else:
+            return self.parameters['num_lowess_iterations']
+        
+    @property
+    def MAX_RETENTION_SHIFT(self):
+        if self.meta_experiment:
+            return self.meta_experiment.NUM_ITERATIONS
+        else:
+            if self.parameters['max_retention_shift'] is None:
+                return np.inf
+            return self.parameters['max_retention_shift']
+        
+
+
     def set_reference(self, reference):
         self.__reference = reference
 
@@ -176,7 +231,6 @@ class ext_Experiment:
             else:
                 raise Exception(user_specified_reference + " not found in sample registry")
         reference_sample = self.sample_registry[reference_sample_id]
-        print(reference_sample)
         print("\n    The reference sample is:\n    ||* %s *||\n" %reference_sample['name'])
         print("Max reference retention time is %4.2f at scan number %d.\n" %(max(reference_sample['list_retention_time']), reference_sample['max_scan_number']))
         self.set_reference(reference_sample['input_file'])
@@ -246,8 +300,11 @@ class ext_Experiment:
             self.annotate()
             self.generate_qc_plot_pdf()
         pickle.dump(self, open(os.path.join(self.output_dir, 'export', 'experiment.json'), 'wb'))
-        self.export_feature_tables()
-        #self.export_log()
+        if self.meta_experiment is None:
+            self.export_meta_feature_table()
+        else:
+            self.export_feature_tables()
+        self.export_log()
 
     def export_readme(self):
         '''
@@ -455,8 +512,7 @@ class ext_Experiment:
         [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...],
         where ref_id_num is index number of mass track in MassGrid.
         '''
-        mz_landmarks = [self.CMAP.MassGrid['mz'][p['ref_id_num']] 
-                        for p in self.CMAP.good_reference_landmark_peaks]
+        mz_landmarks = [self.CMAP.MassGrid['mz'][p['ref_id_num']] for p in self.CMAP.good_reference_landmark_peaks]
         mass_accuracy_ratio = self.KCD.evaluate_mass_accuracy_ratio(
             mz_landmarks, mode=self.mode, mz_tolerance_ppm=10)
         if mass_accuracy_ratio:
@@ -573,37 +629,72 @@ class ext_Experiment:
                 )
 
     def export_meta_feature_table(self, _snr=2, _peak_shape=0.7, _cSelectivity=0.7):
-        raw_meta_ft = []
-        sample_intensity_blank = {sample_name: 0 for sample_name in self.all_nested_samples}
-        for _, peak in enumerate(self.CMAP.FeatureList):
-            row = {
-                key: round(peak[key], round_int) if round_int else peak[key] for key, round_int in self.parameters['feature_table_fields'].items()
-            }
-            sample_intensities = self.calc_peak_area(peak['parent_masstrack_id'], peak['left_base'], peak['right_base'])
-            row['detection_counts'] = len([x for x in sample_intensities.values() if not pd.isna(x) and x > 0])
-            row.update(sample_intensity_blank)
-            row.update(self.calc_peak_area(peak['parent_masstrack_id'], peak['left_base'], peak['right_base']))
-            raw_meta_ft.append(row)
-        raw_meta_ft_df = pd.DataFrame(raw_meta_ft)
-        outfile = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
-        raw_meta_ft_df.to_csv(outfile, index=False, sep="\t")
-        print("\nFeature table (%d x %d) was written to %s." %(raw_meta_ft_df.shape[0], self.number_of_samples, outfile))
+        columns = {key: [round(p[key], round_int) if round_int else p[key] for p in self.CMAP.FeatureList] for key, round_int in self.parameters['feature_table_fields'].items()}
+        intensities = self.calc_peak_areas([(p['parent_masstrack_id'], p['left_base'], p['right_base']) for p in self.CMAP.FeatureList])
+        columns.update({'detection_counts': pd.DataFrame(intensities).astype(bool).sum(axis=1)})
+        columns.update(intensities)
+        full_feature_table = pd.DataFrame(columns)
 
-        preferred_meta_ft_df = raw_meta_ft_df[raw_meta_ft_df['detection_counts'] > 0]
-        preferred_meta_ft_df = preferred_meta_ft_df[preferred_meta_ft_df['snr']>_snr]
-        preferred_meta_ft_df = preferred_meta_ft_df[preferred_meta_ft_df['goodness_fitting']>_peak_shape]
-        preferred_meta_ft_df = preferred_meta_ft_df[preferred_meta_ft_df['cSelectivity']>_cSelectivity]
+        outfile = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
+        full_feature_table.to_csv(outfile, index=False, sep="\t")
+        print("\nFeature table (%d x %d) was written to %s." %(full_feature_table.shape[0], self.number_of_samples, outfile))
+
+        preferred_meta_ft_df = full_feature_table[(full_feature_table['detection_counts'] > 0) & 
+                                                  (full_feature_table['snr']>_snr) & 
+                                                  (full_feature_table['goodness_fitting']>_peak_shape) & 
+                                                  (full_feature_table['cSelectivity']>_cSelectivity)]
         outfile = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
         preferred_meta_ft_df.to_csv(outfile, index=False, sep="\t")
         print("Filtered Feature table (%d x %d) was written to %s.\n" %(preferred_meta_ft_df.shape[0], self.number_of_samples, outfile))
 
         outfile = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['mz_rt_features'])
-        mz_rt_only = pd.DataFrame()
-        mz_rt_only['feature_id'] = preferred_meta_ft_df['feature_id']
-        mz_rt_only['mz'] = preferred_meta_ft_df['mz']
-        mz_rt_only['rtime'] = preferred_meta_ft_df['rtime']
-        mz_rt_only.to_csv(outfile, index=False, sep="\t")
+        preferred_meta_ft_df[['id_number', 'mz', 'rtime']].to_csv(outfile, index=False, sep="\t")
 
+        if 'target' in self.parameters and self.parameters['target']:  
+            matched_list, _, target_unmapped = all_mass_paired_mapping(
+                full_feature_table['mz'].to_list(), self.parameters['target'], self.parameters['mz_tolerance_ppm']
+            )
+            print("\nIn targeted extraction, %d target mz values are not found in this dataset: " %len(target_unmapped))
+            print('    ', [self.parameters['target'][ii] for ii in target_unmapped])
+            matched_targets = [self.parameters['target'][ii[1]] for ii in matched_list]
+            targeted_table = full_feature_table.iloc[[x[0] for x in matched_list], :]
+            targeted_table.insert(0, "query_target", matched_targets)
+            outfile = os.path.join(self.parameters['outdir'], 'targeted_extraction__'+self.parameters['output_feature_table'])
+            targeted_table.to_csv(outfile, index=False, sep="\t")
+            print("Targeted extraction Feature table (%d x %d) was written to %s.\n" %(targeted_table.shape[0], self.number_of_samples, outfile))
+
+        if self.parameters['anno']:
+            unique_compound_table = {
+                "id_number": [x for x in full_feature_table['id_number'].values if x in self.selected_unique_features.keys()],
+                "empCpd": [self.selected_unique_features[ii][0] for ii in self.selected_unique_features.keys()],
+                "neutral_formula": [self.selected_unique_features[ii][1] for ii in self.selected_unique_features.keys()],
+                "ion_relation": [self.selected_unique_features[ii][2] for ii in self.selected_unique_features.keys()],
+            }
+            outfile = os.path.join(self.parameters['outdir'], 'export', 'unique_compound__'+self.parameters['output_feature_table'])
+            unique_compound_table = pd.DataFrame(unique_compound_table)
+            unique_compound_table.to_csv(outfile, index=False, sep="\t")
+            print("Unique compound table (%d x %d) was written to %s.\n" %(unique_compound_table.shape[0], self.number_of_samples, outfile))
+        
+        #self.export_all()
+        self.export_log()
+
+    def calc_peak_areas(self, peaks):
+        peak_areas = {}
+        for sample in self.all_samples:
+            mapped_peaks = []
+            for p in peaks:
+                if p[0] is not None:
+                    mappped_track_number = self.CMAP.MassGrid[sample.name][p[0]]
+                    if not pd.isna(mappped_track_number):
+                        mapped_left_base = sample.reverse_rt_cal_dict.get(p[1], p[1])
+                        mapped_right_base = sample.reverse_rt_cal_dict.get(p[2], p[2])
+                        mapped_peaks.append((int(mappped_track_number), mapped_left_base, mapped_right_base))
+                    else:
+                        mapped_peaks.append((None, None, None))
+                else:
+                    mapped_peaks.append((None, None, None))
+            peak_areas.update(sample.calc_peak_areas(mapped_peaks))
+        return peak_areas
 
     def calc_peak_area(self, mass_track_id, left_base, right_base):
         peak_areas = {}

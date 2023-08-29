@@ -3,7 +3,7 @@ import pandas as pd
 from .LRU_cache import lru_cache
 from .mass_functions import flatten_tuplelist
 from .peaks import get_gaussian_peakarea_on_intensity_list, peak_area_sum, peak_area_auc
-
+import functools
 
 class SimpleSample:
     '''
@@ -47,10 +47,7 @@ class SimpleSample:
         self.is_reference = is_reference 
         self.registry = registry
         self.rt_landmarks = []  # to populate at CMAP.calibrate_sample_RT
-
-        self.__list_mass_tracks = None
         self.__mz_landmarks = None
-        self.__retrieve_mode = None
 
         # These are critical RT calibration functions, index mapping with the reference sample
         self.rt_cal_dict = None
@@ -231,7 +228,8 @@ class SimpleSample:
             }
         mode_method_map['smart'] = mode_method_map['ondisk']
         return mode_method_map[self.database_mode]()
-
+    
+    @functools.lru_cache(1)
     def _retrieve_from_disk(self):
         '''
         Retrieve sample data from local pickle file.

@@ -21,7 +21,7 @@ PARAMETERS = {
                                          # 'auto'   used 'ondisk' or 'memory' based number of samples
                                          # 'smart'  use all available memory minus 2GB as backing store dynamically
     'multicores': -1,                    # number of cores allowed in parallel processing, -1 uses all available cores
-    'project_sample_number_small': 1,   # below this value, memory is used as backing store AND mass grid is built pairwise
+    'project_sample_number_small': 1,    # below this value, memory is used as backing store AND mass grid is built pairwise
 
     # mass parameters
     'mode': 'pos',                       # ionization mode
