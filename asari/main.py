@@ -40,6 +40,7 @@ def __run_process__(parameters, args):
             except ValueError as err:
                 print("Problems with input files: {0}. Back to default min_peak_height.".format(err))
         parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
+        parameters['cal_min_peak_height'] = 10 * parameters['min_peak_height']
         process_project(list_input_files, parameters )
 
 def process(parameters, args):
