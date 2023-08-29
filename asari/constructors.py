@@ -418,7 +418,7 @@ class CompositeMap:
         if self.experiment.parameters['max_retention_shift'] is None:
             MAX_RETENTION_SHIFT = np.inf
         else:
-            MAX_RETENTION_SHIFT = self.experiment.parameters['max_retention_shift'] * 10
+            MAX_RETENTION_SHIFT = self.experiment.parameters['max_retention_shift']
 
         self.good_reference_landmark_peaks = self.set_RT_reference(cal_min_peak_height)
         
@@ -487,7 +487,7 @@ class CompositeMap:
                                 cal_min_peak_height=100000,
                                 MIN_PEAK_NUM=15,
                                 MAX_RETENTION_SHIFT=np.inf,
-                                NUM_ITERATIONS=1):
+                                NUM_ITERATIONS=3):
         '''
         Calibrate/align retention time per sample.
 
@@ -543,8 +543,8 @@ class CompositeMap:
                             min_fwhm=3, min_prominence_threshold_ratio=0.2)
                 
                 if Upeak:
-                    rt_delta = Upeak['apex'] - self.good_reference_landmark_peaks[jj]['apex']
-                    if abs(rt_delta) < MAX_RETENTION_SHIFT:
+                    scan_no_delta = Upeak['apex'] - self.good_reference_landmark_peaks[jj]['apex']
+                    if abs(scan_no_delta) < MAX_RETENTION_SHIFT:
                         Upeak.update({'ref_id_num': ii})
                         good_landmark_peaks.append(Upeak)
                         selected_reference_landmark_peaks.append(self.good_reference_landmark_peaks[jj])
