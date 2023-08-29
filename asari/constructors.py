@@ -6,7 +6,6 @@ from scipy import interpolate
 import os
 import csv
 import numpy as np
-from pympler.asizeof import asizeof
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
 from . import json_encoder
 from functools import lru_cache
@@ -427,6 +426,35 @@ class CompositeMap:
         for sample in self.experiment.all_samples[1:]:      # first sample is reference
             sample.rt_cal_dict, sample.reverse_rt_cal_dict = {}, {}    
     
+    @staticmethod
+    def parallel_align(alignment_function,
+                        _comp_dict, samples, 
+                        cal_min_peak_height, 
+                        MassGrid, 
+                        good_reference_landmark_peaks, 
+                        reference_sample,
+                        outdir,
+                        rt_length):
+        from multiprocessing import Manager, Pool, cpu_count
+        manager = Manager()
+        cmap = manager.dict()
+        for k, v in _comp_dict.items():
+            cmap[k] = v
+        workers = Pool(2)
+        print("aligning in parallel")
+        jobs = [(SM, 
+                cal_min_peak_height, 
+                cmap, 
+                MassGrid[SM.name], 
+                good_reference_landmark_peaks,
+                reference_sample,
+                outdir,
+                rt_length) for SM in samples]
+        print("built jobs")
+        workers.starmap(alignment_function, jobs)
+        return cmap
+
+
     def build_composite_tracks(self):
         '''
         Perform RT calibration then make composite tracks.
@@ -465,26 +493,39 @@ class CompositeMap:
         # add to export mz and rtime of good reference landmarks
         if self.experiment.parameters['debug_rtime_align']:
             self.export_reference_sample()
-        for SM in self.experiment.all_samples:
-            list_mass_tracks = SM.list_mass_tracks
-            if self.experiment.rt_align and not SM.is_reference:
-                calibration_function = rt_lowess_calibration_debug if self.experiment.parameters['debug_rtime_align'] else rt_lowess_calibration
-                self.calibrate_sample_RT(SM, 
-                                        calibration_function=calibration_function,
-                                        cal_min_peak_height=cal_min_peak_height, 
-                                        MIN_PEAK_NUM=MIN_PEAK_NUM,
-                                        MAX_RETENTION_SHIFT=MAX_RETENTION_SHIFT,
-                                        NUM_ITERATIONS=NUM_ITERATIONS,)
+        if True or 'debug_rtime_align_parallel' in self.experiment.parameters:
+            samples = self.experiment.all_samples
+            self.composite_mass_tracks = CompositeMap.parallel_align(CompositeMap.calibrate_with_mz_landmarks_parallel, 
+                                        _comp_dict, 
+                                        samples, 
+                                        cal_min_peak_height,
+                                        self.MassGrid,
+                                        self.good_reference_landmark_peaks,
+                                        self.reference_sample,
+                                        self.experiment.output_dir,
+                                        self.rt_length)
 
-            for k in mzlist:
-                ref_index = self.MassGrid[SM.name][k]
-                if not pd.isna(ref_index): # ref_index can be NA 
-                    _comp_dict[k] += remap_intensity_track( 
-                        list_mass_tracks[int(ref_index)]['intensity'],  
-                        basetrack.copy(), SM.rt_cal_dict 
-                        )
-        result = {k : {'id_number': k, 'mz': mzDict[k], 'intensity': v} for k, v in _comp_dict.items()}
-        self.composite_mass_tracks = result
+        else:
+            for SM in self.experiment.all_samples:
+                list_mass_tracks = SM.list_mass_tracks
+                if self.experiment.rt_align and not SM.is_reference:
+                    calibration_function = rt_lowess_calibration_debug if self.experiment.parameters['debug_rtime_align'] else rt_lowess_calibration
+                    self.calibrate_sample_RT(SM, 
+                                            calibration_function=calibration_function,
+                                            cal_min_peak_height=cal_min_peak_height, 
+                                            MIN_PEAK_NUM=MIN_PEAK_NUM,
+                                            MAX_RETENTION_SHIFT=MAX_RETENTION_SHIFT,
+                                            NUM_ITERATIONS=NUM_ITERATIONS,)
+
+                for k in mzlist:
+                    ref_index = self.MassGrid[SM.name][k]
+                    if not pd.isna(ref_index): # ref_index can be NA 
+                        _comp_dict[k] += remap_intensity_track( 
+                            list_mass_tracks[int(ref_index)]['intensity'],  
+                            basetrack.copy(), SM.rt_cal_dict 
+                            )
+            result = {k : {'id_number': k, 'mz': mzDict[k], 'intensity': v} for k, v in _comp_dict.items()}
+            self.composite_mass_tracks = result
 
     def calibrate_with_standards(self,
                                  sample,
@@ -552,6 +593,71 @@ class CompositeMap:
         if not _CALIBRATED:
             sample.rt_cal_dict, sample.reverse_rt_cal_dict = {}, {}
             print("~warning~ Faluire in retention time alignment (%d); %s is used without alignment." %(len(good_landmark_peaks), sample.name))
+
+    @staticmethod
+    def calibrate_with_mz_landmarks_parallel(sample,
+                                    cal_min_peak_height,
+                                    cmap,
+                                    MassGrid_instance,
+                                    good_reference_landmark_peaks,
+                                    reference_sample,
+                                    outdir,
+                                    rt_length,
+                                    MAX_RETENTION_SHIFT=np.inf,
+                                    MIN_PEAK_NUM=5,
+                                    NUM_ITERATIONS=3):
+        print("Aligning: ", sample.name)
+        candidate_landmarks = [MassGrid_instance.values[p['ref_id_num']] for p in good_reference_landmark_peaks]
+        good_landmark_peaks, selected_reference_landmark_peaks = [], []
+        for jj in range(len(good_reference_landmark_peaks)):
+            ii = candidate_landmarks[jj]
+            if not pd.isna(ii):
+                try:
+                    ii = int(ii)
+                    this_mass_track = sample.list_mass_tracks[ii]
+                    Upeak = quick_detect_unique_elution_peak(this_mass_track['intensity'], 
+                                min_peak_height=cal_min_peak_height, 
+                                min_fwhm=3, min_prominence_threshold_ratio=0.2, all_peaks=False)
+                    if Upeak:
+                        rt_delta = Upeak['apex'] - good_reference_landmark_peaks[jj]['apex']
+                        if abs(rt_delta) < MAX_RETENTION_SHIFT:
+                            Upeak.update({'ref_id_num': ii})
+                            good_landmark_peaks.append(Upeak)
+                            selected_reference_landmark_peaks.append(good_reference_landmark_peaks[jj])
+                except:
+                    pass
+        _NN, _CALIBRATED = len(good_landmark_peaks), False
+        print(sample.name, _NN)
+
+        sample.rt_landmarks = [p['apex'] for p in good_landmark_peaks]
+        # only do RT calibration if MIN_PEAK_NUM is met
+        if _NN >  MIN_PEAK_NUM:
+            try:
+                sample.rt_cal_dict, sample.reverse_rt_cal_dict = rt_lowess_calibration( 
+                                            good_landmark_peaks, 
+                                            selected_reference_landmark_peaks, 
+                                            sample.rt_numbers, 
+                                            reference_sample.rt_numbers, 
+                                            NUM_ITERATIONS, 
+                                            sample.name,
+                                            outdir)
+                _CALIBRATED = True
+            except:
+                _CALIBRATED = False
+        if not _CALIBRATED:
+                sample.rt_cal_dict, sample.reverse_rt_cal_dict =  {}, {}
+                print("    ~warning~ Faluire in retention time alignment (%d); %s is used without alignment." 
+                                            %( _NN, sample.name))
+        basetrack = np.zeros(rt_length, dtype=np.int64)        # self.rt_length defines max rt number
+        for k in MassGrid_instance.index:
+            ref_index = MassGrid_instance[k]
+            if not pd.isna(ref_index): # ref_index can be NA 
+                cmap[k] += remap_intensity_track( 
+                    sample.list_mass_tracks[int(ref_index)]['intensity'],  
+                    basetrack.copy(), sample.rt_cal_dict 
+                    )
+
+
 
     def calibrate_with_mz_landmarks(self,
                                     sample,
@@ -626,15 +732,18 @@ class CompositeMap:
         sample.rt_landmarks = [p['apex'] for p in good_landmark_peaks]
         # only do RT calibration if MIN_PEAK_NUM is met
         if _NN >  MIN_PEAK_NUM:
-            sample.rt_cal_dict, sample.reverse_rt_cal_dict = calibration_function( 
-                                        good_landmark_peaks, 
-                                        selected_reference_landmark_peaks, 
-                                        sample.rt_numbers, 
-                                        self.reference_sample.rt_numbers, 
-                                        NUM_ITERATIONS, 
-                                        sample.name,
-                                        self.experiment.parameters['outdir'])
-            _CALIBRATED = True
+            try:
+                sample.rt_cal_dict, sample.reverse_rt_cal_dict = calibration_function( 
+                                            good_landmark_peaks, 
+                                            selected_reference_landmark_peaks, 
+                                            sample.rt_numbers, 
+                                            self.reference_sample.rt_numbers, 
+                                            NUM_ITERATIONS, 
+                                            sample.name,
+                                            self.experiment.parameters['outdir'])
+                _CALIBRATED = True
+            except:
+                _CALIBRATED = False
         if not _CALIBRATED:
                 sample.rt_cal_dict, sample.reverse_rt_cal_dict =  {}, {}
                 print("    ~warning~ Faluire in retention time alignment (%d); %s is used without alignment." 
