@@ -3,9 +3,14 @@ Classes of MassGrid and CompositeMap.
 '''
 import pandas as pd
 from scipy import interpolate
-from scipy.ndimage import maximum_filter1d
+import os
+import csv
 import numpy as np
+from pympler.asizeof import asizeof
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
+from . import json_encoder
+from functools import lru_cache
+from intervaltree import IntervalTree
 
 from .mass_functions import (flatten_tuplelist, 
                              landmark_guided_mapping, 
@@ -16,7 +21,10 @@ from .chromatograms import (nn_cluster_by_mz_seeds,
                             remap_intensity_track)
 from .peaks import (quick_detect_unique_elution_peak,
                     batch_deep_detect_elution_peaks,
-                    get_gaussian_peakarea_on_intensity_list)
+                    get_gaussian_peakarea_on_intensity_list,
+                    peak_area_auc,
+                    peak_area_sum
+                    )
 from .samples import SimpleSample
 
 
@@ -26,7 +34,7 @@ class MassGrid:
     This shares similarity to FeatureMap in OpenMS, but the correspondence 
     in asari takes adavantage of high m/z resolution first before feature detection.
     '''
-    def __init__(self, cmap=None, experiment=None):
+    def __init__(self, cmap, experiment=None):
         '''
         Initiating MassGrid by linking to CompositeMap and ext_Experiment instances.
 
@@ -44,13 +52,34 @@ class MassGrid:
         should refactor this if possible.
         '''
 
-        self.experiment = experiment
         self.CMAP = cmap
-        self.reference_sample_instance = self.CMAP.reference_sample_instance
-        self.max_ref_rtime = self.CMAP.max_ref_rtime
-        self.list_sample_names = self.CMAP.list_sample_names
-        self._number_of_samples_ = self.CMAP._number_of_samples_
-        
+        self._number_of_samples_ = self.CMAP.number_of_samples # this should be a property but doing so gives an error
+        self.anchor_mz_pairs = None
+        self._mz_landmarks_ = None
+        self.__interval_tree = None
+        self.__dict__.update(cmap.__dict__)
+        self.__dict__.update(experiment.__dict__)
+
+    
+    @property
+    def mass_grid_interval_tree(self):
+        if self.__interval_tree is None:
+            mz_tree = IntervalTree()
+            mz_ppm = self.CMAP.experiment.mz_tolerance_ppm
+            for i, mz in enumerate(self.MassGrid["mz"]):
+                mz_err = mz/1e6 * mz_ppm
+                mz_tree.addi(mz - mz_err, mz + mz_err, i)
+            self.__interval_tree = mz_tree
+        return self.__interval_tree
+    
+    def find_nearest_mass_track(self, query_mz):
+        match = self.mass_grid_interval_tree.at(query_mz)
+        if match:
+            for m in match:
+                return int(m.data)
+        else:
+            return np.nan
+    
     def build_grid_sample_wise(self):
         '''
         Align one sample at a time to reference m/z grid, based on their anchor m/z tracks.
@@ -62,13 +91,8 @@ class MassGrid:
         build_grid_by_centroiding
         '''
         self._initiate_mass_grid()
-        sample_ids = self.experiment.valid_sample_ids
-        sample_ids.pop(self.experiment.reference_sample_id)
-        for sid in sample_ids:
-            SM = SimpleSample(self.experiment.sample_registry[sid],
-                experiment=self.experiment, database_mode=self.experiment.database_mode, 
-                mode=self.experiment.mode)
-            self.add_sample(SM)
+        for sid in [sample_id for sample_id in self.experiment.valid_sample_ids if sample_id != self.experiment.reference_sample_id]:            
+            self.add_sample(SimpleSample(self.experiment.sample_registry[sid], experiment=self.experiment))
 
     def build_grid_by_centroiding(self):
         '''
@@ -81,14 +105,19 @@ class MassGrid:
         --------
         build_grid_sample_wise
         '''
+
         all = []
-        for ii in range(self._number_of_samples_):
-            sid = self.experiment.valid_sample_ids[ii]
-            for jj in self.experiment.sample_registry[sid]['track_mzs']:
-                all.append(
-                    (jj[0], jj[1], ii)      # m/z, masstrack_id, sample_index
-                )
+        for ii, sid in enumerate(self.experiment.valid_sample_ids):
+            all.extend([(jj[0], jj[1], ii) for jj in self.experiment.sample_registry[sid]['track_mzs']])
         all.sort()
+
+        #for ii in range(self._number_of_samples_):
+        #    sid = self.experiment.valid_sample_ids[ii]
+        #    for jj in self.experiment.sample_registry[sid]['track_mzs']:
+        #        all.append(
+        #            (jj[0], jj[1], ii)      # m/z, masstrack_id, sample_index
+        #        )
+        #all.sort()
 
         all_bins = self.bin_track_mzs(all, self.experiment.reference_sample_id)
 
@@ -96,6 +125,8 @@ class MassGrid:
             np.full((len(all_bins), self._number_of_samples_), None),
             columns=self.CMAP.list_sample_names,
         )
+
+
         for jj in range(len(all_bins)):
             for (mz, track_id, sample_ii) in all_bins[jj][1]:
                 self.MassGrid.iloc[jj, sample_ii] = track_id
@@ -104,12 +135,9 @@ class MassGrid:
         self.MassGrid.insert(0, "mz", mz_list)          # add extra col for mz
 
         # determine anchor and landmark mass tracks
-        list_mass_tracks = []
-        for ii in range(len(mz_list)):
-            list_mass_tracks.append({'id_number': ii, 'mz': mz_list[ii],})
-        self.anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(
-            list_mass_tracks, mz_tolerance_ppm=self.experiment.parameters['mz_tolerance_ppm']
-            )
+
+        list_mass_tracks = [{'id_number': ii, 'mz': mz} for ii, mz in enumerate(mz_list)]
+        self.anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(list_mass_tracks, mz_tolerance_ppm=self.experiment.mz_tolerance_ppm)
         self._mz_landmarks_ = flatten_tuplelist(self.anchor_mz_pairs)
 
         # make sample instances
@@ -119,11 +147,9 @@ class MassGrid:
         for sid in self.experiment.valid_sample_ids:
             if sid != self.experiment.reference_sample_id:
                 SM = SimpleSample(self.experiment.sample_registry[sid],
-                    experiment=self.experiment, database_mode=self.experiment.database_mode, 
-                    mode=self.experiment.mode
+                    experiment=self.experiment
                     )
                 self.experiment.all_samples.append(SM)
-
 
     def _initiate_mass_grid(self):
         '''
@@ -157,8 +183,7 @@ class MassGrid:
         self.MassGrid[ reference_sample.name ] = [ x['id_number'] for x in ref_list_mass_tracks ]
         self.experiment.all_samples.append(reference_sample)
 
-
-    def add_sample(self, sample, database_cursor=None):
+    def add_sample(self, sample):
         '''
         This adds a sample to MassGrid, including the m/z alignment of the sample against the 
         existing reference m/z values in the MassGrid.
@@ -179,6 +204,7 @@ class MassGrid:
         self.experiment.all_samples : 
             adding this sample 
         '''
+        self.__interval_tree = None
         print("Adding sample to MassGrid,", sample.name)
         mzlist = [x[0] for x in sample.track_mzs]
         new_reference_mzlist, new_reference_map2, updated_REF_landmarks, _r = \
@@ -193,12 +219,11 @@ class MassGrid:
         NewGrid[ :self.MassGrid.shape[0]] = self.MassGrid
         NewGrid['mz'] = new_reference_mzlist
         NewGrid[ sample.name ] = new_reference_map2
+        self.oldGrid = self.MassGrid
         self.MassGrid = NewGrid
         self._mz_landmarks_ = updated_REF_landmarks
         sample.mz_calibration_ratio = _r            # not used now
-        
         self.experiment.all_samples.append(sample)
-
 
     def bin_track_mzs(self, tl, reference_id):
         '''
@@ -253,19 +278,6 @@ class MassGrid:
 
         return good_bins
 
-
-    def join(self, M2):
-        '''
-        Placeholder. Future option to join with another MassGrid via a common reference.
-
-        Parameters
-        ----------
-        M2: MassGrid instance
-            the mass grid to be merged with this MassGrid
-        '''
-        pass
-
-
 class CompositeMap:
     '''
     Each experiment is summarized into a CompositeMap (CMAP), as a master feature map.
@@ -288,14 +300,10 @@ class CompositeMap:
             the object representing the experiment from which to build the composite map
         '''
         self.experiment = experiment
-        self._number_of_samples_ = experiment.number_of_samples
-        self.list_sample_names = [experiment.sample_registry[ii]['name'] 
-                                  for ii in experiment.valid_sample_ids]
+        self.list_sample_names = [experiment.sample_registry[ii]['name'] for ii in experiment.valid_sample_ids]
 
         # designated reference sample; all RT is aligned to this sample
-        self.reference_sample_instance = self.reference_sample = \
-            self.get_reference_sample_instance(experiment.reference_sample_id)
-        self.rt_length = self.experiment.number_scans
+        self.reference_sample_instance = self.reference_sample = self.get_reference_sample_instance(experiment.reference_sample_id)
         self.dict_scan_rtime = self.get_reference_rtimes(self.rt_length)
         self.max_ref_rtime = self.dict_scan_rtime[self.rt_length-1]
 
@@ -307,6 +315,33 @@ class CompositeMap:
         self.good_reference_landmark_peaks = []     # used for RT alignment and m/z calibration to DB
         # self.reference_mzdict = {}
         self.composite_mass_tracks = {}             # following MassGrid indices
+        self.__interval_tree = None
+    @property
+    def number_of_samples(self):
+        return self.experiment.number_of_samples
+    
+    @property
+    def rt_length(self):
+        return self.experiment.number_scans
+
+    @property
+    def mass_grid_interval_tree(self):
+        if self.__interval_tree is None:
+            mz_tree = IntervalTree()
+            mz_ppm = self.experiment.mz_tolerance_ppm
+            for i, mz in enumerate(self.MassGrid["mz"]):
+                mz_err = mz/1e6 * mz_ppm
+                mz_tree.addi(mz - mz_err, mz + mz_err, i)
+            self.__interval_tree = mz_tree
+        return self.__interval_tree
+    
+    def find_nearest_mass_track(self, query_mz):
+        match = self.mass_grid_interval_tree.at(query_mz)
+        if match:
+            for m in match:
+                return int(m.data)
+        else:
+            return np.nan
 
     def get_reference_sample_instance(self, reference_sample_id):
         '''
@@ -322,11 +357,11 @@ class CompositeMap:
         -------
         instance of SimpleSample class for the reference_sample.
         '''
-        SM = SimpleSample(self.experiment.sample_registry[reference_sample_id],
-                experiment=self.experiment, database_mode=self.experiment.database_mode, 
-                mode=self.experiment.mode,
-                is_reference=True)
-        SM.list_mass_tracks = SM.get_masstracks_and_anchors()
+        SM = SimpleSample(
+            self.experiment.sample_registry[reference_sample_id],
+            experiment=self.experiment,
+            is_reference=True)
+        #SM.list_mass_tracks = SM.get_masstracks_and_anchors()
         return SM
 
     def get_reference_rtimes(self, rt_length):
@@ -343,6 +378,7 @@ class CompositeMap:
         -------
         dictionary of scan number to retetion time in the reference_sample.
         '''
+
         X, Y = self.reference_sample.rt_numbers, self.reference_sample.list_retention_time
         interf = interpolate.interp1d(X, Y, fill_value="extrapolate")
         newX = range(rt_length)
@@ -377,11 +413,10 @@ class CompositeMap:
         '''
         print("Constructing MassGrid, ...")
         MG = MassGrid( self, self.experiment )
-        if self._number_of_samples_ <= self.experiment.parameters['project_sample_number_small']:
+        if self.number_of_samples <= self.experiment.project_sample_number_small:
             MG.build_grid_sample_wise()
         else:
             MG.build_grid_by_centroiding()
-           
         self.MassGrid = MG.MassGrid
         self._mz_landmarks_ = MG._mz_landmarks_
 
@@ -390,9 +425,8 @@ class CompositeMap:
         Create empty mapping dictionaries if the RT alignment fails, e.g. for blank or exogenous samples.
         '''
         for sample in self.experiment.all_samples[1:]:      # first sample is reference
-            sample.rt_cal_dict, sample.reverse_rt_cal_dict = {}, {}
-
-
+            sample.rt_cal_dict, sample.reverse_rt_cal_dict = {}, {}    
+    
     def build_composite_tracks(self):
         '''
         Perform RT calibration then make composite tracks.
@@ -418,10 +452,9 @@ class CompositeMap:
         if self.experiment.parameters['max_retention_shift'] is None:
             MAX_RETENTION_SHIFT = np.inf
         else:
-            MAX_RETENTION_SHIFT = self.experiment.parameters['max_retention_shift'] * 10
+            MAX_RETENTION_SHIFT = self.experiment.parameters['max_retention_shift']
 
-        self.good_reference_landmark_peaks = self.set_RT_reference(cal_min_peak_height)
-        
+        self.good_reference_landmark_peaks = self.set_RT_reference()
         mzDict = dict(self.MassGrid['mz'])
         mzlist = list(self.MassGrid.index)                          # this gets indices as keys, per mass track
         basetrack = np.zeros(self.rt_length, dtype=np.int64)        # self.rt_length defines max rt number
@@ -432,26 +465,16 @@ class CompositeMap:
         # add to export mz and rtime of good reference landmarks
         if self.experiment.parameters['debug_rtime_align']:
             self.export_reference_sample()
-
         for SM in self.experiment.all_samples:
-            print("   ", SM.name)
-            list_mass_tracks = SM.get_masstracks_and_anchors()
-
-            if self.experiment.parameters['rt_align_on'] and not SM.is_reference:
-                if self.experiment.parameters['debug_rtime_align']:
-                    self.calibrate_sample_RT(SM, list_mass_tracks, 
-                                        calibration_fuction=rt_lowess_calibration_debug,
+            list_mass_tracks = SM.list_mass_tracks
+            if self.experiment.rt_align and not SM.is_reference:
+                calibration_function = rt_lowess_calibration_debug if self.experiment.parameters['debug_rtime_align'] else rt_lowess_calibration
+                self.calibrate_sample_RT(SM, 
+                                        calibration_function=calibration_function,
                                         cal_min_peak_height=cal_min_peak_height, 
                                         MIN_PEAK_NUM=MIN_PEAK_NUM,
                                         MAX_RETENTION_SHIFT=MAX_RETENTION_SHIFT,
-                                        NUM_ITERATIONS=NUM_ITERATIONS)
-                else:
-                    self.calibrate_sample_RT(SM, list_mass_tracks, 
-                                        calibration_fuction=rt_lowess_calibration, 
-                                        cal_min_peak_height=cal_min_peak_height, 
-                                        MIN_PEAK_NUM=MIN_PEAK_NUM,
-                                        MAX_RETENTION_SHIFT=MAX_RETENTION_SHIFT,
-                                        NUM_ITERATIONS=NUM_ITERATIONS)
+                                        NUM_ITERATIONS=NUM_ITERATIONS,)
 
             for k in mzlist:
                 ref_index = self.MassGrid[SM.name][k]
@@ -460,34 +483,83 @@ class CompositeMap:
                         list_mass_tracks[int(ref_index)]['intensity'],  
                         basetrack.copy(), SM.rt_cal_dict 
                         )
-
-        result = {}
-        for k,v in _comp_dict.items():
-            result[k] = { 'id_number': k, 'mz': mzDict[k], 'intensity': v }
-
+        result = {k : {'id_number': k, 'mz': mzDict[k], 'intensity': v} for k, v in _comp_dict.items()}
         self.composite_mass_tracks = result
 
-    def calibrate_sample_RT_by_standards(self, sample):
-        '''
-        Placeholder, to add RT calibration based on spike-in compound standards.
+    def calibrate_with_standards(self,
+                                 sample,
+                                 standards, 
+                                 calibration_function,
+                                 cal_min_peak_height=100000,
+                                 MIN_PEAK_NUM=5,
+                                 MAX_RETENTION_SHIFT=np.inf,
+                                 NUM_ITERATIONS=3,
+                                 mz_ppm=5):
+        print(standards)
+        standards = pd.read_csv(standards)
+        standards["mass_grid_id"] = [self.find_nearest_mass_track(x) for x in standards["MZ"]]
+        standards["scan_no"] = [self.reference_sample_instance.map_rtime_to_scan_number(x) for x in standards["RT"]]
+        potential_references = [{'apex': scan_no, 'height': np.inf, 'ref_id_num': mgrid_id} for scan_no, mgrid_id in zip(standards['scan_no'], standards['mass_grid_id']) if not pd.isna(mgrid_id)]
+        candidate_landmarks = []
+        for potential_reference in potential_references:
+            if not pd.isna(potential_reference['ref_id_num']):
+                candidate_landmarks.append(self.MassGrid[sample.name].values[int(potential_reference['ref_id_num'])])
+        
+        good_landmark_peaks, selected_reference_landmark_peaks = [], []
+        for jj, this_reference in enumerate(potential_references):
+            ii = candidate_landmarks[jj]
+            if not pd.isna(ii):
+                this_mass_track = sample.list_mass_tracks[ii]
+                Upeaks = quick_detect_unique_elution_peak(
+                    this_mass_track['intensity'],
+                    min_peak_height=cal_min_peak_height,
+                    min_fwhm=3,
+                    min_prominence_threshold_ratio=0.2,
+                    all_peaks=True
+                )
+                if Upeaks:
+                    new_Upeaks = []
+                    for i, Upeak_1 in enumerate(Upeaks):
+                        if abs(self.reference_sample_instance.scan_time_to_rtime(Upeak_1['apex']) - self.reference_sample_instance.scan_time_to_rtime(this_reference['apex'])) < MAX_RETENTION_SHIFT:
+                            good = True
+                            for j, Upeak_2 in enumerate(Upeaks):
+                                if i != j:
+                                    if abs(self.reference_sample_instance.scan_time_to_rtime(Upeak_1['apex']) - self.reference_sample_instance.scan_time_to_rtime(Upeak_2['apex'])) < 2 * MAX_RETENTION_SHIFT:
+                                        good = False
+                                        break
+                        if good:
+                            new_Upeaks.append(Upeak_1)
+                    if len(new_Upeaks) == 1:
+                        Upeak = new_Upeaks[0]
+                        Upeak.update({'ref_id_num': ii})
+                        good_landmark_peaks.append(Upeak)
+                        selected_reference_landmark_peaks.append(this_reference)
+                    else:
+                        print(new_Upeaks)
+        if len(good_landmark_peaks) > MIN_PEAK_NUM:
+            try:
+                sample.rt_cal_dict, sample.reverse_rt_cal_dict = calibration_function( 
+                                                good_landmark_peaks, 
+                                                selected_reference_landmark_peaks, 
+                                                sample.rt_numbers, 
+                                                self.reference_sample.rt_numbers, 
+                                                NUM_ITERATIONS, 
+                                                sample.name,
+                                                self.experiment.output_dir)
+                _CALIBRATED = True
+            except:
+                _CALIBRATED = False
+        if not _CALIBRATED:
+            sample.rt_cal_dict, sample.reverse_rt_cal_dict = {}, {}
+            print("~warning~ Faluire in retention time alignment (%d); %s is used without alignment." %(len(good_landmark_peaks), sample.name))
 
-        Parameters
-        ----------
-        sample: 
-            this will either be a SimpleSample object for the sample containing 
-            the spike-in standards.
-        '''
-        pass
-
-
-    def calibrate_sample_RT(self, 
-                                sample, 
-                                list_mass_tracks,
-                                calibration_fuction=rt_lowess_calibration, 
-                                cal_min_peak_height=100000,
-                                MIN_PEAK_NUM=15,
-                                MAX_RETENTION_SHIFT=np.inf,
-                                NUM_ITERATIONS=1):
+    def calibrate_with_mz_landmarks(self,
+                                    sample,
+                                    calibration_function=rt_lowess_calibration,
+                                    cal_min_peak_height=100000,
+                                    MIN_PEAK_NUM=5,
+                                    MAX_RETENTION_SHIFT=np.inf,
+                                    NUM_ITERATIONS=3):
         '''
         Calibrate/align retention time per sample.
 
@@ -529,42 +601,103 @@ class CompositeMap:
             To consider to enforce good_landmark_peaks to cover RT range evenly in the future.
         '''
 
-        candidate_landmarks = [self.MassGrid[sample.name].values[
-                                p['ref_id_num']] for p in 
-                                self.good_reference_landmark_peaks] # contains NaN
+        candidate_landmarks = [self.MassGrid[sample.name].values[p['ref_id_num']] for p in self.good_reference_landmark_peaks]
         good_landmark_peaks, selected_reference_landmark_peaks = [], []
         for jj in range(len(self.good_reference_landmark_peaks)):
             ii = candidate_landmarks[jj]
             if not pd.isna(ii):
-                ii = int(ii)
-                this_mass_track = list_mass_tracks[ii]
-                Upeak = quick_detect_unique_elution_peak(this_mass_track['intensity'], 
-                            min_peak_height=cal_min_peak_height, 
-                            min_fwhm=3, min_prominence_threshold_ratio=0.2)
-                
-                if Upeak:
-                    rt_delta = Upeak['apex'] - self.good_reference_landmark_peaks[jj]['apex']
-                    if abs(rt_delta) < MAX_RETENTION_SHIFT:
-                        Upeak.update({'ref_id_num': ii})
-                        good_landmark_peaks.append(Upeak)
-                        selected_reference_landmark_peaks.append(self.good_reference_landmark_peaks[jj])
-
+                try:
+                    ii = int(ii)
+                    this_mass_track = sample.list_mass_tracks[ii]
+                    Upeak = quick_detect_unique_elution_peak(this_mass_track['intensity'], 
+                                min_peak_height=cal_min_peak_height, 
+                                min_fwhm=3, min_prominence_threshold_ratio=0.2, all_peaks=False)
+                    if Upeak:
+                        rt_delta = Upeak['apex'] - self.good_reference_landmark_peaks[jj]['apex']
+                        if abs(rt_delta) < MAX_RETENTION_SHIFT:
+                            Upeak.update({'ref_id_num': ii})
+                            good_landmark_peaks.append(Upeak)
+                            selected_reference_landmark_peaks.append(self.good_reference_landmark_peaks[jj])
+                except:
+                    pass
         _NN, _CALIBRATED = len(good_landmark_peaks), False
         print(sample.name, _NN)
 
         sample.rt_landmarks = [p['apex'] for p in good_landmark_peaks]
         # only do RT calibration if MIN_PEAK_NUM is met
         if _NN >  MIN_PEAK_NUM:
-            sample.rt_cal_dict, sample.reverse_rt_cal_dict = calibration_fuction( 
-                                        good_landmark_peaks, selected_reference_landmark_peaks, 
-                                        sample.rt_numbers, self.reference_sample.rt_numbers, NUM_ITERATIONS, sample.name,
+            sample.rt_cal_dict, sample.reverse_rt_cal_dict = calibration_function( 
+                                        good_landmark_peaks, 
+                                        selected_reference_landmark_peaks, 
+                                        sample.rt_numbers, 
+                                        self.reference_sample.rt_numbers, 
+                                        NUM_ITERATIONS, 
+                                        sample.name,
                                         self.experiment.parameters['outdir'])
             _CALIBRATED = True
         if not _CALIBRATED:
                 sample.rt_cal_dict, sample.reverse_rt_cal_dict =  {}, {}
                 print("    ~warning~ Faluire in retention time alignment (%d); %s is used without alignment." 
                                             %( _NN, sample.name))
-                
+
+    def calibrate_sample_RT(self,
+                            sample,
+                            calibration_function=rt_lowess_calibration,
+                            cal_min_peak_height=100000,
+                            MIN_PEAK_NUM=5,
+                            MAX_RETENTION_SHIFT=np.inf,
+                            NUM_ITERATIONS=3):
+        if self.experiment.alignment_mode == "data-driven":
+            self.calibrate_with_mz_landmarks(sample, 
+                                             calibration_function=calibration_function, 
+                                             cal_min_peak_height=cal_min_peak_height,
+                                             MIN_PEAK_NUM=MIN_PEAK_NUM,
+                                             MAX_RETENTION_SHIFT=MAX_RETENTION_SHIFT,
+                                             NUM_ITERATIONS=NUM_ITERATIONS)
+        elif self.experiment.alignment_mode == "data-driven-enhanced":
+            pass
+        elif self.experiment.alignment_mode == "standards":
+            self.calibrate_with_standards(sample,
+                                          self.experiment.reference_standards,
+                                          calibration_function=calibration_function,
+                                          cal_min_peak_height=cal_min_peak_height,
+                                          MIN_PEAK_NUM=MIN_PEAK_NUM,
+                                          MAX_RETENTION_SHIFT=MAX_RETENTION_SHIFT,
+                                          NUM_ITERATIONS=NUM_ITERATIONS)
+
+    def set_RT_reference2(self, cal_peak_intensity_threshold=100000, min_mSelectivity=0.99, MAX_RETENTION_SHIFT=np.inf):
+        anchors = 0
+        selectivities = calculate_selectivity(self.MassGrid['mz'][self._mz_landmarks_], self.experiment.mz_tolerance_ppm)
+        good_reference_landmark_peaks = []
+        ref_list_mass_tracks = self.reference_sample.list_mass_tracks
+        for ii in range(len(self._mz_landmarks_)):
+            if selectivities[ii] > min_mSelectivity:
+                ref_ii = self.MassGrid[self.reference_sample.name][self._mz_landmarks_[ii]]
+                if ref_ii and not pd.isna(ref_ii):
+                    this_mass_track = ref_list_mass_tracks[ int(ref_ii) ]
+                    Upeaks = quick_detect_unique_elution_peak(this_mass_track['intensity'], 
+                                min_peak_height=cal_peak_intensity_threshold, 
+                                min_fwhm=3, min_prominence_threshold_ratio=0.2, all_peaks=True)
+                    if Upeaks:
+                        if (MAX_RETENTION_SHIFT is np.inf and len(Upeaks) == 1) or (len(Upeaks) == 1):
+                            Upeak = Upeaks[0]
+                            Upeak.update({'ref_id_num': self._mz_landmarks_[ii]}) # as in MassGrid index
+                            good_reference_landmark_peaks.append(Upeak)
+                            anchors += 1
+                        else:
+                            #print(Upeaks)
+                            for i, Upeak_1 in enumerate(Upeaks):
+                                good = True
+                                for j, Upeak_2 in enumerate(Upeaks):
+                                    if i != j:
+                                        if abs(self.reference_sample_instance.scan_time_to_rtime(Upeak_1['apex']) - self.reference_sample_instance.scan_time_to_rtime(Upeak_2['apex'])) < MAX_RETENTION_SHIFT:
+                                            good = False
+                                if good:
+                                    anchors += 1
+                                    Upeak_1.update({'ref_id_num': self._mz_landmarks_[ii]})
+                                    good_reference_landmark_peaks.append(Upeak)
+        self.reference_sample.rt_landmarks = [p['apex'] for p in good_reference_landmark_peaks]
+        return good_reference_landmark_peaks
 
     def set_RT_reference(self, cal_peak_intensity_threshold=100000):
         '''
@@ -581,12 +714,12 @@ class CompositeMap:
         ------- 
         good_reference_landmark_peaks: [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...]
         '''
-        selectivities = calculate_selectivity( self.MassGrid['mz'][self._mz_landmarks_], 
-                                                self.experiment.parameters['mz_tolerance_ppm'])
+        selectivities = calculate_selectivity(self.MassGrid['mz'][self._mz_landmarks_], self.experiment.mz_tolerance_ppm)
         good_reference_landmark_peaks = []
         ref_list_mass_tracks = self.reference_sample.list_mass_tracks
         for ii in range(len(self._mz_landmarks_)):
             if selectivities[ii] > 0.99:
+                #print("ref: ", self.reference_sample.name)
                 ref_ii = self.MassGrid[self.reference_sample.name][self._mz_landmarks_[ii]]
                 if ref_ii and not pd.isna(ref_ii):
                     this_mass_track = ref_list_mass_tracks[ int(ref_ii) ]
@@ -598,9 +731,7 @@ class CompositeMap:
                         good_reference_landmark_peaks.append(Upeak)
 
         self.reference_sample.rt_landmarks = [p['apex'] for p in good_reference_landmark_peaks]
-
         return good_reference_landmark_peaks
-
 
     def global_peak_detection(self):
         '''
@@ -626,11 +757,11 @@ class CompositeMap:
 
         self.FeatureList = batch_deep_detect_elution_peaks(
             self.composite_mass_tracks.values(), 
-            self.experiment.number_scans, self.experiment.parameters
+            self.experiment.number_scans, 
+            self.experiment.parameters
         )
-        ii = 0
-        for peak in self.FeatureList:
-            ii += 1
+        
+        for ii, peak in enumerate(self.FeatureList):
             peak['id_number'] = 'F'+str(ii)
             # convert scan numbers to rtime
             try:
@@ -646,7 +777,6 @@ class CompositeMap:
                       (peak['apex'], peak['left_base'], peak['right_base']))
 
         self.generate_feature_table()
-
 
     def get_peak_area_sum(self, track_intensity, left_base, right_base):
         '''
@@ -666,7 +796,7 @@ class CompositeMap:
         ------- 
         Integer of peak area value
         '''
-        return track_intensity[left_base: right_base+1].sum()
+        return int(peak_area_sum(track_intensity, left_base, right_base))
     
     
     def get_peak_area_auc(self, track_intensity, left_base, right_base):
@@ -688,9 +818,8 @@ class CompositeMap:
         Integer of peak area value
         
         '''
-        return int(maximum_filter1d(
-            track_intensity[left_base: right_base+1], size=2, mode='constant').sum())
-
+        return int(peak_area_auc(track_intensity, left_base, right_base))
+    
 
     def get_peak_area_gaussian(self, track_intensity, left_base, right_base):
         '''
@@ -710,24 +839,18 @@ class CompositeMap:
         ------- 
         peak area, Integer value as gaussian integral.
         '''
-        return int(get_gaussian_peakarea_on_intensity_list(
-            track_intensity, left_base, right_base))
+        return int(get_gaussian_peakarea_on_intensity_list(track_intensity, left_base, right_base))
 
 
     def generate_feature_table(self):
         '''
         Initiate and populate self.FeatureTable, each sample per column in dataframe.
         '''
-        peak_area_function = self.get_peak_area_sum
-        if self.experiment.parameters['peak_area'] == 'auc':
-            peak_area_function = self.get_peak_area_auc
-        elif self.experiment.parameters['peak_area'] == 'gauss':
-            peak_area_function = self.get_peak_area_gaussian
+        
 
         FeatureTable = pd.DataFrame(self.FeatureList)
         for SM in self.experiment.all_samples:
-            FeatureTable[SM.name] = self.extract_features_per_sample(SM, peak_area_function)
-
+            FeatureTable[SM.name] = self.extract_features_per_sample(SM, SimpleSample.peak_area_mode_map[self.experiment.peak_area_mode])
         self.FeatureTable = FeatureTable
 
 
@@ -750,21 +873,24 @@ class CompositeMap:
         '''
         fList = []
         mass_track_map = self.MassGrid[sample.name]
-        list_mass_tracks = sample.get_masstracks_and_anchors()
+        list_mass_tracks = sample.list_mass_tracks
+        #list_mass_tracks = sample.get_masstracks_and_anchors()
         for peak in self.FeatureList:
             track_number = mass_track_map[peak['parent_masstrack_id']]
             peak_area = 0
             if not pd.isna(track_number):           # watch out dtypes
-                mass_track = list_mass_tracks[ int(track_number) ]
-                # watch for range due to calibration/conversion.
-                left_base = sample.reverse_rt_cal_dict.get(peak['left_base'], peak['left_base'])
-                right_base = sample.reverse_rt_cal_dict.get(peak['right_base'], peak['right_base'])
-                peak_area = peak_area_function(mass_track['intensity'], left_base, right_base)
-
+                try:
+                    mass_track = list_mass_tracks[ int(track_number) ]
+                    # watch for range due to calibration/conversion.
+                    left_base = sample.reverse_rt_cal_dict.get(peak['left_base'], peak['left_base'])
+                    right_base = sample.reverse_rt_cal_dict.get(peak['right_base'], peak['right_base'])
+                    peak_area = peak_area_function(mass_track['intensity'], left_base, right_base)
+                except:
+                    peak_area = None
             fList.append( peak_area )
-
         return fList
     
+
     def export_reference_sample(self):
         """Write mz and retention time of "good" ions to csv in reference sample
 
@@ -786,16 +912,10 @@ class CompositeMap:
          
         """
         # extendable. could add height and other params
-        mz_landmarks = [self.MassGrid['mz'].values[
-                        p['ref_id_num']] for p in 
-                        self.good_reference_landmark_peaks] 
-        rtime_landmarks = [self.dict_scan_rtime[p['apex']] for p in 
-                        self.good_reference_landmark_peaks]
-        reference_sample_name = self.reference_sample.name
-        import os
-        import csv
+        mz_landmarks = [self.MassGrid['mz'].values[p['ref_id_num']] for p in self.good_reference_landmark_peaks] 
+        rtime_landmarks = [self.dict_scan_rtime[p['apex']] for p in self.good_reference_landmark_peaks]
         # example: batch14_MT_20210808_087_mz_rtime_landmarks.csv
-        referece_path = os.path.join(self.experiment.parameters['outdir'], 'export', reference_sample_name + '_mz_rtime_landmarks.csv')
+        referece_path = os.path.join(self.experiment.parameters['outdir'], 'export', str(self.reference_sample.name) + '_mz_rtime_landmarks.csv')
         with open(referece_path, 'w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(["mz", "rtime"])  #  headers
