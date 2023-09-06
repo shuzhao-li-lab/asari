@@ -580,6 +580,12 @@ class CompositeMap:
         Returns
         ------- 
         good_reference_landmark_peaks: [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...]
+
+        Note
+        ----
+        Some members in good_reference_landmark_peaks may have the same RT apex.
+        But the redundant numbers should be handled by rt_lowess_calibration, in which .frac is
+        more important for stability.
         '''
         selectivities = calculate_selectivity( self.MassGrid['mz'][self._mz_landmarks_], 
                                                 self.experiment.parameters['mz_tolerance_ppm'])

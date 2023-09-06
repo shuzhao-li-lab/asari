@@ -356,8 +356,10 @@ def rt_lowess_calibration(good_landmark_peaks,
     sample_rt_bound = max(sample_rt_numbers)
     rt_rightend_ = 1.1 * sample_rt_bound
     xx, yy = [-0.1 * sample_rt_bound,]*3, [-0.1 * sample_rt_bound,]*3
-    rt_cal = sorted([(x[0]['apex'], x[1]['apex']) for x in zip(good_landmark_peaks, 
-                                                               selected_reference_landmark_peaks)])
+    rt_cal = sorted(
+        [(x[0]['apex'], x[1]['apex']) for x in zip(good_landmark_peaks, 
+                                                               selected_reference_landmark_peaks)]
+    )
 
     xx += [L[0] for L in rt_cal] + [rt_rightend_]*3
     yy += [L[1] for L in rt_cal] + [rt_rightend_]*3
@@ -413,7 +415,7 @@ def rt_lowess_calibration_debug(good_landmark_peaks,
         Range matched. Only changed numbers are kept for efficiency.
     
     Outputs
-        -------
+    -------
     A PDF file showing the LOWESS regression result.
         
     Note
