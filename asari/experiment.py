@@ -14,7 +14,6 @@ from .json_encoder import NpEncoder
 try:
     import importlib.resources as pkg_resources
 except ImportError:
-    # Shuzhao - what is the purpose of this? I'm assuming this is vestigial and can be removed?
     import importlib_resources as pkg_resources
 
 from . import db

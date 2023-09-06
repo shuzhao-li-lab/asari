@@ -367,10 +367,12 @@ def rt_lowess_calibration(good_landmark_peaks,
     #lowess_predicted = lowess(yy, xx, frac= .2, it=1, xvals=np.array(sample_rt_numbers, dtype=float)) 
     #
     # downgrade now for compatibility to older statsmodels
-    lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=num_iterations, xvals=sample_rt_numbers)
+    lowess_predicted = __hacked_lowess__(yy, xx, frac= .5, it=num_iterations, xvals=sample_rt_numbers)
+
     interf = interpolate.interp1d(lowess_predicted, sample_rt_numbers, fill_value="extrapolate")
     ref_interpolated = interf( reference_rt_numbers )
     lowess_predicted = [int(round(ii)) for ii in lowess_predicted]
+
     rt_cal_dict = dict( 
         [(x,y) for x,y in zip(sample_rt_numbers, lowess_predicted) if x!=y and 0<=y<=reference_rt_bound] )
 
