@@ -356,20 +356,21 @@ def rt_lowess_calibration(good_landmark_peaks,
     sample_rt_bound = max(sample_rt_numbers)
     rt_rightend_ = 1.1 * sample_rt_bound
     xx, yy = [-0.1 * sample_rt_bound,]*3, [-0.1 * sample_rt_bound,]*3
-    rt_cal = sorted(
-        [(x[0]['apex'], x[1]['apex']) for x in zip(good_landmark_peaks, 
-                                                               selected_reference_landmark_peaks)]
+    rt_cal = clean_rt_calibration_points(
+        [(x[0]['apex'], x[1]['apex']) for x in zip(good_landmark_peaks, selected_reference_landmark_peaks)]
     )
-
     xx += [L[0] for L in rt_cal] + [rt_rightend_]*3
     yy += [L[1] for L in rt_cal] + [rt_rightend_]*3
+    # scale frac parameter like a sigmoid of number of data points when len(rt_cal) is in (50,150).
+    FRAC = 0.6 - 0.004*(len(rt_cal)-50)
+    FRAC = max(0.2, min(FRAC, 0.6))    # bound frac in (0.2, 0.6)
     
     # This requires statsmodels > v 0.12.
     # float conversion on xvals is to bypass a bug in statsmodels, which was fixed today 2022-01-27
     #lowess_predicted = lowess(yy, xx, frac= .2, it=1, xvals=np.array(sample_rt_numbers, dtype=float)) 
     #
     # downgrade now for compatibility to older statsmodels
-    lowess_predicted = __hacked_lowess__(yy, xx, frac= .5, it=num_iterations, xvals=sample_rt_numbers)
+    lowess_predicted = __hacked_lowess__(yy, xx, frac=FRAC, it=num_iterations, xvals=sample_rt_numbers)
 
     interf = interpolate.interp1d(lowess_predicted, sample_rt_numbers, fill_value="extrapolate")
     ref_interpolated = interf( reference_rt_numbers )
@@ -383,6 +384,28 @@ def rt_lowess_calibration(good_landmark_peaks,
         [(x,y) for x,y in zip(reference_rt_numbers, ref_interpolated) if x!=y and 0<=y<=sample_rt_bound] )
         
     return rt_cal_dict, reverse_rt_cal_dict
+
+
+def clean_rt_calibration_points(rt_cal_pairs):
+    '''
+    Remove redundant RT calibration data points and outliers (out of 3x stdev).
+    This does not force even distribution of calibration data points.
+
+    Parameters
+    ----------
+    rt_cal_pairs : list of paired scan numbers from this sample and from the reference sample.
+
+    Returns
+    -------
+    rt_cal_pairs : clean and sorted version of rt_cal_pairs.
+    '''
+    rt_cal_pairs = [(x, x[0]-x[1]) for x in set(rt_cal_pairs)]
+    _deltas = [x[1] for x in rt_cal_pairs]
+    m, std3x = np.mean(_deltas), np.std(_deltas) * 3
+    _low, _high = m-std3x, m+std3x
+
+    return sorted([x[0] for x in rt_cal_pairs if _low < x[1] < _high])
+
 
 def rt_lowess_calibration_debug(good_landmark_peaks, 
                           selected_reference_landmark_peaks, 
@@ -433,18 +456,21 @@ def rt_lowess_calibration_debug(good_landmark_peaks,
     sample_rt_bound = max(sample_rt_numbers)
     rt_rightend_ = 1.1 * sample_rt_bound
     xx, yy = [-0.1 * sample_rt_bound,]*3, [-0.1 * sample_rt_bound,]*3
-    rt_cal = sorted([(x[0]['apex'], x[1]['apex']) for x in zip(good_landmark_peaks, 
-                                                               selected_reference_landmark_peaks)])
-
+    rt_cal = clean_rt_calibration_points(
+        [(x[0]['apex'], x[1]['apex']) for x in zip(good_landmark_peaks, selected_reference_landmark_peaks)]
+    )
     xx += [L[0] for L in rt_cal] + [rt_rightend_]*3
     yy += [L[1] for L in rt_cal] + [rt_rightend_]*3
-    
+    # scale frac parameter like a sigmoid of number of data points when len(rt_cal) is in (50,150).
+    FRAC = 0.6 - 0.004*(len(rt_cal)-50)
+    FRAC = max(0.2, min(FRAC, 0.6))    # bound frac in (0.2, 0.6)
+
     # This requires statsmodels > v 0.12.
     # float conversion on xvals is to bypass a bug in statsmodels, which was fixed today 2022-01-27
     #lowess_predicted = lowess(yy, xx, frac= .2, it=1, xvals=np.array(sample_rt_numbers, dtype=float)) 
     #
     # downgrade now for compatibility to older statsmodels
-    lowess_predicted = __hacked_lowess__(yy, xx, frac= .2, it=num_iterations, xvals=sample_rt_numbers)
+    lowess_predicted = __hacked_lowess__(yy, xx, frac=FRAC, it=num_iterations, xvals=sample_rt_numbers)
     interf = interpolate.interp1d(lowess_predicted, sample_rt_numbers, fill_value="extrapolate")
     ref_interpolated = interf( reference_rt_numbers )
     lowess_predicted = [int(round(ii)) for ii in lowess_predicted]

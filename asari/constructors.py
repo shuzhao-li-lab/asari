@@ -437,17 +437,17 @@ class CompositeMap:
             print("   ", SM.name)
             list_mass_tracks = SM.get_masstracks_and_anchors()
 
-            if self.experiment.parameters['rt_align_on'] and not SM.is_reference:
-                if self.experiment.parameters['debug_rtime_align']:
+            if SM.is_reference:
+                print("\t\tgood_reference_landmark_peaks: ", len(self.good_reference_landmark_peaks))
+            else:
+                if self.experiment.parameters['rt_align_on']:
+                    if self.experiment.parameters['debug_rtime_align']:
+                        cal_func = rt_lowess_calibration_debug
+                    else:
+                        cal_func = rt_lowess_calibration
+
                     self.calibrate_sample_RT(SM, list_mass_tracks, 
-                                        calibration_fuction=rt_lowess_calibration_debug,
-                                        cal_min_peak_height=cal_min_peak_height, 
-                                        MIN_PEAK_NUM=MIN_PEAK_NUM,
-                                        MAX_RETENTION_SHIFT=MAX_RETENTION_SHIFT,
-                                        NUM_ITERATIONS=NUM_ITERATIONS)
-                else:
-                    self.calibrate_sample_RT(SM, list_mass_tracks, 
-                                        calibration_fuction=rt_lowess_calibration, 
+                                        calibration_fuction=cal_func,
                                         cal_min_peak_height=cal_min_peak_height, 
                                         MIN_PEAK_NUM=MIN_PEAK_NUM,
                                         MAX_RETENTION_SHIFT=MAX_RETENTION_SHIFT,
@@ -526,7 +526,8 @@ class CompositeMap:
             When calibration_fuction fails, e.g. inf on lowess_predicted,
             it is assumed that this sample is not amendable to computational alignment,
             and the sample will be attached later without adjusting retention time.
-            To consider to enforce good_landmark_peaks to cover RT range evenly in the future.
+            It will be good to have good_landmark_peaks to cover RT range evenly in the future.
+            Using user-supplied internal standards will be an important option.
         '''
 
         candidate_landmarks = [self.MassGrid[sample.name].values[
@@ -550,7 +551,7 @@ class CompositeMap:
                         selected_reference_landmark_peaks.append(self.good_reference_landmark_peaks[jj])
 
         _NN, _CALIBRATED = len(good_landmark_peaks), False
-        print(sample.name, _NN)
+        print("\t\tgood_landmark_peaks: ", _NN)
 
         sample.rt_landmarks = [p['apex'] for p in good_landmark_peaks]
         # only do RT calibration if MIN_PEAK_NUM is met
@@ -604,7 +605,7 @@ class CompositeMap:
                         good_reference_landmark_peaks.append(Upeak)
 
         self.reference_sample.rt_landmarks = [p['apex'] for p in good_reference_landmark_peaks]
-
+        
         return good_reference_landmark_peaks
 
 
