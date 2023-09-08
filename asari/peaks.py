@@ -348,7 +348,8 @@ def detect_evaluate_peaks_on_roi(list_intensity_roi, rt_numbers_roi,
     '''
     Return list of peaks based on detection in ROI.
     An ROI is a segment on a masstrack, defined by list_intensity_roi and rt_numbers_roi.
-     
+    ROIs are extracted from a masstrack by filtering out low-intensity regions.
+
     Parameters
     ----------
     list_intensity : list[np.integer]
@@ -390,6 +391,13 @@ def detect_evaluate_peaks_on_roi(list_intensity_roi, rt_numbers_roi,
                                     width=min_fwhm, 
                                     wlen=wlen,
                                     ) 
+    # Relax wlen if no peak is found on this ROI
+    if peaks.size == 0 and len(list_intensity_roi) > wlen:
+        peaks, properties = find_peaks(list_intensity_roi, height=min_peak_height, 
+                                    distance=min_fwhm, prominence=min_prominence_threshold, width=min_fwhm, 
+                                    wlen=None,
+                                    ) 
+    
     for ii in range(peaks.size):
         if properties['right_bases'][ii] - properties['left_bases'][ii] >= min_fwhm + 2:
             _jpeak = evaluate_roi_peak_json_(
@@ -429,7 +437,7 @@ def evaluate_roi_peak_json_(ii,
     ----
     This handles the conversion btw indices of ROI and indices of mass_track.
     The peak shape is evluated here on a Gaussian model.  
-    The left, right bases are constrained by N*stdev in the fitted model,
+    The left, right bases are constrained by N*stdev in the fitted model, mostly to ignore long tails,
     which can be optimized in the future.
     '''
     left_index, right_index = properties['left_bases'][ii], \
@@ -655,7 +663,7 @@ def quick_detect_unique_elution_peak(intensity_track,
     min_fwhm : float
         minimal peak width required for a peak.
     min_prominence_threshold_ratio : float
-        require ratio of prominence relative to peak height.
+        required ratio of prominence relative to peak height.
 
     Returns
     -------
