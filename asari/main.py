@@ -1,6 +1,7 @@
 import argparse
 from yaml import load, Loader
 import multiprocessing as mp
+import os
 
 from asari import __version__
 from .workflow import (get_mz_list, 
@@ -156,7 +157,7 @@ def main(parameters=PARAMETERS):
     if args.project:
         parameters['project_name'] = args.project
     if args.output:
-        parameters['outdir'] = args.output
+        parameters['outdir'] = os.path.abspath(args.output)
     if args.peak_area:
         parameters['peak_area'] = args.peak_area
     if args.pickle:
