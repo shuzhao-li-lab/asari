@@ -59,6 +59,8 @@ class SimpleSample:
         # These are critical RT calibration functions, index mapping with the reference sample
         self.rt_cal_dict = None
         self.reverse_rt_cal_dict = None
+        self.is_rt_aligned = is_reference      # init value False unless is_reference
+        
         # placeholder
         self.mz_calibration_function = None
                                    

@@ -458,8 +458,12 @@ class ext_Experiment:
         3. unique compound table under `outdir/export/`
         4. dependent on `target` extract option, a targeted_extraction table under `outdir`. 
         '''
-        good_samples = [sample.name for sample in self.all_samples] 
-        filtered_FeatureTable = self.CMAP.FeatureTable[good_samples]                       
+        if self.parameters['drop_unaligned_samples']:
+            good_samples = [sample.name for sample in self.all_samples if sample.is_rt_aligned]
+        else:
+            good_samples = [sample.name for sample in self.all_samples]
+        filtered_FeatureTable = self.CMAP.FeatureTable[good_samples]          # this fixes order of samples       
+        number_of_samples = len(good_samples)      
         # non zero counts
         count = filtered_FeatureTable[filtered_FeatureTable>1].count(axis='columns')
         self.CMAP.FeatureTable['detection_counts'] = count
@@ -477,7 +481,7 @@ class ext_Experiment:
         outfile = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
         filtered_FeatureTable.to_csv(outfile, index=False, sep="\t")
         print("\nFeature table (%d x %d) was written to %s." %(
-                                filtered_FeatureTable.shape[0], self.number_of_samples, outfile))
+                                filtered_FeatureTable.shape[0], number_of_samples, outfile))
 
         # extract targeted m/z features
         if 'target' in self.parameters and self.parameters['target']:  
@@ -492,7 +496,7 @@ class ext_Experiment:
             outfile = os.path.join(self.parameters['outdir'], 'targeted_extraction__'+self.parameters['output_feature_table'])
             targeted_table.to_csv(outfile, index=False, sep="\t")
             print("Targeted extraction Feature table (%d x %d) was written to %s.\n" %(
-                                targeted_table.shape[0], self.number_of_samples, outfile))
+                                targeted_table.shape[0], number_of_samples, outfile))
 
         outfile = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
         # Some features can have all 0s, filtered here
@@ -501,8 +505,8 @@ class ext_Experiment:
                                                         filtered_FeatureTable['goodness_fitting']>_peak_shape][
                                                         filtered_FeatureTable['cSelectivity']>_cSelectivity ]
         filtered_FeatureTable.to_csv(outfile, index=False, sep="\t")
-        print("Filtered Feature table (%d x %d) was written to %s.\n" %(
-                                filtered_FeatureTable.shape[0], self.number_of_samples, outfile))
+        print("\nFiltered Feature table (%d x %d) was written to %s.\n" %(
+                                filtered_FeatureTable.shape[0], number_of_samples, outfile))
         
         if self.parameters['anno']:
             # in self.selected_unique_features: (empCpd id, neutral_formula, ion_relation)
@@ -516,7 +520,7 @@ class ext_Experiment:
             outfile = os.path.join(self.parameters['outdir'], 'export', 'unique_compound__'+self.parameters['output_feature_table'])
             unique_compound_table.to_csv(outfile, index=False, sep="\t")
             print("Unique compound table (%d x %d) was written to %s.\n" %(
-                                unique_compound_table.shape[0], self.number_of_samples, outfile))
+                                unique_compound_table.shape[0], number_of_samples, outfile))
 
         
     def export_log(self):

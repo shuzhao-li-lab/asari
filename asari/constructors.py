@@ -453,13 +453,15 @@ class CompositeMap:
                                         MAX_RETENTION_SHIFT=MAX_RETENTION_SHIFT,
                                         NUM_ITERATIONS=NUM_ITERATIONS)
 
-            for k in mzlist:
-                ref_index = self.MassGrid[SM.name][k]
-                if not pd.isna(ref_index): # ref_index can be NA 
-                    _comp_dict[k] += remap_intensity_track( 
-                        list_mass_tracks[int(ref_index)]['intensity'],  
-                        basetrack.copy(), SM.rt_cal_dict 
-                        )
+            # option to skip sample if not aligned
+            if not self.experiment.parameters['drop_unaligned_samples'] or SM.is_rt_aligned:
+                for k in mzlist:
+                    ref_index = self.MassGrid[SM.name][k]
+                    if not pd.isna(ref_index): # ref_index can be NA 
+                        _comp_dict[k] += remap_intensity_track( 
+                            list_mass_tracks[int(ref_index)]['intensity'],  
+                            basetrack.copy(), SM.rt_cal_dict 
+                            )
 
         result = {}
         for k,v in _comp_dict.items():
@@ -550,20 +552,21 @@ class CompositeMap:
                         good_landmark_peaks.append(Upeak)
                         selected_reference_landmark_peaks.append(self.good_reference_landmark_peaks[jj])
 
-        _NN, _CALIBRATED = len(good_landmark_peaks), False
-        print("\t\tgood_landmark_peaks: ", _NN)
+        _NN = len(good_landmark_peaks)
+        print("\tgood_landmark_peaks: ", _NN)
 
         sample.rt_landmarks = [p['apex'] for p in good_landmark_peaks]
-        # only do RT calibration if MIN_PEAK_NUM is met
+        # only do RT calibration if MIN_PEAK_NUM is met.
         if _NN >  MIN_PEAK_NUM:
             sample.rt_cal_dict, sample.reverse_rt_cal_dict = calibration_fuction( 
                                         good_landmark_peaks, selected_reference_landmark_peaks, 
                                         sample.rt_numbers, self.reference_sample.rt_numbers, NUM_ITERATIONS, sample.name,
                                         self.experiment.parameters['outdir'])
-            _CALIBRATED = True
-        if not _CALIBRATED:
+            sample.is_rt_aligned = True
+            
+        if not sample.is_rt_aligned:
                 sample.rt_cal_dict, sample.reverse_rt_cal_dict =  {}, {}
-                print("    ~warning~ Faluire in retention time alignment (%d); %s is used without alignment." 
+                print("    ~warning~ Faluire in retention time alignment (%d); %s." 
                                             %( _NN, sample.name))
                 
 
@@ -733,7 +736,8 @@ class CompositeMap:
 
         FeatureTable = pd.DataFrame(self.FeatureList)
         for SM in self.experiment.all_samples:
-            FeatureTable[SM.name] = self.extract_features_per_sample(SM, peak_area_function)
+            if not self.experiment.parameters['drop_unaligned_samples'] or SM.is_rt_aligned:
+                FeatureTable[SM.name] = self.extract_features_per_sample(SM, peak_area_function)
 
         self.FeatureTable = FeatureTable
 

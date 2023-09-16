@@ -136,6 +136,8 @@ def main(parameters=PARAMETERS):
             help='perform default annotation after processing data')
     parser.add_argument('--debug_rtime_align', default=False, 
             help='Toggle on debug mode for retention alignment: output align figures and reference features.')
+    parser.add_argument('--drop_unaligned_samples', default=False, 
+            help='Drop samples that fail RT alignment from composite map.')
 
     args = parser.parse_args()
 
@@ -147,6 +149,7 @@ def main(parameters=PARAMETERS):
     parameters['multicores'] = min(mp.cpu_count(), parameters['multicores'])
     parameters['input'] = args.input
     parameters['debug_rtime_align'] = booleandict[args.debug_rtime_align]
+    parameters['drop_unaligned_samples'] = booleandict[args.drop_unaligned_samples]
     
     if args.mode:
         parameters['mode'] = args.mode

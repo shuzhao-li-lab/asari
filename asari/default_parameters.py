@@ -39,9 +39,10 @@ PARAMETERS = {
     'reference': None,
     'rt_align_method': 'lowess',        # 'lowess', 'tolerance', or to implement           
     'rt_align_on': True,                # False to bypass retention time alignment
+    'drop_unaligned_samples': False,    # Drop samples that fail RT alignment from composite map
     'rtime_tolerance': 50,              # feature rtime shift threshold under 10 seconds; or 10% of rtime   
     'cal_min_peak_height': 100000,      # minimal peak height required for peaks used for RT calibration
-    'peak_number_rt_calibration': 15,   # minimal number of selected high-quality peaks required for RT calibration. 
+    'peak_number_rt_calibration': 20,   # minimal number of selected high-quality peaks required for RT calibration. 
                                         # Samples with fewer selected peaks are dropped out.
     'max_retention_shift': None,        # landmark peak pairs with a scan number delta greater than this are not used for RT calibration
     'num_lowess_iterations': 3,         # number of lowess iterations to perform for RT calibration, higher values take longer but less sensitive to outliers
