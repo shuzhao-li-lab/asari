@@ -211,7 +211,7 @@ class ext_Experiment:
             self.select_unique_compound_features(EED.dict_empCpds)
         
         # export JSON
-        outfile = os.path.join(self.parameters['outdir'], 'Annotated_empricalCompounds.json')
+        outfile = os.path.join(self.parameters['outdir'], 'Annotated_empiricalCompounds.json')
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(EED.dict_empCpds, f, cls=NpEncoder, ensure_ascii=False, indent=2)
 
