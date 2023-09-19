@@ -463,7 +463,7 @@ class ext_Experiment:
         else:
             good_samples = [sample.name for sample in self.all_samples]
         filtered_FeatureTable = self.CMAP.FeatureTable[good_samples]          # this fixes order of samples       
-        number_of_samples = len(good_samples)      
+        self.number_of_samples = number_of_samples = len(good_samples)      
         # non zero counts
         count = filtered_FeatureTable[filtered_FeatureTable>1].count(axis='columns')
         self.CMAP.FeatureTable['detection_counts'] = count
