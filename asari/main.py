@@ -40,9 +40,16 @@ def __run_process__(parameters, args):
                 parameters['min_peak_height'] = estimate_min_peak_height(list_input_files)
             except ValueError as err:
                 print("Problems with input files: {0}. Back to default min_peak_height.".format(err))
+        elif args.min_height:
+            try:
+                parameters['min_peak_height'] = float(args.min_height)
+            except:
+                print("Problems with specified min_height. Back to default min_peak_height.")
+
         parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
         parameters['cal_min_peak_height'] = 10 * parameters['min_peak_height']
-        process_project(list_input_files, parameters )
+        process_project(list_input_files, parameters)
+        
 
 def process(parameters, args):
     __run_process__(parameters, args)
@@ -128,8 +135,10 @@ def main(parameters=PARAMETERS):
             help='number of lowess iterations attempted during alignment')
     parser.add_argument('--autoheight', default=False,
             help='automatic determining min peak height')
+    parser.add_argument('--min_height', default=False,
+            help='minimum height for peaks')
     parser.add_argument('--peak_area', default='sum',
-            help='peak area culculation, sum, auc or gauss for area under the curve')
+            help='peak area calculation, sum, auc or gauss for area under the curve')
     parser.add_argument('--pickle', default=False, 
             help='keep all intermediate pickle files, ondisk mode only.')
     parser.add_argument('--anno', default=True, 
