@@ -5,7 +5,9 @@ import pickle
 
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
-from .default_parameters import adduct_search_patterns, adduct_search_patterns_neg, isotope_search_patterns, extended_adducts
+from .default_parameters import adduct_search_patterns, \
+    adduct_search_patterns_neg, isotope_search_patterns, extended_adducts, \
+    readme_doc_str
 
 from .mass_functions import all_mass_paired_mapping
 from .constructors import CompositeMap
@@ -159,6 +161,7 @@ class ext_Experiment:
             self.generate_qc_plot_pdf()
         self.export_feature_tables()
         self.export_log()
+        self.export_readme()
 
     def annotate(self):
         '''
@@ -533,3 +536,11 @@ class ext_Experiment:
         outfile = os.path.join(self.parameters['outdir'], 'project.json')
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(self.parameters, f, cls=NpEncoder, ensure_ascii=False, indent=2)
+
+    def export_readme(self):
+        '''
+        Export a REAME.txt file as simple instruction to end users.
+        '''
+        outfile = os.path.join(self.parameters['outdir'], 'README.txt')
+        with open(outfile, 'w', encoding='utf-8') as f:
+            f.write(readme_doc_str)

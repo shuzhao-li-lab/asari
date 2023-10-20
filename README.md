@@ -3,7 +3,7 @@ Asari
 [![Documentation Status](https://readthedocs.org/projects/asari/badge/?version=latest)](https://asari.readthedocs.io/en/latest/?badge=latest)
 [![DOI](https://img.shields.io/badge/DOI-doi.org%2F10.1038%2Fs41467--023--39889--1-blue)](https://doi.org/10.1038/s41467-023-39889-1)
 
-Trackable and scalable Python program for high-resolution LC-MS metabolomics data preprocessing, 
+Trackable and scalable Python program for high-resolution LC-MS metabolomics data preprocessing ([Li et al. Nature Communications 14.1 (2023): 4113](https://www.nature.com/articles/s41467-023-39889-1)):
 
 - Taking advantage of high mass resolution to prioritize mass separation and alignment
 - Peak detection on a composite map instead of repeated on individual samples
@@ -13,9 +13,7 @@ Trackable and scalable Python program for high-resolution LC-MS metabolomics dat
 - Scalable, performance conscious, disciplined use of memory and CPU 
 - Transparent, JSON centric data structures, easy to chain other tools
 
-Input data are centroied mzML files.
-We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
-Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats.
+A web server (https://asari.app) and [full pipeline](https://pypi.org/project/pcpfm/) are available now.
 
 Install
 =======
@@ -23,7 +21,18 @@ Install
 
 - Or clone from source code: https://github.com/shuzhao-li/asari . One can run it as a Python module by calling Python interpreter. GitHub repo is often ahead of PyPi versions.
 
-- Requires Python 3.8+. Installation time ~ 5 seconds.
+- Requires Python 3.8+. Installation time ~ 5 seconds if common libraries already exist.
+
+- One can use the web version (https://asari.app) without local installation.
+
+Input
+=====
+Input data are centroied mzML files from LC-MS metabolomics. 
+We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
+Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats.
+
+MS/MS spectra are ignored by asari. 
+Our pipeline (https://pypi.org/project/pcpfm/) has annotation steps to use MS/MS data.
 
 Use 
 ===
