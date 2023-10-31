@@ -1,8 +1,9 @@
 Overview
 ========
 [![Documentation Status](https://readthedocs.org/projects/asari/badge/?version=latest)](https://asari.readthedocs.io/en/latest/?badge=latest)
+[![DOI](https://img.shields.io/badge/DOI-doi.org%2F10.1038%2Fs41467--023--39889--1-blue)](https://doi.org/10.1038/s41467-023-39889-1)
 
-Trackable and scalable Python program for high-resolution LC-MS metabolomics data preprocessing, 
+Trackable and scalable Python program for high-resolution LC-MS metabolomics data preprocessing ([Li et al. Nature Communications 14.1 (2023): 4113](https://www.nature.com/articles/s41467-023-39889-1)):
 
 - Taking advantage of high mass resolution to prioritize mass separation and alignment
 - Peak detection on a composite map instead of repeated on individual samples
@@ -12,9 +13,7 @@ Trackable and scalable Python program for high-resolution LC-MS metabolomics dat
 - Scalable, performance conscious, disciplined use of memory and CPU 
 - Transparent, JSON centric data structures, easy to chain other tools
 
-Input data are centroied mzML files.
-We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
-Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats.
+A web server [https://asari.app](https://asari.app) and [full pipeline](https://pypi.org/project/pcpfm/) are available now.
 
 Install
 -------
@@ -22,7 +21,18 @@ Install
 
 - Or clone from source code: https://github.com/shuzhao-li/asari . One can run it as a Python module by calling Python interpreter. GitHub repo is often ahead of PyPi versions.
 
-- Requires Python 3.8+. Installation time ~ 5 seconds.
+- Requires Python 3.8+. Installation time ~ 5 seconds if common libraries already exist.
+
+- One can use the web version (https://asari.app) without local installation.
+
+Input
+=====
+Input data are centroied mzML files from LC-MS metabolomics. 
+We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
+Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats.
+
+MS/MS spectra are ignored by asari. 
+Our pipeline (https://pypi.org/project/pcpfm/) has annotation steps to use MS/MS data.
 
 Use 
 ---
@@ -97,7 +107,7 @@ Dashboard
 ---------
 After data are processed, users can use `asari viz --input process_result_dir` to launch a dashboard to inspect data, where 'process_result_dir' refers to the result folder. The dashboard uses these files under the result folder: 'project.json', 'export/cmap.pickle', 'export/epd.pickle' and 'export/full_Feature_table.tsv'. Thus, one can move around the folder, but modification of these files is not a good idea. Please note that pickle files are for internal use, and one should not trust pickle files from other people.
  
-![viz_screen_shot](docs/source/_static/viz_screen_shot20220518.png)
+![viz_screen_shot](_static/viz_screen_shot20220518.png)
 
 
 Parameters
@@ -115,7 +125,7 @@ That is, commandline overwrites `xyz.yaml`, which overwrites default asari param
 
 Algorithms
 ----------
-Basic data concepts follow https://github.com/shuzhao-li/metDataModel, organized as
+Basic data concepts follow [https://github.com/shuzhao-li/metDataModel]https://github.com/shuzhao-li/metDataModel, organized as
 
     ├── Experiment
        ├── Sample
