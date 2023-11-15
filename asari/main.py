@@ -75,7 +75,7 @@ def update_peak_detection_params(parameters, args):
             parameters['min_intensity_threshold'] = parameters['min_peak_height'] / 100
         except ValueError as err:
             print("Problems with input files: {0}. Back to default min_peak_height.".format(err))
-    elif args.min_height:
+    elif args.min_peak_height:
         try:
             parameters['min_peak_height'] = float(args.min_peak_height)
             parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
