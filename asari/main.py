@@ -35,19 +35,7 @@ def __run_process__(parameters, args):
     if not list_input_files:
         print("No valid mzML files are found in the input directory :(")
     else:
-        if args.autoheight:
-            try:
-                parameters['min_peak_height'] = estimate_min_peak_height(list_input_files)
-            except ValueError as err:
-                print("Problems with input files: {0}. Back to default min_peak_height.".format(err))
-        elif args.min_height:
-            try:
-                parameters['min_peak_height'] = float(args.min_height)
-            except:
-                print("Problems with specified min_height. Back to default min_peak_height.")
 
-        parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
-        parameters['cal_min_peak_height'] = 10 * parameters['min_peak_height']
         process_project(list_input_files, parameters)
         
 
@@ -77,6 +65,44 @@ def viz(parameters, args):
     datadir = args.input
     project_desc, cmap, epd, Ftable = read_project(datadir)
     dashboard(project_desc, cmap, epd, Ftable)
+
+def update_peak_detection_params(parameters, args):
+    if args.autoheight:
+        try:
+            parameters['min_peak_height'] = estimate_min_peak_height(read_project_dir(args.input))
+            parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
+            parameters['cal_min_peak_height'] = 10 * parameters['min_peak_height']
+            parameters['min_intensity_threshold'] = parameters['min_peak_height'] / 100
+        except ValueError as err:
+            print("Problems with input files: {0}. Back to default min_peak_height.".format(err))
+    elif args.min_height:
+        try:
+            parameters['min_peak_height'] = float(args.min_peak_height)
+            parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
+            parameters['cal_min_peak_height'] = 10 * parameters['min_peak_height']
+            parameters['min_intensity_threshold'] = parameters['min_peak_height'] / 100
+        except:
+            print("Problems with specified min_height. Back to default min_peak_height.")
+
+    if args.min_prominence_threshold:
+        try:
+            parameters['min_prominence_threshold'] = float(args.min_prominence_threshold)
+        except ValueError as err:
+            print("Problems with specified min_prominence_threshold. Back to default min_prominence_threshold.")
+
+    if args.cal_min_peak_height:
+        try:
+            parameters['cal_min_peak_height'] = float(args.cal_min_peak_height)
+        except ValueError as err:
+            print("Problems with specified cal_min_peak_height. Back to default cal_min_peak_height.")
+
+    if args.min_intensity_threshold:
+        try:
+            parameters['min_intensity_threshold'] = float(args.min_intensity_threshold)
+        except ValueError as err:
+            print("Problems with specified min_intensity_threshold. Back to default min_intensity_threshold.")                    
+    return parameters
+
 
 def main(parameters=PARAMETERS):
     '''
@@ -135,8 +161,14 @@ def main(parameters=PARAMETERS):
             help='number of lowess iterations attempted during alignment')
     parser.add_argument('--autoheight', default=False,
             help='automatic determining min peak height')
-    parser.add_argument('--min_height', default=False,
+    parser.add_argument('--min_peak_height', default=False,
             help='minimum height for peaks')
+    parser.add_argument('--min_prominence_threshold', default=None,
+            help='minimum prominence threshold for peak detection')
+    parser.add_argument('--cal_min_peak_height', default=None,
+            help='peaks with an intensity below this value are not used for rt calibration')
+    parser.add_argument('--min_intensity_threshold', default=None,
+            help='signal below this value is removed before peak picking')
     parser.add_argument('--peak_area', default='sum',
             help='peak area calculation, sum, auc or gauss for area under the curve')
     parser.add_argument('--pickle', default=False, 
@@ -186,6 +218,9 @@ def main(parameters=PARAMETERS):
         parameters['max_retention_shift'] = float(args.max_retention_shift)
     if args.num_lowess_iterations:
         parameters['num_lowess_iterations'] = args.num_lowess_iterations
+
+    # probably not necessary to pass the parameters back here, but I think it makes it explicit
+    parameters = update_peak_detection_params(parameters, args)
 
     if args.run == 'process':
         process(parameters, args)
