@@ -83,6 +83,9 @@ def update_peak_detection_params(parameters, args):
             parameters['min_intensity_threshold'] = parameters['min_peak_height'] / 100
         except:
             print("Problems with specified min_height. Back to default min_peak_height.")
+    else:
+        parameters['min_prominence_threshold'] = int(0.33 * parameters['min_peak_height'])
+
 
     if args.min_prominence_threshold:
         try:
