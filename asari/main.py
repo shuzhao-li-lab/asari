@@ -70,19 +70,18 @@ def update_peak_detection_params(parameters, args):
     if args.autoheight:
         try:
             parameters['min_peak_height'] = estimate_min_peak_height(read_project_dir(args.input))
-            parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
-            parameters['cal_min_peak_height'] = 10 * parameters['min_peak_height']
-            parameters['min_intensity_threshold'] = parameters['min_peak_height'] / 100
+
         except ValueError as err:
             print("Problems with input files: {0}. Back to default min_peak_height.".format(err))
     elif args.min_peak_height:
         try:
             parameters['min_peak_height'] = float(args.min_peak_height)
-            parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
-            parameters['cal_min_peak_height'] = 10 * parameters['min_peak_height']
-            parameters['min_intensity_threshold'] = parameters['min_peak_height'] / 100
         except:
             print("Problems with specified min_height. Back to default min_peak_height.")
+
+    parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
+    parameters['cal_min_peak_height'] = 10 * parameters['min_peak_height']
+    parameters['min_intensity_threshold'] = parameters['min_peak_height'] / 100
 
     if args.min_prominence_threshold:
         try:
