@@ -379,7 +379,7 @@ def rt_lowess_calibration(good_landmark_peaks,
     rt_cal_dict = dict( 
         [(x,y) for x,y in zip(sample_rt_numbers, lowess_predicted) if x!=y and 0<=y<=reference_rt_bound] )
 
-    ref_interpolated = [int(round(ii)) for ii in ref_interpolated]
+    ref_interpolated = [int(round(ii)) for ii in ref_interpolated if abs(ii) != float('inf')]
     reverse_rt_cal_dict = dict(
         [(x,y) for x,y in zip(reference_rt_numbers, ref_interpolated) if x!=y and 0<=y<=sample_rt_bound] )
         
