@@ -466,7 +466,9 @@ class ext_Experiment:
         else:
             good_samples = [sample.name for sample in self.all_samples]
         filtered_FeatureTable = self.CMAP.FeatureTable[good_samples]          # this fixes order of samples       
-        self.number_of_samples = number_of_samples = len(good_samples)      
+        self.number_of_samples = number_of_samples = len(good_samples)
+        self.dropped_sample_names = [sample.name for sample in self.all_samples 
+                                     if sample.name not in good_samples]     # samples dropped due to alignment or quality
         # non zero counts
         count = filtered_FeatureTable[filtered_FeatureTable>1].count(axis='columns')
         self.CMAP.FeatureTable['detection_counts'] = count
@@ -533,6 +535,8 @@ class ext_Experiment:
         '''
         self.parameters['number_of_samples'] = self.number_of_samples
         self.parameters['number_scans'] = self.number_scans
+        # Record of dropped samples. Right place in log, wrong name in parameters
+        self.parameters['dropped_samples'] = self.dropped_sample_names
         outfile = os.path.join(self.parameters['outdir'], 'project.json')
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(self.parameters, f, cls=NpEncoder, ensure_ascii=False, indent=2)

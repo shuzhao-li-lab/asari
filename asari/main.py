@@ -37,7 +37,6 @@ def __run_process__(parameters, args):
     else:
         process_project(list_input_files, parameters)
         
-
 def process(parameters, args):
     __run_process__(parameters, args)
 
