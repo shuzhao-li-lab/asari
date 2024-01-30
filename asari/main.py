@@ -35,7 +35,6 @@ def __run_process__(parameters, args):
     if not list_input_files:
         print("No valid mzML files are found in the input directory :(")
     else:
-
         process_project(list_input_files, parameters)
         
 
@@ -176,16 +175,19 @@ def main(parameters=PARAMETERS):
             help='perform default annotation after processing data')
     parser.add_argument('--debug_rtime_align', default=False, 
             help='Toggle on debug mode for retention alignment: output align figures and reference features.')
+    
+    # use True in data mining
     parser.add_argument('--drop_unaligned_samples', default=False, 
             help='Drop samples that fail RT alignment from composite map.')
 
     args = parser.parse_args()
-
-    # update parameters
+    
+    # update parameters from user specified yaml file
     if args.parameters:
         parameters.update(
             load(open(args.parameters).read(), Loader=Loader)
         )
+        
     parameters['multicores'] = min(mp.cpu_count(), parameters['multicores'])
     parameters['input'] = args.input
     parameters['debug_rtime_align'] = booleandict[args.debug_rtime_align]
@@ -213,12 +215,16 @@ def main(parameters=PARAMETERS):
         parameters['database_mode'] = args.database_mode
     if args.wlen:
         parameters['wlen'] = args.wlen
+        
+    # Not useful as chromatogram.clean_rt_calibration_points filters outliers
     if args.max_retention_shift:
         parameters['max_retention_shift'] = float(args.max_retention_shift)
+        
     if args.num_lowess_iterations:
         parameters['num_lowess_iterations'] = args.num_lowess_iterations
 
-    # probably not necessary to pass the parameters back here, but I think it makes it explicit
+    # update peak detection parameters by autoheight then CLI args
+    # min_peak_height, min_prominence_threshold, cal_min_peak_height, min_intensity_threshold
     parameters = update_peak_detection_params(parameters, args)
 
     if args.run == 'process':
