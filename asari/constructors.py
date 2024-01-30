@@ -558,11 +558,14 @@ class CompositeMap:
         sample.rt_landmarks = [p['apex'] for p in good_landmark_peaks]
         # only do RT calibration if MIN_PEAK_NUM is met.
         if _NN >  MIN_PEAK_NUM:
-            sample.rt_cal_dict, sample.reverse_rt_cal_dict = calibration_fuction( 
+            try:
+                sample.rt_cal_dict, sample.reverse_rt_cal_dict = calibration_fuction( 
                                         good_landmark_peaks, selected_reference_landmark_peaks, 
                                         sample.rt_numbers, self.reference_sample.rt_numbers, NUM_ITERATIONS, sample.name,
                                         self.experiment.parameters['outdir'])
-            sample.is_rt_aligned = True
+                sample.is_rt_aligned = True
+            except OverflowError:
+                pass
             
         if not sample.is_rt_aligned:
                 sample.rt_cal_dict, sample.reverse_rt_cal_dict =  {}, {}
