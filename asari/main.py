@@ -191,6 +191,7 @@ def main(parameters=PARAMETERS):
     parameters['input'] = args.input
     parameters['debug_rtime_align'] = booleandict[args.debug_rtime_align]
     parameters['drop_unaligned_samples'] = booleandict[args.drop_unaligned_samples]
+    parameters['autoheight'] = booleandict[args.autoheight]
     
     if args.mode:
         parameters['mode'] = args.mode
