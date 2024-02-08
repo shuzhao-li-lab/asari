@@ -161,7 +161,7 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
     _baseline_, noise_level, scaling_factor, min_prominence_threshold, list_intensity \
         = audit_mass_track(
                 mass_track['intensity'], min_fwhm, min_intensity_threshold, 
-                min_peak_height, min_prominence_threshold
+                min_peak_height, min_prominence_threshold, min_prominence_ratio
                 )       
     # # get ROIs by separation/filtering with noise_level, allowing 2 gap
     __selected_scans__ = list_scans[list_intensity > noise_level]
@@ -199,7 +199,7 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
                 peak['parent_masstrack_id'] = mass_track['id_number']
                 peak['mz'] = mass_track['mz']
                 peak['height'] = scaling_factor * peak['height'] + _baseline_
-                __height = min(peak['height'], 99999999)        # cap upper limit and avoid INF 
+                __height = min(peak['height'], 1e100)        # cap upper limit and avoid INF 
                 peak['snr'] = int(__height/compute_noise_by_flanks(
                                     peak, mass_track['intensity'], noise_data_points, 
                                     min_intensity_threshold, noise_level)) 
@@ -258,7 +258,8 @@ def audit_mass_track(list_intensity,
                      min_fwhm, 
                      min_intensity_threshold, 
                      min_peak_height, 
-                     min_prominence_threshold):
+                     min_prominence_threshold,
+                     min_prominence_ratio):
     '''
     Get statistical summary on a mass track (list_intensity), then
     rescale, detrend, smooth and subtract baseline if needed.
@@ -318,11 +319,13 @@ def audit_mass_track(list_intensity,
     '''
     scaling_factor, LOW, HIGH = 1, min_intensity_threshold, 1E8
     _baseline_, noise_level = LOW, LOW                     # will not change on a clean track
-    max_intensity, median_intensity = list_intensity.max(), np.median(list_intensity)
+    max_intensity = list_intensity.max()
     if max_intensity > HIGH:
         scaling_factor = max_intensity/HIGH
         list_intensity = list_intensity/scaling_factor
+        min_prominence_threshold = HIGH * min_prominence_ratio
 
+    median_intensity = np.median(list_intensity)
     if median_intensity > LOW: 
         LL = list_intensity[list_intensity > LOW]
         if len(LL) > len(list_intensity) * 0.5 and median_intensity > 10 * min_peak_height:
@@ -332,10 +335,12 @@ def audit_mass_track(list_intensity,
         
     _baseline_, noise_level = max(_baseline_, LOW), max(noise_level, LOW)
     new_prominence = max(noise_level, min_prominence_threshold)
-    # decision on smoothing
-    if 100 * noise_level > max_intensity or max_intensity < 10 * min_peak_height:        
+    # decision on smoothing, when noisy or too high
+    if scaling_factor > 1:
+        list_intensity = smooth_moving_average(list_intensity, size=min_fwhm * 3)
+    elif 100 * noise_level > max_intensity or max_intensity < 10 * min_peak_height:      
         list_intensity = smooth_moving_average(list_intensity, size=min_fwhm + 2)
-
+        
     list_intensity = list_intensity - _baseline_
 
     return _baseline_, noise_level, scaling_factor, new_prominence, list_intensity 
