@@ -76,19 +76,21 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
     '''
     iters = []
     min_peak_height = parameters['min_peak_height']
+    min_peak_ratio = parameters['min_peak_ratio']
     min_prominence_threshold = parameters['min_prominence_threshold']
     min_intensity_threshold = parameters['min_intensity_threshold']
     min_fwhm = round( 0.5 * parameters['min_timepoints'] )
     snr = parameters['signal_noise_ratio']
     peakshape = parameters['gaussian_shape']
     wlen = parameters['wlen']            # divided window to the left and to right
-    min_prominence_ratio = 0.05
+    min_prominence_ratio = 0.02          # only used on very high peaks
     iteration = False                    # a 2nd round of peak detection if enough remaining datapoints
     for mass_track in list_mass_tracks:
         if mass_track['intensity'].max() > min_peak_height:
             iters.append(
-                (mass_track, number_of_scans, min_peak_height, min_fwhm, min_prominence_threshold,
-                wlen, snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold, 
+                (mass_track, number_of_scans, min_peak_height, min_peak_ratio, 
+                min_fwhm, min_prominence_threshold, wlen, 
+                snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold, 
                 shared_list)
             )
     return iters
@@ -99,7 +101,7 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
 # -----------------------------------------------------------------------------
 
 def stats_detect_elution_peaks(mass_track, number_of_scans, 
-                min_peak_height, min_fwhm, min_prominence_threshold,
+                min_peak_height, min_peak_ratio, min_fwhm, min_prominence_threshold,
                 wlen, snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold,
                 shared_list):
     '''
@@ -158,11 +160,11 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
     '''
     list_json_peaks, list_peaks = [], []
     list_scans = np.arange(number_of_scans)
-    _baseline_, noise_level, scaling_factor, min_prominence_threshold, list_intensity \
-        = audit_mass_track(
+    _baseline_, noise_level, scaling_factor, min_peak_height, list_intensity = audit_mass_track(
                 mass_track['intensity'], min_fwhm, min_intensity_threshold, 
-                min_peak_height, min_prominence_threshold, min_prominence_ratio
-                )       
+                min_peak_height, min_peak_ratio
+                )
+    
     # # get ROIs by separation/filtering with noise_level, allowing 2 gap
     __selected_scans__ = list_scans[list_intensity > noise_level]
     if __selected_scans__.any():
@@ -184,7 +186,7 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
                 list_intensity_roi = list_intensity[R]
                 peaks = detect_evaluate_peaks_on_roi( 
                             list_intensity_roi, R, 
-                            min_peak_height, min_fwhm, min_prominence_threshold, wlen,
+                            min_peak_height, min_peak_ratio, min_fwhm, min_prominence_threshold, wlen,
                             snr, peakshape, min_prominence_ratio, noise_level
                     )
                 list_json_peaks += peaks
@@ -208,6 +210,7 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
                     list_peaks.append(peak)
 
     shared_list += list_peaks
+
 
 def compute_noise_by_flanks(peak, 
                             list_intensity, 
@@ -258,8 +261,8 @@ def audit_mass_track(list_intensity,
                      min_fwhm, 
                      min_intensity_threshold, 
                      min_peak_height, 
-                     min_prominence_threshold,
-                     min_prominence_ratio):
+                     min_peak_ratio
+                     ):
     '''
     Get statistical summary on a mass track (list_intensity), then
     rescale, detrend, smooth and subtract baseline if needed.
@@ -286,7 +289,7 @@ def audit_mass_track(list_intensity,
         estimated noise level
     scaling_factor : float
         a normalization factor to scale the data under preset ceiling
-    new_prominence : float
+    min_prominence_threshold : float
         new prominence value, overwriting with noise_level if it is
         greater than the initial min_prominence_threshold.
     list_intensity : list[np.integer]
@@ -315,7 +318,7 @@ def audit_mass_track(list_intensity,
 
     Smoothing (chromatograms.smooth_moving_average) is applied when the noise level 
     is higher than 1% of max intensity and max intensity is lower than 10 times of the 
-    preset min_peak_height. 
+    preset min_peak_height, or scaling occurred. 
     '''
     scaling_factor, LOW, HIGH = 1, min_intensity_threshold, 1E8
     _baseline_, noise_level = LOW, LOW                     # will not change on a clean track
@@ -323,8 +326,7 @@ def audit_mass_track(list_intensity,
     if max_intensity > HIGH:
         scaling_factor = max_intensity/HIGH
         list_intensity = list_intensity/scaling_factor
-        min_prominence_threshold = HIGH * min_prominence_ratio
-
+        
     median_intensity = np.median(list_intensity)
     if median_intensity > LOW: 
         LL = list_intensity[list_intensity > LOW]
@@ -334,19 +336,20 @@ def audit_mass_track(list_intensity,
         _baseline_, noise_level = bottom_x_perc.mean(), bottom_x_perc.std()
         
     _baseline_, noise_level = max(_baseline_, LOW), max(noise_level, LOW)
-    new_prominence = max(noise_level, min_prominence_threshold)
     # decision on smoothing, when noisy or too high
-    if scaling_factor > 1:
+    if scaling_factor > 1 or max_intensity > 1000 * min_peak_height:
         list_intensity = smooth_moving_average(list_intensity, size=min_fwhm * 3)
     elif 100 * noise_level > max_intensity or max_intensity < 10 * min_peak_height:      
         list_intensity = smooth_moving_average(list_intensity, size=min_fwhm + 2)
         
     list_intensity = list_intensity - _baseline_
+    # adapt min_peak_height per ROI
+    min_peak_height = max(min_peak_height, max_intensity * min_peak_ratio) - _baseline_
 
-    return _baseline_, noise_level, scaling_factor, new_prominence, list_intensity 
+    return _baseline_, noise_level, scaling_factor, min_peak_height, list_intensity 
 
 def detect_evaluate_peaks_on_roi(list_intensity_roi, rt_numbers_roi, 
-                    min_peak_height, min_fwhm, min_prominence_threshold, wlen,
+                    min_peak_height, min_peak_ratio, min_fwhm, min_prominence_threshold, wlen,
                     snr, peakshape, min_prominence_ratio,
                     noise_level,
                     ):
@@ -363,6 +366,8 @@ def detect_evaluate_peaks_on_roi(list_intensity_roi, rt_numbers_roi,
         scan numbers that define the ROI.
     min_peak_height : float
         as in main parameters.
+    min_peak_ratio : float
+        minimal ratio of a peak of the max height of its mass track. Not used here.
     min_fwhm : float
         taken as half of min_timepoints in main parameters.
     min_prominence_threshold : float
@@ -384,11 +389,14 @@ def detect_evaluate_peaks_on_roi(list_intensity_roi, rt_numbers_roi,
     A list of peaks in JSON format.
     '''
     list_peaks = []
-    # raise prominence if high intensity and high noise
     max_intensity = list_intensity_roi.max()
-    if max_intensity > 10 * min_peak_height and 10 * noise_level > min_peak_height:
-        min_prominence_threshold = max(
-            min_prominence_threshold, max_intensity*min_prominence_ratio)
+    # ROI dependent prominence, different from full mass track
+    min_prominence_threshold = max(min_prominence_threshold, 
+                                   max_intensity * min_prominence_ratio,
+                                   0.33 * min_peak_height,
+                                   2 * noise_level
+                                    )
+    
     peaks, properties = find_peaks(list_intensity_roi, 
                                     height=min_peak_height, 
                                     distance=min_fwhm,

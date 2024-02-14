@@ -89,7 +89,7 @@ def get_file_masstrack_stats(infile,
         Max intensity in any landmark track:  687,714,048
         Minimal height of landmark tracks:  2,334 
 
-        Mass accuracy was estimated on 124 matched values as -1.8 ppm.
+        Mass accuracy was estimated on 203 matched values as -0.4 ppm.
 
     To-do: to add output info on instrumentation.
     '''
@@ -124,8 +124,15 @@ def get_file_masstrack_stats(infile,
         ii += 1
 
     new['list_mass_tracks'] = list_mass_tracks
+    _max_scan_number = len(new['list_scan_numbers'])
     anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(list_mass_tracks, 
                             list_mz_diff = [1.003355,], mz_tolerance_ppm=mz_tolerance_ppm)
+    
+    # Filter anchor_mz_pairs, to enforce apex within 5% of RT in a pair
+    anchor_mz_pairs = match_mzdiff_pairs_by_rt(anchor_mz_pairs,
+                            list_mass_tracks, _max_scan_number, 
+                            rt_window_perc=0.05, min_scans_window=10)
+    
     _mz_landmarks_ = flatten_tuplelist(anchor_mz_pairs)
     all_mz = [x['mz'] for x in list_mass_tracks]
     # down scale list_mass_tracks to verified by _mz_landmarks_
@@ -135,7 +142,7 @@ def get_file_masstrack_stats(infile,
     min_peak_height_ = int(min(peak_heights))
     # recommended_min_peak_height = int(0.5 * min(peak_heights))
 
-    print("Total number of MS1 spectra: %d" %len(new['list_scan_numbers']))
+    print("Total number of MS1 spectra: %d" %_max_scan_number)
     if jj > 1:
         print("of which %d are positive ionization mode." %jj)
     else:
@@ -154,6 +161,34 @@ def get_file_masstrack_stats(infile,
         return new
     else:
         return _mz_landmarks_, ionization_mode, min_peak_height_
+
+
+def match_mzdiff_pairs_by_rt(matched_mz_pairs, 
+            list_mass_tracks, max_scan_number, rt_window_perc=0.05, min_scans_window=10):
+    '''
+    Filter matched_mz_pairs by a window of retention time.
+    Use max of (min_scans_window, max_scan_number*rt_window_perc) as match requirement on RT.
+    This is used to enforce coelution of isotopes or adducts.
+
+    Parameters
+    ----------
+    matched_mz_pairs : result form find_mzdiff_pairs_from_masstracks, [(id pair), ...]
+    list_mass_tracks : [{'id_number': ii, 'mz': track[0], 'intensity': track[1]}, ...]
+    
+    Returns
+    -------
+    list of filtered matched_mz_pairs.
+    '''
+    _window = max(min_scans_window, max_scan_number*rt_window_perc)
+    _dict_mass_tracks = {}
+    for L in list_mass_tracks:
+        _dict_mass_tracks[L['id_number']] = L['intensity']
+    new = []
+    for pair in matched_mz_pairs:
+        apex1, apex2 = np.argmax(_dict_mass_tracks[pair[0]]), np.argmax(_dict_mass_tracks[pair[1]])
+        if abs(apex1 - apex2) < _window:
+            new.append(pair)
+    return new
 
 
 # -----------------------------------------------------------------------------
