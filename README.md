@@ -29,7 +29,7 @@ Input
 =====
 Input data are centroied mzML files from LC-MS metabolomics. 
 We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
-Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats.
+Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats and .mzXML files.
 
 MS/MS spectra are ignored by asari. 
 Our pipeline (https://pypi.org/project/pcpfm/) has annotation steps to use MS/MS data.
