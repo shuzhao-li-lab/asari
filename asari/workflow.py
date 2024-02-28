@@ -198,7 +198,7 @@ def make_iter_parameters(sample_registry, parameters, shared_dict):
                                os.path.basename(sample['input_file']).replace('.mzML', '')+'.pickle')
         iters.append(
             (sample['sample_id'], sample['input_file'], parameters['mode'], parameters['database_mode'],
-            mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, outfile,
+            mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, parameters['intensity_multiplier'], outfile,
             shared_dict
             )
         )
@@ -237,7 +237,7 @@ def batch_EIC_from_samples_(sample_registry, parameters):
     return _d
 
 def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
-                    mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, outfile, 
+                    mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, intensity_multiplier, outfile, 
                     shared_dict):
     '''
     Extraction of mass tracks from a single sample. Used by multiprocessing in batch_EIC_from_samples_.
@@ -298,7 +298,8 @@ def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
                     mz_tolerance_ppm=mz_tolerance_ppm, 
                     min_intensity=min_intensity, 
                     min_timepoints=min_timepoints, 
-                    min_peak_height=min_peak_height)
+                    min_peak_height=min_peak_height,
+                    intensity_multiplier=intensity_multiplier)
         new['max_scan_number'] = max(xdict['rt_numbers'])
         ii = 0
         # already in ascending order of m/z from extract_massTracks_, get_thousandth_regions

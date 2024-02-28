@@ -174,7 +174,8 @@ def main(parameters=PARAMETERS):
             help='perform default annotation after processing data')
     parser.add_argument('--debug_rtime_align', default=False, 
             help='Toggle on debug mode for retention alignment: output align figures and reference features.')
-    
+    parser.add_argument('--intensity_multiplier', default=1, 
+            help='Multiply observed intensities by this value, for debug use only, may help with TOF data')
     # use True in data mining
     parser.add_argument('--drop_unaligned_samples', default=False, 
             help='Drop samples that fail RT alignment from composite map.')
@@ -215,6 +216,8 @@ def main(parameters=PARAMETERS):
         parameters['database_mode'] = args.database_mode
     if args.wlen:
         parameters['wlen'] = args.wlen
+    if args.intensity_multiplier:
+        parameters['intensity_multiplier'] = int(args.intensity_multiplier)
         
     # Not useful as chromatogram.clean_rt_calibration_points filters outliers
     if args.max_retention_shift:
