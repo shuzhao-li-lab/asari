@@ -197,19 +197,20 @@ In the container, ThermoRawFileParser is under `/usr/local/thermo/`.
 # asari process --mode neg --input tmp --output test99
 ```
 
+Discussion and Future Plans
+===========================
+**Known limitations**
+- The current version was mostly developed for Orbitrap data, less tested on TOF.
+- Default elution peak detection is based on local maxima using statistically guided parameters. For highly complex local EIC, additional algorithm may be needed.
 
-Links
-=====
-Source code: https://github.com/shuzhao-li/asari
+**Next steps in development**
+- Implementation of `join` function to facilitate better parallelization.
+- To improve TOF support.
+- Automated handling of sample clusters, since different sample types may be included in an experiment.
+- To add GC-MS support.
 
-Package Repository: https://pypi.org/project/asari-metabolomics/
+**How accurate are my m/z values?**
 
-Test data: https://github.com/shuzhao-li/data/tree/main/data
-
-Notebooks to reproduce publication figures: https://github.com/shuzhao-li/data/tree/main/notebooks
-
-How accurate are my m/z values?
-===============================
 The mass tracks are scaffolds to assemble data. Very close m/z values may not be distinguished on a mass track. For example, when mass tracks are constructed for 5 ppm resolution, two m/z values of 3 ppm apart will be reported on the same mass track. This leads to a situation where the m/z values are not optimal. Asari is designed for reliable information retrieval. If the data are processed under 5 ppm, the information can be retrieved by 5 ppm. The true m/z values will be recovered via annotation, if the features are resolved by LC, when asari features are matched to annotation libraries.
 
 As discussed in the manuscript, ppm is not perfect in modeling mass resolution and is not constant for all m/z ranges. It is a practical tool we currently work with. If two compounds are not resolved by LC and their m/z values are 4 ppm apart, asari processing by 5 ppm will treat them as one feature. If the mass resolution is justified, one can run asari using, for instance, 3 ppm. The default workflow in asari does not fine-tune the m/z values, because the split m/z peaks from centroiding are difficult to distinguish from real m/z peaks. We leave the fine-tuning to annotation or targeted extraction workflow.
@@ -217,15 +218,24 @@ As discussed in the manuscript, ppm is not perfect in modeling mass resolution a
 We thank reviewer #1 for valuable discussions on this topic.
 
 
-Related projects
-================
+Asari suite and Related projects
+================================
+The asari suite includes 
+- asari (Source code: https://github.com/shuzhao-li/asari, Package Repository: https://pypi.org/project/asari-metabolomics/)
+- metDataModel: data models for metabolomics (https://github.com/shuzhao-li-lab/metDataModel)
+- mass2chem: common utilities in interpreting mass spectrometry data, annotation (https://github.com/shuzhao-li-lab/mass2chem)
+- khipu: a Python library for generalized, low-level annotation of MS metabolomics (https://github.com/shuzhao-li-lab/khipu)
+- JMS: Json's Metabolite Services. Search functions, annotation and metabolic models (https://github.com/shuzhao-li-lab/JMS)
+- pcpfm pipeline (https://github.com/shuzhao-li-lab/PythonCentricPipelineForMetabolomics)
+- asari-x: the eXposome miner (to be released)
 
-Mummichog: metabolomics pathway/network analysis
 
-metDataModel: data models for metabolomics
+Links for the asari paper:
+- Test data: https://github.com/shuzhao-li/data/tree/main/data
+- Notebooks to reproduce publication figures: https://github.com/shuzhao-li/data/tree/main/notebooks
 
-mass2chem: common utilities in interpreting mass spectrometry data, annotation
+The khipu paper: https://pubs.acs.org/doi/10.1021/acs.analchem.2c05810
 
-khipu: a Python library for generalized, low-level annotation of MS metabolomics
+The pipeline manuscript (under review): https://www.biorxiv.org/content/10.1101/2024.02.13.580048v1
 
-JMS: Json's Metabolite Services
+Tutorial on asari and the pipeline: https://github.com/shuzhao-li-lab/asari_pcpfm_tutorials
