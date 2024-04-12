@@ -179,10 +179,25 @@ One can then use `asari join` to merge the results [in progress].
 
 Future improvement can be made by implementing some functions, e.g. chromatogram building, in C.
 
-Docker image
-============
-At https://hub.docker.com/r/shuzhao/asari.
 
+Platforms, Anaconda and Docker
+==============================
+**Desktop vs Cloud**
+
+Python itself is used on Windows, Mac and Linux. Users may encouter problems related to Python not to asari, in which cases your best option is to find your local IT friend. We are a small team of scientists. There is no plan to build a desktop graphic application, but we do a lot of cloud computing. If you don't like command lines (many people don't), please feel free to try out the web server (https://asari.app). The free server has a quota. Please contact us if you find yourself in need of substantial cloud resources.
+
+**Anaconda and conda, virtual environments**
+
+Anaconda has various channels to distribute conda pacages. After looking into conda distribution, I came to the conclusion that it's not worth the effort to maintain a separate package on conda-forge.  The concern is that once we put in a conda package in public distribution, long-term maintenance of it and related packages will be potential issues. Pip is always in conda and one can use the same `pip install asari-metabolomics` in conda environment.
+
+Conda is excellent in handling virtual environments. Because we often use tools of different dependencies, virtual environments are great for preventing conflicts. This screen shot shows asari 1.13.1 installed in conda "base" environment and 1.11.4 in my native system environment.
+![conda_screen_shot](docs/source/_static/conda_asari_screenshot.png)
+
+**What happened to Docker?**
+
+My daily computer has an M2 chip, so that I haven't used Docker for a while. The use of virtual environments (see above) removes a lot of need of Docker.
+
+There's a Dockerfile in GitHub repo and one can build an image from there. There's an older Docker image built on Intel chip at https://hub.docker.com/r/shuzhao/asari.
 This image includes mono and ThermoRawFileParser, which converts Thermo .raw files to .mzML files.
 
 Example use
