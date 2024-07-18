@@ -15,6 +15,8 @@ Trackable and scalable Python program for high-resolution LC-MS metabolomics dat
 
 A web server (https://asari.app) and [full pipeline](https://pypi.org/project/pcpfm/) are available now.
 
+A set of tutorials are hosted at https://github.com/shuzhao-li-lab/asari_pcpfm_tutorials/.
+
 Install
 =======
 - From PyPi repository: `pip3 install asari-metabolomics`. Add `--upgrade` to update to new versions.
@@ -27,7 +29,7 @@ Install
 
 Input
 =====
-Input data are centroied mzML files from LC-MS metabolomics. 
+Input data are centroid mzML files from LC-MS metabolomics. 
 We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
 Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats and .mzXML files.
 
@@ -251,6 +253,6 @@ Links for the asari paper:
 
 The khipu paper: https://pubs.acs.org/doi/10.1021/acs.analchem.2c05810
 
-The pipeline manuscript (under review): https://www.biorxiv.org/content/10.1101/2024.02.13.580048v1
+The pipeline and datamodel paper: https://doi.org/10.1371/journal.pcbi.1011912 
 
 Tutorial on asari and the pipeline: https://github.com/shuzhao-li-lab/asari_pcpfm_tutorials
