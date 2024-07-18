@@ -176,11 +176,7 @@ Asari is designed to run > 1000 samples on a laptop computer. The performance is
 
 When a study has N (default 10) or fewer samples, the MassGrid assembly uses a slower algorithm to compensate statistical distribution.
 
-If the individual files are large or the sample number is very high, it is easy to split the data and run asari separately. 
-One can then use `asari join` to merge the results [in progress].
-
 Future improvement can be made by implementing some functions, e.g. chromatogram building, in C.
-
 
 Platforms, Anaconda and Docker
 ==============================
@@ -221,10 +217,10 @@ Discussion and Future Plans
 - Default elution peak detection is based on local maxima using statistically guided parameters. For highly complex local EIC, additional algorithm may be needed.
 
 **Next steps in development**
-- Implementation of `join` function to facilitate better parallelization.
-- To improve TOF support.
+- Implementation of `join` function to facilitate better parallelization. The goal is to have 'native' level of matching features when large datasets are split and processed separately. This can be equivalent function of matching different datasets.
+- To improve TOF support. This maybe related to better construction of mass tracks when the m/z space gets too crowded.
 - Automated handling of sample clusters, since different sample types may be included in an experiment.
-- To add GC-MS support.
+- To add GC-MS support (mostly RT optimization, deconvolution and library search).
 
 **How accurate are my m/z values?**
 
