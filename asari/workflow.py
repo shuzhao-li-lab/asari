@@ -11,6 +11,7 @@ import multiprocessing as mp
 import os
 import pymzml
 import pickle
+import scipy
 
 from .experiment import ext_Experiment
 from .chromatograms import extract_massTracks_ 
@@ -193,13 +194,14 @@ def make_iter_parameters(sample_registry, parameters, shared_dict):
     min_intensity = parameters['min_intensity_threshold']
     min_timepoints = parameters['min_timepoints']
     min_peak_height = parameters['min_peak_height']
+    sparsify_mass_tracks = parameters['sparsify_mass_tracks']
     for sample in sample_registry.values():
         outfile = os.path.join(parameters['outdir'], 'pickle', 
                                os.path.basename(sample['input_file']).replace('.mzML', '')+'.pickle')
         iters.append(
             (sample['sample_id'], sample['input_file'], parameters['mode'], parameters['database_mode'],
             mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, parameters['intensity_multiplier'], outfile,
-            shared_dict
+            shared_dict, sparsify_mass_tracks
             )
         )
     return iters
@@ -238,7 +240,7 @@ def batch_EIC_from_samples_(sample_registry, parameters):
 
 def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
                     mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, intensity_multiplier, outfile, 
-                    shared_dict):
+                    shared_dict, sparsify_mass_tracks):
     '''
     Extraction of mass tracks from a single sample. Used by multiprocessing in batch_EIC_from_samples_.
     `shared_dict` is used to pass back information, thus critical. Designed here as
@@ -325,6 +327,11 @@ def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
                                             track_mzs,
                                             new['number_anchor_mz_pairs'], anchor_mz_pairs,  
                                             {} )  
+            
+            if sparsify_mass_tracks:
+                for mass_track in new['list_mass_tracks']:
+                    mass_track['intensity'] = scipy.sparse.coo_array(mass_track['intensity'])
+
             with open(outfile, 'wb') as f:
                 pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
 

@@ -122,6 +122,9 @@ class SimpleSample:
         '''
         with open(self.data_location, 'rb') as f:
             sample_data = pickle.load(f)
+            for mass_track in sample_data['list_mass_tracks']:
+                if hasattr(mass_track['intensity'], "todense"):
+                    mass_track['intensity'] = mass_track['intensity'].todense()[0]
         return sample_data
 
     def push_to_db(self, cursor):

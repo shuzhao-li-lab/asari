@@ -55,8 +55,13 @@ PARAMETERS = {
     'mass_grid_mapping': "_mass_grid_mapping.csv",
     'annotation_filename': "Annotation_table.tsv",
     'json_empricalCompounds': "_empCpd_json.json",
+    
     # for annotation
     'check_isotope_ratio': False,
+
+    # computational_tweaks
+    'sparsify_mass_tracks': True
+
 
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
