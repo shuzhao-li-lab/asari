@@ -168,7 +168,7 @@ def remove_intermediate_pickles(parameters):
 # -----------------------------------------------------------------------------
 # Mass track (EIC) extraction, multi-core parralization via multiprocessing
 
-def make_iter_parameters(sample_registry, parameters, shared_dict):
+def make_iter_parameters(sample_registry, parameters):
     '''
     Generate iterables for multiprocess.starmap for getting sample mass tracks.
 
@@ -190,17 +190,18 @@ def make_iter_parameters(sample_registry, parameters, shared_dict):
     min_peak_height, output_file, shared_dict), ...]
     '''
     iters = []
-    mz_tolerance_ppm = parameters['mz_tolerance_ppm']
-    min_intensity = parameters['min_intensity_threshold']
-    min_timepoints = parameters['min_timepoints']
-    min_peak_height = parameters['min_peak_height']
     for sample in sample_registry.values():
-        outfile = os.path.join(parameters['outdir'], 'pickle', 
-                               os.path.basename(sample['input_file']).replace('.mzML', '')+'.pickle')
-        iters.append(
-            (sample['sample_id'], sample['input_file'], parameters['mode'], parameters['database_mode'],
-            mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, parameters['intensity_multiplier'], outfile,
-            shared_dict
+        iters.append((
+            sample['sample_id'], 
+            sample['input_file'], 
+            parameters['mode'], 
+            parameters['database_mode'],
+            parameters['mz_tolerance_ppm'], 
+            parameters['min_intensity_threshold'], 
+            parameters['min_timepoints'], 
+            parameters['min_peak_height'], 
+            parameters['intensity_multiplier'], 
+            os.path.join(parameters['outdir'], 'pickle', os.path.basename(sample['input_file']).replace('.mzML', '')+'.pickle')
             )
         )
     return iters
@@ -227,19 +228,15 @@ def batch_EIC_from_samples_(sample_registry, parameters):
     --------
     single_sample_EICs_
     '''
-    with mp.Manager() as manager:
-        shared_dict = manager.dict()
-        iters = make_iter_parameters(sample_registry, parameters, shared_dict)
-        # print("Number of processes ", number_processes)
-        with mp.Pool( parameters['multicores'] ) as pool:
-            pool.starmap( single_sample_EICs_, iters )
-
-        _d = dict(shared_dict)
-    return _d
+    shared_dict = {}
+    with mp.Pool(parameters['multicores']) as pool:
+         results = pool.starmap(single_sample_EICs_, make_iter_parameters(sample_registry, parameters))
+    for r in results:
+        shared_dict.update(r)
+    return shared_dict
 
 def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
-                    mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, intensity_multiplier, outfile, 
-                    shared_dict):
+                    mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, intensity_multiplier, outfile):
     '''
     Extraction of mass tracks from a single sample. Used by multiprocessing in batch_EIC_from_samples_.
     `shared_dict` is used to pass back information, thus critical. Designed here as
@@ -278,13 +275,11 @@ def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
     outfile : str
         where the output will be written
         passed from parameter dictionary by make_iter_parameters.
-    shared_dict : dict
-        dictionary object used to pass data btw multiple processing.
 
-    Updates
+    Returns
     -------
-    shared_dict : dict
-        dictionary object used to pass data btw multiple processing.
+    EIC_dict: dict
+        used to update the mapping dict in the main thread
 
     See also
     --------
@@ -321,37 +316,29 @@ def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
         new['number_anchor_mz_pairs'] = len(anchor_mz_pairs)
 
         if database_mode == 'ondisk':
-            shared_dict[new['sample_id']] = ('passed', 'passed', outfile,
-                                            new['max_scan_number'], xdict['rt_numbers'], xdict['rt_times'],
-                                            track_mzs,
-                                            new['number_anchor_mz_pairs'], anchor_mz_pairs,  
-                                            {} )  
+            to_return = {}
             with open(outfile, 'wb') as f:
                 pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
         if database_mode == 'compressed':
-            shared_dict[new['sample_id']] = ('passed', 'passed', outfile + ".gz",
-                                new['max_scan_number'], xdict['rt_numbers'], xdict['rt_times'],
-                                track_mzs,
-                                new['number_anchor_mz_pairs'], anchor_mz_pairs,  
-                                {} )  
-            with gzip.GzipFile(outfile + ".gz", 'wb', compresslevel=1) as f:
+            outfile += ".gz"
+            to_return = {}
+            with gzip.GzipFile(outfile, 'wb', compresslevel=1) as f:
                 pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
-
         elif database_mode == 'memory':
-            shared_dict[new['sample_id']] = ('passed', 'passed', outfile,
-                                            new['max_scan_number'], xdict['rt_numbers'], xdict['rt_times'],
-                                            track_mzs,
-                                            new['number_anchor_mz_pairs'], anchor_mz_pairs,  
-                                            new )
-
+            to_return = new
         print("Extracted %s to %d mass tracks." %(os.path.basename(infile), ii))
+        return {new['sample_id']: ('passed', 'passed', outfile,
+                                        new['max_scan_number'], xdict['rt_numbers'], xdict['rt_times'],
+                                        track_mzs,
+                                        new['number_anchor_mz_pairs'], anchor_mz_pairs,  
+                                        to_return)}
 
     except:
         # xml.etree.ElementTree.ParseError
-        shared_dict[new['sample_id']] = ('failed', '', '', 
-                                            0, [], [], [], 0, [], 
-                                            {})
         print("mzML processing error in sample %s, skipped." %infile)
+        return {new['sample_id']: ('failed', '', '', 0, [], [], [], 0, [], {})}
+
+
 
 
 # -----------------------------------------------------------------------------

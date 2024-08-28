@@ -3,6 +3,7 @@ import multiprocessing as mp
 from .mass_functions import flatten_tuplelist
 from functools import lru_cache
 import gzip
+import os
 
 class SimpleSample:
     '''
@@ -16,6 +17,14 @@ class SimpleSample:
     mass_track_cache = {}
     sample_order = None
     order_map = None
+
+    @classmethod
+    def populate_order(cls, directory):
+        order = []
+        for x in os.listdir(directory):
+            order.append(directory + x)
+        SimpleSample.sample_order = sorted(order)
+        SimpleSample.order_map = {x: i for i, x in enumerate(cls.sample_order)}
 
     def __init__(self, registry={}, experiment=None, database_mode='ondisk', mode='pos', is_reference=False):
         '''
@@ -90,14 +99,12 @@ class SimpleSample:
         '''
         import os
         if self.data_location in SimpleSample.mass_track_cache:
+            print("cache hit")
             return SimpleSample.mass_track_cache[self.data_location]
         else:
+            print("cache miss")
             if SimpleSample.sample_order is None:
-                order = []
-                for x in os.listdir(self.experiment.output_dir + "/pickle/"):
-                    order.append(self.experiment.output_dir + "/pickle/" + x)
-                SimpleSample.sample_order = sorted(order)
-                SimpleSample.order_map = {x: i for i, x in enumerate(self.sample_order)}
+                SimpleSample.populate_order(self.experiment.output_dir + "/pickle/")
             start = SimpleSample.order_map[self.data_location]
             to_load = [self.data_location] + list(SimpleSample.sample_order[start + 1: min(start + self.experiment.parameters['multicores'], len(SimpleSample.sample_order))])
             with mp.Pool(self.experiment.parameters['multicores']) as workers:
