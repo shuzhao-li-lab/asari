@@ -1,7 +1,6 @@
 import pickle
 import multiprocessing as mp
 from .mass_functions import flatten_tuplelist
-from functools import lru_cache
 import gzip
 import os
 
@@ -10,7 +9,6 @@ def load_from_disk(path):
         return pickle.load(open(path, 'rb'))
     elif path.endswith(".pickle.gz"):
         return pickle.load(gzip.GzipFile(path, 'rb'))
-
 
 class SimpleSample:
     '''
@@ -100,9 +98,7 @@ class SimpleSample:
         list_mass_tracks is accessed twice in this version of asari:
         1) RT calibration and building composite map
         2) extraction of peak areas for features
-        '''
-        import os
-        
+        '''        
         if self.data_location in SimpleSample.mass_track_cache:
             return SimpleSample.mass_track_cache[self.data_location]
         else:
