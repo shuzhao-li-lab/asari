@@ -7,6 +7,7 @@ XICs without neighbors within x ppm are considered specific (i.e. high selectivi
 Low selectivity regions will be still inspected to determine the true number of XICs.
 '''
 from operator import itemgetter
+from collections import defaultdict
 import numpy as np
 
 from scipy import interpolate
@@ -50,32 +51,20 @@ def extract_massTracks_(ms_expt,
     co-indexed rt_numbers, rt_times, and mass tracks respectively. Mass tracks are represented
     as [( mz, np.array(intensities at full rt range) ), ...]
     '''
-    alldata = []
+    mzTree = defaultdict(list)
     rt_times = []           # in seconds
-    ii = 0
     for spec in ms_expt:
         if spec.ms_level == 1:                         # MS Level 1 only
             rt_times.append(spec.scan_time_in_minutes()*60)
+            intensities = spec.i.astype(int)
             if intensity_multiplier != 1:
-                intensities = spec.i.astype(int) * intensity_multiplier
-            else:
-                intensities = spec.i.astype(int)
+                intensities *= intensity_multiplier
             good_positions = intensities > min_intensity
-            intensities = intensities[good_positions]
-            mzs = spec.mz[good_positions]
-            alldata += [(mz, ii, inten) for mz, inten in zip(mzs, intensities)]
-            ii += 1
+            for mz, intensity in zip(spec.mz[good_positions], intensities[good_positions]):
+                mzTree[int(mz * 1000)].append((mz, len(rt_times)-1, intensity))
 
     #print("extracted %d valide data points." %len(alldata))
-    mzTree = {}
-    for x in alldata:
-        ii = int(x[0]*1000)
-        if ii in mzTree:
-            mzTree[ii].append(x)
-        else:
-            mzTree[ii] = [x]
 
-    del alldata
     rt_numbers = list(range(len(rt_times)))
     rt_length = len(rt_numbers)
 
@@ -454,7 +443,6 @@ def rt_lowess_calibration_debug(good_landmark_peaks,
     import os
 
     # force left and right ends, to prevent runaway curve functions
-    reference_rt_bound = max(reference_rt_numbers)
     sample_rt_bound = max(sample_rt_numbers)
     rt_rightend_ = 1.1 * sample_rt_bound
     xx, yy = [-0.1 * sample_rt_bound,]*3, [-0.1 * sample_rt_bound,]*3
