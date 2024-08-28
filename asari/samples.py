@@ -27,11 +27,8 @@ class SimpleSample:
 
     @classmethod
     def populate_order(cls, directory):
-        order = []
-        for x in os.listdir(directory):
-            order.append(directory + x)
-        SimpleSample.sample_order = sorted(order)
-        SimpleSample.order_map = {x: i for i, x in enumerate(cls.sample_order)}
+        cls.sample_order = sorted([directory + x for x in os.listdir(directory)])
+        cls.order_map = {x: i for i, x in enumerate(cls.sample_order)}
 
     def __init__(self, registry={}, experiment=None, database_mode='ondisk', mode='pos', is_reference=False):
         '''
@@ -107,15 +104,13 @@ class SimpleSample:
         import os
         
         if self.data_location in SimpleSample.mass_track_cache:
-            print("cache hit")
             return SimpleSample.mass_track_cache[self.data_location]
         else:
-            print("cache miss")
             if SimpleSample.sample_order is None:
                 SimpleSample.populate_order(self.experiment.output_dir + "/pickle/")
             num_preload = self.experiment.parameters['multicores']
             start = SimpleSample.order_map[self.data_location]
-            to_load = list(SimpleSample.sample_order[start: min(start + num_preload, len(SimpleSample.sample_order))])
+            to_load = set(list(SimpleSample.sample_order[start: min(start + num_preload, len(SimpleSample.sample_order))]))
             with mp.Pool(num_preload) as workers:
                 results = workers.map(load_from_disk, to_load)
             SimpleSample.mass_track_cache = dict(zip(to_load, [r['list_mass_tracks'] for r in results]))
