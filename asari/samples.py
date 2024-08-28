@@ -5,6 +5,13 @@ from functools import lru_cache
 import gzip
 import os
 
+def load_from_disk(path):
+    if path.endswith(".pickle"):
+        return pickle.load(open(path, 'rb'))
+    elif path.endswith(".pickle.gz"):
+        return pickle.load(gzip.GzipFile(path, 'rb'))
+
+
 class SimpleSample:
     '''
     Lightweight class of an experimental sample to facilitate workflow.
@@ -98,6 +105,7 @@ class SimpleSample:
         2) extraction of peak areas for features
         '''
         import os
+        
         if self.data_location in SimpleSample.mass_track_cache:
             print("cache hit")
             return SimpleSample.mass_track_cache[self.data_location]
@@ -105,10 +113,11 @@ class SimpleSample:
             print("cache miss")
             if SimpleSample.sample_order is None:
                 SimpleSample.populate_order(self.experiment.output_dir + "/pickle/")
+            num_preload = self.experiment.parameters['multicores']
             start = SimpleSample.order_map[self.data_location]
-            to_load = [self.data_location] + list(SimpleSample.sample_order[start + 1: min(start + self.experiment.parameters['multicores'], len(SimpleSample.sample_order))])
-            with mp.Pool(self.experiment.parameters['multicores']) as workers:
-                results = workers.map(self.load_from_disk, to_load)
+            to_load = list(SimpleSample.sample_order[start: min(start + num_preload, len(SimpleSample.sample_order))])
+            with mp.Pool(num_preload) as workers:
+                results = workers.map(load_from_disk, to_load)
             SimpleSample.mass_track_cache = dict(zip(to_load, [r['list_mass_tracks'] for r in results]))
             return SimpleSample.mass_track_cache[self.data_location]
 
@@ -125,11 +134,3 @@ class SimpleSample:
             'rt_landmarks': self.rt_landmarks,
             'reverse_rt_cal_dict': self.reverse_rt_cal_dict,
         }
-    
-    @staticmethod
-    def load_from_disk(path):
-        if path.endswith(".pickle"):
-            return pickle.load(open(path, 'rb'))
-        elif path.endswith(".pickle.gz"):
-            return pickle.load(gzip.GzipFile(path, 'rb'))
-
