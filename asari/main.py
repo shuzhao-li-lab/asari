@@ -179,7 +179,8 @@ def main(parameters=PARAMETERS):
     # use True in data mining
     parser.add_argument('--drop_unaligned_samples', default=False, 
             help='Drop samples that fail RT alignment from composite map.')
-
+    parser.add_argument('-w', '--workflow', default="LC", 
+            help='Use LC or GC workflow, default is LC')
     args = parser.parse_args()
     
     # update parameters from user specified yaml file
@@ -193,6 +194,7 @@ def main(parameters=PARAMETERS):
     parameters['debug_rtime_align'] = booleandict[args.debug_rtime_align]
     parameters['drop_unaligned_samples'] = booleandict[args.drop_unaligned_samples]
     parameters['autoheight'] = booleandict[args.autoheight]
+    parameters['workflow'] = args.workflow
     
     if args.mode:
         parameters['mode'] = args.mode

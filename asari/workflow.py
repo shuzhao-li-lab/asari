@@ -22,56 +22,19 @@ from mass2chem.search import find_mzdiff_pairs_from_masstracks
 # -----------------------------------------------------------------------------
 # main workflow for `process`
 # -----------------------------------------------------------------------------
-def process_project(list_input_files, parameters):
-    '''
-    This defines the main work flow in processing a list of LC-MS files, 
-    creates the output folder with a time stamp, and uses sample registry to coordinate parallel processing.
-    The whole project data are tracked in experiment.ext_Experiment class.
 
-    Parameters
-    ----------
-    list_input_files : list[str]
-        list of centroided mzML filepaths from LC-MS metabolomics. Usually found in a folder.
-    parameters : dict
-        parameter dictionary passed from main.py, 
-        which imports from default_parameters and updates the dict by user arguments.
-
-    Outputs
-    -------
-    A local folder with asari processing result, e.g::
-    
-        rsvstudy_asari_project_427105156
-        ├── Annotated_empricalCompounds.json
-        ├── Feature_annotation.tsv
-        ├── export
-        │   ├── _mass_grid_mapping.csv
-        │   ├── cmap.pickle
-        │   ├── full_Feature_table.tsv
-        │   └── unique_compound__Feature_table.tsv
-        ├── pickle
-        │   ├── Blank_20210803_003.pickle
-        │   ├── ...
-        ├── preferred_Feature_table.tsv
-        └── project.json
-        
-
-    The pickle folder is removed after the processing by default.
-    '''
+def workflow_setup(list_input_files, parameters):
     sample_registry = register_samples(list_input_files)
     if parameters['database_mode'] == 'auto':
         if len(list_input_files) <= parameters['project_sample_number_small']:
             parameters['database_mode'] = 'memory'
         else:
-            parameters['database_mode'] = 'ondisk'        # yet to implement mongo etc
-    
-    # time_stamp is `month daay hour minute second``
+            parameters['database_mode'] = 'ondisk'
     time_stamp = [str(x) for x in time.localtime()[1:6]]
     parameters['time_stamp'] = ':'.join(time_stamp)
     time_stamp = ''.join(time_stamp)
     # if parameters['database_mode'] == 'ondisk':
     create_export_folders(parameters, time_stamp)
-        
-    # samples are processed to mass tracks (EICs) here
     shared_dict = batch_EIC_from_samples_(sample_registry, parameters)
     for sid, sam in sample_registry.items():
         sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'
@@ -81,13 +44,31 @@ def process_project(list_input_files, parameters):
             ], sam['sample_data'] = shared_dict[sid]
 
         sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
-    
     EE = ext_Experiment(sample_registry, parameters)
-    EE.process_all()
-    EE.export_all(anno=parameters["anno"])
+    return EE
 
+def workflow_cleanup(EE, list_input_files, parameters):
     if not parameters['pickle'] and parameters['database_mode'] != 'memory':
         remove_intermediate_pickles(parameters)
+
+def process_project(list_input_files, parameters):
+    EE = workflow_setup(list_input_files, parameters)
+    workflows = {
+        "GC": process_GC_project,
+        "LC": process_LC_project
+    }
+    workflows[parameters['workflow']](EE, list_input_files, parameters)
+    workflow_cleanup(EE, list_input_files, parameters)
+
+def process_GC_project(EE, list_input_files, parameters):
+    print("Processing Project using GC Workflow")
+    EE.process_all()
+    EE.export_all(anno=False)
+
+def process_LC_project(EE, list_input_files, paramaters):
+    print("Processing Project using LC Workflow")
+    EE.process_all()
+    EE.export_all(anno=False)
 
 def read_project_dir(directory, file_pattern='.mzML'):
     '''
@@ -122,12 +103,7 @@ def register_samples(list_input_files):
     ------
     sample_registry, a dictionary of integer sample id's to filepaths
     '''
-    sample_registry = {}
-    ii = 0
-    for file in sorted(list_input_files):
-        sample_registry[ii] = {'sample_id': ii, 'input_file': file}
-        ii += 1
-    return sample_registry
+    return {ii: {'sample_id': ii, "input_file": file} for ii, file in enumerate(sorted(list_input_files))}
 
 def create_export_folders(parameters, time_stamp):
     '''
