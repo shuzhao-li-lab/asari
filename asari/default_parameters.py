@@ -57,6 +57,7 @@ PARAMETERS = {
     'json_empricalCompounds': "_empCpd_json.json",
     # for annotation
     'check_isotope_ratio': False,
+    'workflow': "LC",
 
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
