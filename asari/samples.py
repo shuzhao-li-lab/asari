@@ -1,5 +1,8 @@
 import pickle
+import multiprocessing as mp
 from .mass_functions import flatten_tuplelist
+from functools import lru_cache
+import gzip
 
 class SimpleSample:
     '''
@@ -10,6 +13,10 @@ class SimpleSample:
     Function to get mass tracks from a mzML file is in workflow.process_project and batch_EIC_from_samples_.
     Peaks and empCpds are determined in constructors.CompositeMap.
     '''
+    mass_track_cache = {}
+    sample_order = None
+    order_map = None
+
     def __init__(self, registry={}, experiment=None, database_mode='ondisk', mode='pos', is_reference=False):
         '''
         Build a lightweight sample class.
@@ -33,6 +40,7 @@ class SimpleSample:
         For larger studies, m/z alignment is done via NN clustering, where m/z accuracy 
         is not checked during MassGrid construction. But it is checked during DB annotation.
         '''
+
         self.experiment = experiment
         self.mode = mode
         self.database_mode = database_mode 
@@ -80,12 +88,22 @@ class SimpleSample:
         1) RT calibration and building composite map
         2) extraction of peak areas for features
         '''
-        if self.list_mass_tracks:     # important, this is used to check if in memory
-            return self.list_mass_tracks
+        import os
+        if self.data_location in SimpleSample.mass_track_cache:
+            return SimpleSample.mass_track_cache[self.data_location]
         else:
-            sample_data = self._get_sample_data()
-            list_mass_tracks = sample_data['list_mass_tracks']
-            return list_mass_tracks
+            if SimpleSample.sample_order is None:
+                order = []
+                for x in os.listdir(self.experiment.output_dir + "/pickle/"):
+                    order.append(self.experiment.output_dir + "/pickle/" + x)
+                SimpleSample.sample_order = sorted(order)
+                SimpleSample.order_map = {x: i for i, x in enumerate(self.sample_order)}
+            start = SimpleSample.order_map[self.data_location]
+            to_load = [self.data_location] + list(SimpleSample.sample_order[start + 1: min(start + self.experiment.parameters['multicores'], len(SimpleSample.sample_order))])
+            with mp.Pool(self.experiment.parameters['multicores']) as workers:
+                results = workers.map(self.load_from_disk, to_load)
+            SimpleSample.mass_track_cache = dict(zip(to_load, [r['list_mass_tracks'] for r in results]))
+            return SimpleSample.mass_track_cache[self.data_location]
 
 
     def get_rt_calibration_records(self):
@@ -100,48 +118,11 @@ class SimpleSample:
             'rt_landmarks': self.rt_landmarks,
             'reverse_rt_cal_dict': self.reverse_rt_cal_dict,
         }
+    
+    @staticmethod
+    def load_from_disk(path):
+        if path.endswith(".pickle"):
+            return pickle.load(open(path, 'rb'))
+        elif path.endswith(".pickle.gz"):
+            return pickle.load(gzip.GzipFile(path, 'rb'))
 
-
-    def _get_sample_data(self):
-        '''
-        Wrapper of _retrieve_from_disk function.
-        Old function kept to leave room for additional logics.
-
-        Note:
-            Potential use of database_mode, e.g.
-            if self.database_mode == 'ondisk': 
-                return self._retrieve_from_disk()
-            elif: self.database_mode == 'firebase': 
-                return self.retrieve_from_db()
-        '''
-        return self._retrieve_from_disk()
-
-    def _retrieve_from_disk(self):
-        '''
-        Retrieve sample data from local pickle file.
-        '''
-        with open(self.data_location, 'rb') as f:
-            sample_data = pickle.load(f)
-        return sample_data
-
-    def push_to_db(self, cursor):
-        '''
-        Placeholder.
-
-        Parameters
-        ----------
-        cursor - database cursor instance
-            cursor to interact with database
-        '''
-        pass
-
-    def retrieve_from_db(self, cursor):
-        '''
-        Placeholder.
-
-        Parameters
-        ----------
-        cursor - database cursor instance
-            cursor to interact with database
-        '''
-        pass

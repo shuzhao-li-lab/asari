@@ -11,6 +11,7 @@ import multiprocessing as mp
 import os
 import pymzml
 import pickle
+import gzip
 
 from .experiment import ext_Experiment
 from .chromatograms import extract_massTracks_ 
@@ -62,7 +63,7 @@ def process_project(list_input_files, parameters):
             parameters['database_mode'] = 'memory'
         else:
             parameters['database_mode'] = 'ondisk'        # yet to implement mongo etc
-
+    
     # time_stamp is `month daay hour minute second``
     time_stamp = [str(x) for x in time.localtime()[1:6]]
     parameters['time_stamp'] = ':'.join(time_stamp)
@@ -326,6 +327,14 @@ def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
                                             new['number_anchor_mz_pairs'], anchor_mz_pairs,  
                                             {} )  
             with open(outfile, 'wb') as f:
+                pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
+        if database_mode == 'compressed':
+            shared_dict[new['sample_id']] = ('passed', 'passed', outfile + ".gz",
+                                new['max_scan_number'], xdict['rt_numbers'], xdict['rt_times'],
+                                track_mzs,
+                                new['number_anchor_mz_pairs'], anchor_mz_pairs,  
+                                {} )  
+            with gzip.GzipFile(outfile + ".gz", 'wb', compresslevel=1) as f:
                 pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
 
         elif database_mode == 'memory':
