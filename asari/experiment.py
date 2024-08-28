@@ -55,18 +55,32 @@ class ext_Experiment:
         Major class attributes including self.number_of_samples, number_scans, reference_sample_id.
         '''
         self.sample_registry = sample_registry
+        self.parameters = parameters
         self.valid_sample_ids = self.get_valid_sample_ids()
         self.number_of_samples = len(self.valid_sample_ids)
         self.number_scans = self.get_max_scan_number(sample_registry)
         self.all_samples = self.all_sample_instances = []
-
-        self.parameters = parameters
-        self.output_dir = parameters['outdir']
-        self.mode = parameters['mode']
-        self.mz_tolerance_ppm = self.parameters['mz_tolerance_ppm']
-        self.check_isotope_ratio = self.parameters['check_isotope_ratio']
-        self.database_mode = parameters['database_mode']
         self.reference_sample_id = self.get_reference_sample_id()
+
+    @property
+    def output_dir(self):
+        return self.parameters['outdir']
+    
+    @property
+    def mode(self):
+        return self.parameters['mode']
+    
+    @property
+    def mz_tolerance_ppm(self):
+        return self.parameters['mz_tolerance_ppm']
+    
+    @property
+    def check_isotope_ratio(self):
+        return self.parameters['check_isotope_ratio']
+    
+    @property
+    def database_mode(self):
+        return self.parameters['database_mode']
         
     def get_reference_sample_id(self):
         '''
@@ -270,11 +284,8 @@ class ext_Experiment:
         _export = {
             '_number_of_samples_': self.CMAP._number_of_samples_,
             'rt_length': self.CMAP.rt_length,
-            'rt_reference_landmarks': [p['apex'] 
-                                       for p in self.CMAP.good_reference_landmark_peaks],
-            'rt_records': [sample.get_rt_calibration_records()
-                                        for sample in self.all_samples
-                                        ],
+            'rt_reference_landmarks': [p['apex'] for p in self.CMAP.good_reference_landmark_peaks],
+            'rt_records': [sample.rt_calibration_records for sample in self.all_samples],
             'dict_scan_rtime': self.CMAP.dict_scan_rtime,
             'list_mass_tracks': self.CMAP.composite_mass_tracks,
             'MassGrid': dict(self.CMAP.MassGrid),

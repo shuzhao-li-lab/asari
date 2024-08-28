@@ -93,12 +93,11 @@ def extract_massTracks_(ms_expt,
         merged.append( merge_two_mass_tracks(tracks[a], tracks[b]) )
         to_remove += [a, b]
 
-    updated_tracks = [tracks[ii] for ii in range(len(tracks)) if ii not in to_remove] + merged
 
     return {
         'rt_numbers': rt_numbers,
         'rt_times': rt_times,
-        'tracks': updated_tracks,
+        'tracks': [tracks[ii] for ii in range(len(tracks)) if ii not in to_remove] + merged,
     }
 
 
@@ -478,7 +477,7 @@ def rt_lowess_calibration_debug(good_landmark_peaks,
     ref_interpolated = interf( reference_rt_numbers )
     lowess_predicted = [int(round(ii)) for ii in lowess_predicted]
     rt_cal_dict = dict( 
-        [(x,y) for x,y in zip(sample_rt_numbers, lowess_predicted) if x!=y and 0<=y<=reference_rt_bound] )
+        [(x,y) for x,y in zip(sample_rt_numbers, lowess_predicted) if x!=y and 0<=y<=max(reference_rt_numbers)] )
 
     ref_interpolated = [int(round(ii)) for ii in ref_interpolated]
     reverse_rt_cal_dict = dict(

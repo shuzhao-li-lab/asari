@@ -192,11 +192,10 @@ def mass_paired_mapping(list1, list2, std_ppm=5):
     all = [(list1[ii], 1, ii) for ii in range(len(list1))] + [(list2[jj], 2, jj) for jj in range(len(list2))]
     # [(mz, list_origin, index_origin), ...]
     all.sort()
-    NN = len(all)
     # Add a mock entry to allow loop goes through NN.
     all.append((999999, 2, None))
     mapped, ratio_deltas = [], []
-    for ii in range(1, NN):
+    for ii in range(1, len(all)):
         if all[ii][1] != all[ii-1][1]:          # from two diff list_origin
             _tolerance = all[ii][0] * std_ppm * 0.000001
             _d = all[ii][0]-all[ii-1][0]
@@ -246,9 +245,8 @@ def complete_mass_paired_mapping(list1, list2, std_ppm=5):
     all = [(list1[ii], 1, ii) for ii in range(len(list1))] + [(list2[jj], 2, jj) for jj in range(len(list2))]
     # [(mz, list_origin, index_origin), ...]
     all.sort()
-    NN = len(all)
     mapped = []
-    for ii in range(1, NN):
+    for ii in range(1, len(all)):
         if all[ii][1] != all[ii-1][1]:          # from two diff list_origin
             _tolerance = all[ii][0] * std_ppm * 0.000001
             _d = all[ii][0]-all[ii-1][0]

@@ -52,27 +52,11 @@ class SimpleSample:
         is not checked during MassGrid construction. But it is checked during DB annotation.
         '''
 
+        self.__dict__.update(registry)
+
         self.experiment = experiment
-        self.mode = mode
-        self.database_mode = database_mode 
         self.is_reference = is_reference 
-
-        self.input_file = registry['input_file']
-        self.name = registry['name']
-        self.sample_id = registry['sample_id']
-        self.data_location = registry['data_location']
-        self.track_mzs = registry['track_mzs']
-        self.max_scan_number = registry['max_scan_number']
-        self.anchor_mz_pairs = registry['anchor_mz_pairs']
-        self.rt_numbers = registry['list_scan_numbers']
-        self.list_retention_time = registry['list_retention_time']
-
-        if self.database_mode == 'memory':
-            self.list_mass_tracks = registry['sample_data']['list_mass_tracks']
-        else:
-            self.list_mass_tracks = []
             
-        self._mz_landmarks_ = flatten_tuplelist(self.anchor_mz_pairs)
         self.rt_landmarks = []  # to populate at CMAP.calibrate_sample_RT
 
         # These are critical RT calibration functions, index mapping with the reference sample
@@ -82,25 +66,41 @@ class SimpleSample:
         
         # placeholder
         self.mz_calibration_function = None
-                                   
+        self._cached_mass_tracks = None
 
-    def get_masstracks_and_anchors(self):
-        '''
-        Retrieve list_mass_tracks for this sample if not alrady in memory.
+    @property
+    def database_mode(self):
+        return self.experiment.database_mode
 
-        Returns
-        ------- 
-        A list of all mass tracks in this sample.
+    @property
+    def mode(self):
+        return self.experiment.mode
 
-        Note
-        ----
-        Mass tracks are the bulk of data per sample, stored dependent on database_mode.
-        list_mass_tracks is accessed twice in this version of asari:
-        1) RT calibration and building composite map
-        2) extraction of peak areas for features
-        '''        
-        if self.data_location in SimpleSample.mass_track_cache:
-            return SimpleSample.mass_track_cache[self.data_location]
+    @property
+    def rt_numbers(self):
+        return self.list_scan_numbers
+
+    @property
+    def _mz_landmarks_(self):
+        return flatten_tuplelist(self.anchor_mz_pairs)  
+
+    @property
+    def rt_calibration_records(self):
+        return {
+            'sample_id': self.sample_id,
+            'name': self.name,
+            'rt_landmarks': self.rt_landmarks,
+            'reverse_rt_cal_dict': self.reverse_rt_cal_dict,
+        }
+
+    @property
+    def list_mass_tracks(self):
+        if self.sample_data:
+            return self.sample_data['list_mass_tracks']
+        elif self._cached_mass_tracks is not None:
+            return self._cached_mass_tracks
+        elif self.data_location in SimpleSample.mass_track_cache:
+            mass_tracks = SimpleSample.mass_track_cache[self.data_location]
         else:
             if SimpleSample.sample_order is None:
                 SimpleSample.populate_order(self.experiment.output_dir + "/pickle/")
@@ -110,18 +110,8 @@ class SimpleSample:
             with mp.Pool(num_preload) as workers:
                 results = workers.map(load_from_disk, to_load)
             SimpleSample.mass_track_cache = dict(zip(to_load, [r['list_mass_tracks'] for r in results]))
-            return SimpleSample.mass_track_cache[self.data_location]
+            mass_tracks = SimpleSample.mass_track_cache[self.data_location]
 
-
-    def get_rt_calibration_records(self):
-        '''
-        Returns a dictionary of sample_id, name, 
-        rt_landmarks (list of apex scan numbers for the peaks used in RT calibration), 
-        reverse_rt_cal_dict (key=reference scan number, value=sample specific scan number).
-        '''
-        return {
-            'sample_id': self.sample_id,
-            'name': self.name,
-            'rt_landmarks': self.rt_landmarks,
-            'reverse_rt_cal_dict': self.reverse_rt_cal_dict,
-        }
+        if self.is_reference:
+            self._cached_mass_tracks = mass_tracks 
+        return mass_tracks          
