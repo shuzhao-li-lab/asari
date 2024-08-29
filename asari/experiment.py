@@ -119,9 +119,48 @@ class ext_Experiment:
         '''
         return [k for k,v in self.sample_registry.items() if v['status:eic'] == 'passed']
 
+    def determine_acquisition_order(self):
+        sample_order_by_timestamp = [(k, v['acquisition_time']) for k,v in self.sample_registry.items()]
+        return sorted(sample_order_by_timestamp, key=lambda x: x[1])
+    
+    def associate_stds_samples(self, sample_run_order):
+        association = {}
+        current_non_RI_samples = []
+        last_reference = None
+        for sample_id, runtime in sample_run_order:
+            sample_name = self.sample_registry[sample_id]['name']
+            if self.parameters['RI_substr'] in sample_name:
+                last_reference = sample_id
+                for non_RI_sample in current_non_RI_samples:
+                    association[non_RI_sample] = sample_id
+                current_non_RI_samples = []
+            else:
+                current_non_RI_samples.append(sample_id)
+        for non_RI_sample in current_non_RI_samples:
+            association[non_RI_sample] = last_reference
+        return association
+    
+    def convert_to_RI(self, sample_map):
+        from .samples import SimpleSample
+        import tqdm
+        for reference_id in tqdm.tqdm(list(dict.fromkeys(list(sample_map.values())))):
+            reference_instance = SimpleSample(self.sample_registry[reference_id], experiment=self)
+            hits = reference_instance.find_kovats()
+            reference_mass_tracks = reference_instance.list_mass_tracks
+            to_process = []
+            for sample_id, sample_reference in sample_map.items():
+                if sample_reference == reference_id:
+                    to_process.append(sample_id)
+            
+            for sample_id in to_process:
+                sample_instance = SimpleSample(self.sample_registry[sample_id], experiment=self)
+                sample_instance.list_mass_tracks
 
     def process_all_GC(self):
-        pass
+        sample_run_order = self.determine_acquisition_order()
+        mapping = self.associate_stds_samples(sample_run_order)
+        self.convert_to_RI(mapping)
+
 
     def process_all_LC(self):
         self.CMAP = CompositeMap(self)

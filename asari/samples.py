@@ -3,12 +3,25 @@ import multiprocessing as mp
 from .mass_functions import flatten_tuplelist
 import gzip
 import os
+import pandas as pd
+import functools
+from intervaltree import IntervalTree
+from functools import lru_cache
+from collections.abc import Iterable
 
 def load_from_disk(path):
     if path.endswith(".pickle"):
         return pickle.load(open(path, 'rb'))
     elif path.endswith(".pickle.gz"):
         return pickle.load(gzip.GzipFile(path, 'rb'))
+    
+class CachedProperty:
+    def __init__(self, func):
+        self.func = func
+        self.cache = lru_cache()(self.func)
+
+    def __getitem__(self, key):
+        return self.cache(key)
 
 class SimpleSample:
     '''
@@ -67,6 +80,16 @@ class SimpleSample:
         # placeholder
         self.mz_calibration_function = None
         self._cached_mass_tracks = None
+    
+    @functools.cached_property
+    def mz_tree(self):
+        __mz_tree = IntervalTree()
+        mz_tol = self.experiment.mz_tolerance_ppm
+        for t in self.list_mass_tracks:
+            t_mz = t['mz']
+            t_mz_err = t_mz / 1e6 * mz_tol * 4
+            __mz_tree.addi(t_mz - t_mz_err, t_mz + t_mz_err, t['id_number'])
+        return __mz_tree
 
     @property
     def database_mode(self):
@@ -92,7 +115,7 @@ class SimpleSample:
             'rt_landmarks': self.rt_landmarks,
             'reverse_rt_cal_dict': self.reverse_rt_cal_dict,
         }
-
+    
     @property
     def list_mass_tracks(self):
         if self.sample_data:
@@ -113,4 +136,54 @@ class SimpleSample:
             mass_tracks = SimpleSample.mass_track_cache[self.data_location]
         if self.is_reference:
             self._cached_mass_tracks = mass_tracks 
-        return mass_tracks          
+        return mass_tracks
+    
+    def tracks_by_mz(self, query_mass):
+        track_set = set()
+        for x in self.mz_tree.at(float(query_mass) - 1.0072764665789):
+            track_set.add(x.data)
+        return track_set
+    
+    def retrieve_tracks_id(self, id):
+        if isinstance(id, Iterable):
+            return [self.retrieve_tracks_id(x) for x in id]
+        return self.retrieve_track_id(id)
+
+    def retrieve_track_id(self, id):
+        for x in self.list_mass_tracks:
+            if x['id_number'] == id:
+                return x
+            
+    def find_kovats(self, kovats_csv="/Users/mitchjo/asari/asari/db/kovats.csv"):
+        kovats = pd.read_csv(kovats_csv)
+        kovats_hits = []
+        for kovat in kovats.to_dict(orient='records'):
+            kovat_result = dict(kovat)
+            matching_track_ids = self.tracks_by_mz(kovat['mass'])
+            matching_tracks = self.retrieve_tracks_id(matching_track_ids)
+            likely_track = {'mass_track_id': None,
+                            'max_intensity': 0,
+                            'apex': None}
+            for m_t in matching_tracks:
+                apex_tracker = {
+                    'intensity': 0,
+                    'apex': None
+                }
+                for i, intensity in enumerate(m_t['intensity']):
+                    if intensity > apex_tracker['intensity']:
+                        apex_tracker['intensity'] = intensity 
+                        apex_tracker['apex'] = i
+                if apex_tracker['intensity'] > likely_track['max_intensity']:
+                    likely_track['mass_track_id'] = m_t['id_number']
+                    likely_track['max_intensity'] = apex_tracker['intensity']
+                    likely_track['apex'] = apex_tracker['apex']
+            if likely_track['apex']:
+                kovat_result.update(likely_track)
+                kovats_hits.append(kovat_result)
+        return kovats_hits
+                
+
+
+
+
+

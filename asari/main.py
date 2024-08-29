@@ -180,6 +180,8 @@ def main(parameters=PARAMETERS):
             help='Drop samples that fail RT alignment from composite map.')
     parser.add_argument('-w', '--workflow', default="LC", 
             help='Use LC or GC workflow, default is LC')
+    parser.add_argument('--RI_substr', default="RTstd",
+            help='Samples with this substring are kovats standards')
     args = parser.parse_args()
     
     # update parameters from user specified yaml file
@@ -194,6 +196,7 @@ def main(parameters=PARAMETERS):
     parameters['drop_unaligned_samples'] = booleandict[args.drop_unaligned_samples]
     parameters['autoheight'] = booleandict[args.autoheight]
     parameters['workflow'] = args.workflow
+    parameters['RI_substr'] = args.RI_substr
     
     if args.mode:
         parameters['mode'] = args.mode

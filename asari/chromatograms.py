@@ -6,6 +6,9 @@ Use mz tol (default 5 pmm) in XIC construction.
 XICs without neighbors within x ppm are considered specific (i.e. high selectivity). 
 Low selectivity regions will be still inspected to determine the true number of XICs.
 '''
+
+
+
 from operator import itemgetter
 from collections import defaultdict
 import numpy as np
@@ -228,7 +231,7 @@ def merge_two_mass_tracks(T1, T2):
     -------
     The merged mass track. The mz value is averaged between tracks, intensities are summed pair-wise.
     '''
-    return ( 0.5 * (T1[0] + T2[0]), T1[1] + T2[1] )
+    return (0.5 * (T1[0] + T2[0]), T1[1] + T2[1])
 
 
 def get_thousandth_bins(mzTree, mz_tolerance_ppm=5, min_timepoints=5, min_peak_height=1000):
