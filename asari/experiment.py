@@ -146,7 +146,6 @@ class ext_Experiment:
         for reference_id in tqdm.tqdm(list(dict.fromkeys(list(sample_map.values())))):
             reference_instance = SimpleSample(self.sample_registry[reference_id], experiment=self)
             hits = reference_instance.find_kovats()
-            reference_mass_tracks = reference_instance.list_mass_tracks
             to_process = []
             for sample_id, sample_reference in sample_map.items():
                 if sample_reference == reference_id:

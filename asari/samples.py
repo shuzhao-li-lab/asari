@@ -150,11 +150,45 @@ class SimpleSample:
         return self.retrieve_track_id(id)
 
     def retrieve_track_id(self, id):
+        import matplotlib.pyplot as plt
         for x in self.list_mass_tracks:
             if x['id_number'] == id:
                 return x
             
     def find_kovats(self, kovats_csv="/Users/mitchjo/asari/asari/db/kovats.csv"):
+        import matplotlib.pyplot as plt
+        from .peaks import stats_detect_elution_peaks
+
+        kovats = pd.read_csv(kovats_csv)
+        for kovat in kovats.to_dict(orient='records'):
+            for t in self.retrieve_tracks_id(self.tracks_by_mz(kovat['mass'])):
+                EP = stats_detect_elution_peaks(t,                                           
+                                           len(t['intensity']), 
+                                           self.experiment.parameters['min_peak_height'],
+                                           self.experiment.parameters['min_peak_ratio'],
+                                           round(0.5 * self.experiment.parameters['min_timepoints']),
+                                           self.experiment.parameters['min_prominence_threshold'],
+                                           self.experiment.parameters['wlen'],
+                                           self.experiment.parameters['signal_noise_ratio'],
+                                           self.experiment.parameters['gaussian_shape'],
+                                           .02,
+                                           False,
+                                           self.experiment.parameters['min_intensity_threshold'])
+                print(EP)
+
+
+#        for nk in new_kovats:
+#            print(nk)
+#            if nk['agg_track'] is not None:
+#                plt.scatter(range(len(agg_track)), agg_track)
+#                plt.scatter(range(len(nk['agg_track'])), nk['agg_track'], c='r')
+#                plt.show()
+        exit()
+
+
+
+
+    def find_kovats2(self, kovats_csv="/Users/mitchjo/asari/asari/db/kovats.csv"):
         kovats = pd.read_csv(kovats_csv)
         kovats_hits = []
         for kovat in kovats.to_dict(orient='records'):

@@ -168,7 +168,7 @@ def stats_detect_elution_peaks(mass_track,
     SNR is computed on local noise (average of up to 100 nonpeak data points on each side of a peak).
     '''
     list_json_peaks, list_peaks = [], []
-    list_scans = np.arange(number_of_scans)
+    list_scans = np.arange(len(mass_track['intensity']))
     _baseline_, noise_level, scaling_factor, min_peak_height, list_intensity = audit_mass_track(
                 mass_track['intensity'], min_fwhm, min_intensity_threshold, 
                 min_peak_height, min_peak_ratio
