@@ -32,18 +32,10 @@ def workflow_setup(list_input_files, parameters):
             parameters['database_mode'] = 'ondisk'
     time_stamp = [str(x) for x in time.localtime()[1:6]]
     parameters['time_stamp'] = ':'.join(time_stamp)
-    time_stamp = ''.join(time_stamp)
-    # if parameters['database_mode'] == 'ondisk':
-    create_export_folders(parameters, time_stamp)
+    create_export_folders(parameters, ''.join(time_stamp))
     shared_dict = batch_EIC_from_samples_(sample_registry, parameters)
     for sid, sam in sample_registry.items():
-        sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'
-            ], sam['max_scan_number'], sam['list_scan_numbers'], sam['list_retention_time'
-            ], sam['track_mzs'
-            ], sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'
-            ], sam['sample_data'] = shared_dict[sid]
-
-        sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
+        sam.update(shared_dict[sid])
     EE = ext_Experiment(sample_registry, parameters)
     return EE
 
@@ -62,12 +54,12 @@ def process_project(list_input_files, parameters):
 
 def process_GC_project(EE, list_input_files, parameters):
     print("Processing Project using GC Workflow")
-    EE.process_all()
+    EE.process_all_GC()
     EE.export_all(anno=False)
 
 def process_LC_project(EE, list_input_files, paramaters):
     print("Processing Project using LC Workflow")
-    EE.process_all()
+    EE.process_all_LC()
     EE.export_all(anno=False)
 
 def read_project_dir(directory, file_pattern='.mzML'):
@@ -211,8 +203,16 @@ def batch_EIC_from_samples_(sample_registry, parameters):
         shared_dict.update(r)
     return shared_dict
 
-def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
-                    mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, intensity_multiplier, outfile):
+def single_sample_EICs_(sample_id, 
+                        infile, 
+                        ion_mode, 
+                        database_mode, 
+                        mz_tolerance_ppm, 
+                        min_intensity, 
+                        min_timepoints, 
+                        min_peak_height, 
+                        intensity_multiplier,
+                        outfile):
     '''
     Extraction of mass tracks from a single sample. Used by multiprocessing in batch_EIC_from_samples_.
     `shared_dict` is used to pass back information, thus critical. Designed here as
@@ -261,35 +261,25 @@ def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
     --------
     batch_EIC_from_samples_, make_iter_parameters
     '''
-    new = {'sample_id': sample_id, 'input_file': infile, 'ion_mode': ion_mode,}
-    list_mass_tracks = []
-    track_mzs = []
     try:
         exp = pymzml.run.Reader(infile)
+        try:
+            import datetime
+            timestamp = int(datetime.datetime.strptime(exp.info['start_time'], "%Y-%m-%dT%H:%M:%SZ").timestamp())
+        except:
+            timestamp = None
         xdict = extract_massTracks_(exp, 
                     mz_tolerance_ppm=mz_tolerance_ppm, 
                     min_intensity=min_intensity, 
                     min_timepoints=min_timepoints, 
                     min_peak_height=min_peak_height,
                     intensity_multiplier=intensity_multiplier)
+        
+        new = {'sample_id': sample_id, 'input_file': infile, 'ion_mode': ion_mode, 'timestamp': timestamp}
         new['max_scan_number'] = max(xdict['rt_numbers'])
-        ii = 0
-        # already in ascending order of m/z from extract_massTracks_, get_thousandth_regions
-        for track in xdict['tracks']:                         
-            list_mass_tracks.append( {
-                'id_number': ii, 
-                'mz': track[0],
-                # 'rt_scan_numbers': track[1],       # format changed after v1.5
-                'intensity': track[1], 
-                } )
-            track_mzs.append( (track[0], ii) )       # keep a reconrd in sample registry for fast MassGrid align
-            ii += 1
-
-        new['list_mass_tracks'] = list_mass_tracks
-        anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(list_mass_tracks, mz_tolerance_ppm=mz_tolerance_ppm)
-        # find_mzdiff_pairs_from_masstracks is not too sensitive to massTrack format
-        new['anchor_mz_pairs'] = anchor_mz_pairs
-        new['number_anchor_mz_pairs'] = len(anchor_mz_pairs)
+        new['list_mass_tracks'] = [{'id_number': ii, 'mz': t[0], 'intensity': t[1]} for ii, t in enumerate(xdict['tracks'])]
+        new['anchor_mz_pairs'] = find_mzdiff_pairs_from_masstracks(new['list_mass_tracks'], mz_tolerance_ppm=mz_tolerance_ppm)
+        new['number_anchor_mz_pairs'] = len(new['anchor_mz_pairs'])
 
         if database_mode == 'ondisk':
             to_return = {}
@@ -302,19 +292,42 @@ def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
                 pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
         elif database_mode == 'memory':
             to_return = new
-        print("Extracted %s to %d mass tracks." %(os.path.basename(infile), ii))
-        return {new['sample_id']: ('passed', 'passed', outfile,
-                                        new['max_scan_number'], xdict['rt_numbers'], xdict['rt_times'],
-                                        track_mzs,
-                                        new['number_anchor_mz_pairs'], anchor_mz_pairs,  
-                                        to_return)}
+        print("timestamp: ", timestamp)
+        print("Extracted %s to %d mass tracks." %(os.path.basename(infile), len(new['list_mass_tracks'])))
+        return {
+            sample_id: {
+                "status:mzml_parsing": 'passed',
+                "status:eic": 'passed',
+                "data_location": outfile,
+                "max_scan_number": new['max_scan_number'],
+                "list_scan_numbers": xdict['rt_numbers'],
+                "list_retention_time": xdict["rt_times"],
+                "track_mzs": [(t['mz'], t['id_number']) for t in new['list_mass_tracks']],
+                "number_anchor_mz_pairs": new['number_anchor_mz_pairs'],
+                "anchor_mz_pairs": new['anchor_mz_pairs'],
+                "sample_data": to_return,
+                "acquisition_time": timestamp,
+                "name": os.path.basename(infile).replace('.mzML', '')
+            }
+        }
 
-    except:
+    except KeyboardInterrupt:
         # xml.etree.ElementTree.ParseError
         print("mzML processing error in sample %s, skipped." %infile)
-        return {new['sample_id']: ('failed', '', '', 0, [], [], [], 0, [], {})}
-
-
+        return {
+            sample_id: {
+                "status:mzml_parsing": 'failed',
+                "status:eic": '',
+                "data_location": '',
+                "max_scan_number": 0,
+                "list_scan_numbers": [],
+                "list_retention_time": [],
+                "track_mzs": [],
+                "number_anchor_mz_pairs": 0,
+                "anchor_mz_pairs": [],
+                "sample_data": {}
+            }
+        }
 
 
 # -----------------------------------------------------------------------------

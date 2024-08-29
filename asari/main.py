@@ -121,7 +121,6 @@ def main(parameters=PARAMETERS):
         will override any defaults and any values provided in the parameters.json file. 
     '''
 
-
     print("\n\n~~~~~~~ Hello from Asari (%s) ~~~~~~~~~\n" %__version__)
 
     parser = argparse.ArgumentParser(description='asari, LC-MS metabolomics data preprocessing')

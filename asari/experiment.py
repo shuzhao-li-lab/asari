@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import pickle
+import functools
 
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
@@ -58,9 +59,9 @@ class ext_Experiment:
         self.parameters = parameters
         self.valid_sample_ids = self.get_valid_sample_ids()
         self.number_of_samples = len(self.valid_sample_ids)
-        self.number_scans = self.get_max_scan_number(sample_registry)
         self.all_samples = self.all_sample_instances = []
         self.reference_sample_id = self.get_reference_sample_id()
+        self.selected_unique_features = {}
 
     @property
     def output_dir(self):
@@ -81,6 +82,10 @@ class ext_Experiment:
     @property
     def database_mode(self):
         return self.parameters['database_mode']
+    
+    @functools.cached_property
+    def number_scans(self):
+        return max([self.sample_registry[k]['max_scan_number'] for k in self.valid_sample_ids]) + 1
         
     def get_reference_sample_id(self):
         '''
@@ -114,39 +119,11 @@ class ext_Experiment:
         '''
         return [k for k,v in self.sample_registry.items() if v['status:eic'] == 'passed']
 
-    def get_max_scan_number(self, sample_registry):
-        '''
-        Return max scan number among samples, or None if no valid sample.
 
-        Parameters
-        ----------
-        sample_registry: dict
-            a dict that maps sample IDs to sample data
-        '''
+    def process_all_GC(self):
+        pass
 
-        # todo - why does this function need to take sample_registry as an external argument vs. self.sample_registry?
-        if sample_registry:
-            return max([sample_registry[k]['max_scan_number'] for k in self.valid_sample_ids]) + 1
-        else:
-            return None
-
-    def process_all(self):
-        '''
-        This is the default asari workflow.
-        
-        1. Build MassGrid, using either pairwise (small study) or clustering method. 
-           Choose one reference from all samples for the largest number of landmark m/z tracks.
-        2. RT alignment via a LOWESS function, using selective landmark peaks.
-        3. Build composite elution profile (composite_mass_tracks),
-           by cumulative sum of mass tracks from all samples after RT correction.
-        4. Global peak detection is performed on each composite massTrack.
-        5. Mapping global peaks (i.e. features) back to all samples and extract sample specific peak areas.
-           This completes the FeatureTable.
-
-        Updates
-        -------
-        self.CMAP as instance of CompositeMap, and MassGrid, composite map and features within.
-        '''
+    def process_all_LC(self):
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
         if not self.parameters['rt_align_on']:

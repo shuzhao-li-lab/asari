@@ -56,13 +56,13 @@ class SimpleSample:
 
         self.experiment = experiment
         self.is_reference = is_reference 
+        self.is_rt_aligned = is_reference
             
         self.rt_landmarks = []  # to populate at CMAP.calibrate_sample_RT
 
         # These are critical RT calibration functions, index mapping with the reference sample
         self.rt_cal_dict = None
         self.reverse_rt_cal_dict = None
-        self.is_rt_aligned = is_reference      # init value False unless is_reference
         
         # placeholder
         self.mz_calibration_function = None
@@ -111,7 +111,6 @@ class SimpleSample:
                 results = workers.map(load_from_disk, to_load)
             SimpleSample.mass_track_cache = dict(zip(to_load, [r['list_mass_tracks'] for r in results]))
             mass_tracks = SimpleSample.mass_track_cache[self.data_location]
-
         if self.is_reference:
             self._cached_mass_tracks = mass_tracks 
         return mass_tracks          
