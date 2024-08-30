@@ -17,7 +17,7 @@ from .experiment import ext_Experiment
 from .chromatograms import extract_massTracks_ 
 
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
-from .samples import save_to_disk
+from .samples import save_to_disk, SimpleSample
 
 
 # -----------------------------------------------------------------------------
@@ -162,9 +162,8 @@ def make_iter_parameters(sample_registry, parameters):
     [('sample_id', input_file, mode, mz_tolerance_ppm, min_intensity, min_timepoints, 
     min_peak_height, output_file, shared_dict), ...]
     '''
-    iters = []
     for sample in sample_registry.values():
-        iters.append((
+        yield (
             sample['sample_id'], 
             sample['input_file'], 
             parameters['mode'], 
@@ -176,8 +175,10 @@ def make_iter_parameters(sample_registry, parameters):
             parameters['intensity_multiplier'], 
             os.path.join(parameters['outdir'], 'pickle', os.path.basename(sample['input_file']).replace('.mzML', '')+'.pickle')
             )
-        )
-    return iters
+
+
+def wrapped_EIC(args):
+    return single_sample_EICs_(*args)
 
 def batch_EIC_from_samples_(sample_registry, parameters):
     '''
@@ -201,11 +202,29 @@ def batch_EIC_from_samples_(sample_registry, parameters):
     --------
     single_sample_EICs_
     '''
+    started_preload = False
     shared_dict = {}
-    with mp.Pool(parameters['multicores']) as pool:
-         results = pool.starmap(single_sample_EICs_, make_iter_parameters(sample_registry, parameters))
-    for r in results:
-        shared_dict.update(r)
+    iters = list(make_iter_parameters(sample_registry, parameters))
+    chunk = []
+    while iters:
+        for _ in range(parameters['multicores']):
+            try:
+                chunk.append(iters.pop())
+            except:
+                pass
+        with mp.Pool(parameters['multicores']) as workers:
+            results = workers.starmap(single_sample_EICs_, chunk)
+        for r in results:
+            shared_dict.update(r)
+            for _, sample_data in r.items():
+                SimpleSample.sample_order.append(sample_data['data_location'])
+                SimpleSample.sizes[sample_data['data_location']] = sample_data['size']
+                SimpleSample.order_map[sample_data['data_location']] = len(SimpleSample.order_map)
+            if not started_preload:
+                print("start preload")
+                SimpleSample.start_preloading()
+                started_preload = True
+    SimpleSample.stop_event_loop()
     return shared_dict
 
 def single_sample_EICs_(sample_id, 
@@ -322,7 +341,7 @@ def single_sample_EICs_(sample_id,
             }
         }
 
-    except KeyboardInterrupt:
+    except:
         # xml.etree.ElementTree.ParseError
         print("mzML processing error in sample %s, skipped." %infile)
         return {
