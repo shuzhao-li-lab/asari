@@ -9,6 +9,33 @@ from intervaltree import IntervalTree
 from functools import lru_cache, partial
 from collections.abc import Iterable
 
+import gc
+import sys
+
+def get_obj_size(obj):
+    marked = {id(obj)}
+    obj_q = [obj]
+    sz = 0
+
+    while obj_q:
+        sz += sum(map(sys.getsizeof, obj_q))
+
+        # Lookup all the object referred to by the object in obj_q.
+        # See: https://docs.python.org/3.7/library/gc.html#gc.get_referents
+        all_refr = ((id(o), o) for o in gc.get_referents(*obj_q))
+
+        # Filter object that are already marked.
+        # Using dict notation will prevent repeated objects.
+        new_refr = {o_id: o for o_id, o in all_refr if o_id not in marked and not isinstance(o, type)}
+
+        # The new obj_q will be the ones that were not marked,
+        # and we will update marked with their ids so we will
+        # not traverse them again.
+        obj_q = new_refr.values()
+        marked.update(new_refr.keys())
+
+    return sz
+
 def save_to_disk(path, data):
     if path.endswith(".pickle"):
         with open(path, 'wb') as fh:
@@ -16,7 +43,7 @@ def save_to_disk(path, data):
     elif path.endswith(".pickle.gz"):
         with gzip.GzipFile(path, 'wb', compresslevel=1) as fh:
             pickle.dump(data, fh, pickle.HIGHEST_PROTOCOL)
-    return path, {}
+    return path, {}, get_obj_size(data)
 
 def load_from_disk(path):
     if path.endswith(".pickle"):
@@ -24,14 +51,6 @@ def load_from_disk(path):
     elif path.endswith(".pickle.gz"):
         return pickle.load(gzip.GzipFile(path, 'rb'))
     
-class CachedProperty:
-    def __init__(self, func):
-        self.func = func
-        self.cache = lru_cache()(self.func)
-
-    def __getitem__(self, key):
-        return self.cache(key)
-
 class SimpleSample:
     '''
     Lightweight class of an experimental sample to facilitate workflow.
@@ -44,6 +63,7 @@ class SimpleSample:
     mass_track_cache = {}
     sample_order = None
     order_map = None
+    memory_limit = 4 * 1024 ** 3
 
     @classmethod
     def populate_order(cls, directory):
@@ -164,6 +184,7 @@ class SimpleSample:
         for x in self.list_mass_tracks:
             if x['id_number'] == id:
                 return x
+    
             
     def find_kovats(self, kovats_csv="/Users/mitchjo/asari/asari/db/kovats.csv"):
         import matplotlib.pyplot as plt
@@ -195,9 +216,6 @@ class SimpleSample:
                     print("\t", p)
 
         exit()
-
-
-
 
     def find_kovats2(self, kovats_csv="/Users/mitchjo/asari/asari/db/kovats.csv"):
         kovats = pd.read_csv(kovats_csv)

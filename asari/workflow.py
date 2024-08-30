@@ -83,6 +83,10 @@ def read_project_dir(directory, file_pattern='.mzML'):
     print("Working on ~~ %s ~~ \n\n" %directory)
     return [os.path.join(directory, f) for f in os.listdir(directory) if file_pattern in f]
 
+def read_project_file(project_file, file_pattern='.mzML'):
+    print("Working on ~~ %s ~~ \n\n" %project_file)
+    return [os.path.abspath(l.strip()) for l in open(project_file).readlines() if file_pattern in l]
+
 def register_samples(list_input_files):
     '''
     Establish sample_id here, return sample_registry as a dictionary.
@@ -278,7 +282,7 @@ def single_sample_EICs_(sample_id,
         
         list_mass_tracks = [{'id_number': ii, 'mz': t[0], 'intensity': t[1]} for ii, t in enumerate(xdict['tracks'])]
         anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(list_mass_tracks, mz_tolerance_ppm=mz_tolerance_ppm)
-        
+
         new = {
             'sample_id': sample_id,
             'input_file': infile,
@@ -292,11 +296,11 @@ def single_sample_EICs_(sample_id,
         }
 
         if database_mode == 'ondisk':
-            outfile, to_return = save_to_disk(outfile, new)
-        if database_mode == 'compressed':
-            outfile, to_return = save_to_disk(outfile + ".gz", new)
+            outfile, to_return, size = save_to_disk(outfile, new)
+        elif database_mode == 'compressed':
+            outfile, to_return, size = save_to_disk(outfile + ".gz", new)
         elif database_mode == 'memory':
-            to_return = new
+            outfile, to_return, size = "memory", new, 0
 
         print("timestamp: ", timestamp)
         print("Extracted %s to %d mass tracks." %(os.path.basename(infile), len(new['list_mass_tracks'])))
@@ -313,7 +317,8 @@ def single_sample_EICs_(sample_id,
                 "anchor_mz_pairs": new['anchor_mz_pairs'],
                 "sample_data": to_return,
                 "acquisition_time": timestamp,
-                "name": os.path.basename(infile).replace('.mzML', '')
+                "name": os.path.basename(infile).replace('.mzML', ''),
+                "size": size
             }
         }
 
@@ -331,7 +336,8 @@ def single_sample_EICs_(sample_id,
                 "track_mzs": [],
                 "number_anchor_mz_pairs": 0,
                 "anchor_mz_pairs": [],
-                "sample_data": {}
+                "sample_data": {},
+                "size": 0
             }
         }
 

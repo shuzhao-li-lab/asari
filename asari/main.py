@@ -7,7 +7,8 @@ from asari import __version__
 from .workflow import (get_mz_list, 
                        process_project, 
                        process_xics, 
-                       read_project_dir)
+                       read_project_dir,
+                       read_project_file)
 from .default_parameters import PARAMETERS
 from .dashboard import read_project, dashboard
 from .analyze import estimate_min_peak_height, analyze_single_sample
@@ -31,10 +32,15 @@ PARAMETERS['asari_version'] = __version__
 def __run_process__(parameters, args):
     
     # main process function
-    list_input_files = read_project_dir(args.input)
-    if not list_input_files:
-        print("No valid mzML files are found in the input directory :(")
-    else:
+    if os.path.isdir(args.input):
+        list_input_files = read_project_dir(args.input)
+        if not list_input_files:
+            print("No valid mzML files are found in the input directory :(")
+    elif os.path.isfile(args.input):
+        list_input_files = read_project_file(args.input)
+        if not list_input_files:
+            print("No valid mzML files were found in the file list :(")
+    if list_input_files:
         process_project(list_input_files, parameters)
         
 def process(parameters, args):
@@ -134,7 +140,7 @@ def main(parameters=PARAMETERS):
     parser.add_argument('--ppm', default=5, type=int, 
             help='mass precision in ppm (part per million), same as mz_tolerance_ppm')
     parser.add_argument('-i', '--input', 
-            help='input directory of mzML files to process, or a single file to analyze')
+            help='input directory of mzML files to process, or a single file to analyze, or mzML file list')
     parser.add_argument('-o', '--output', 
             help='output directory')
     parser.add_argument('-j', '--project', 
