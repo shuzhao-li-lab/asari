@@ -17,6 +17,7 @@ from .experiment import ext_Experiment
 from .chromatograms import extract_massTracks_ 
 
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
+from .samples import save_to_disk
 
 
 # -----------------------------------------------------------------------------
@@ -275,23 +276,28 @@ def single_sample_EICs_(sample_id,
                     min_peak_height=min_peak_height,
                     intensity_multiplier=intensity_multiplier)
         
-        new = {'sample_id': sample_id, 'input_file': infile, 'ion_mode': ion_mode, 'timestamp': timestamp}
-        new['max_scan_number'] = max(xdict['rt_numbers'])
-        new['list_mass_tracks'] = [{'id_number': ii, 'mz': t[0], 'intensity': t[1]} for ii, t in enumerate(xdict['tracks'])]
-        new['anchor_mz_pairs'] = find_mzdiff_pairs_from_masstracks(new['list_mass_tracks'], mz_tolerance_ppm=mz_tolerance_ppm)
-        new['number_anchor_mz_pairs'] = len(new['anchor_mz_pairs'])
+        list_mass_tracks = [{'id_number': ii, 'mz': t[0], 'intensity': t[1]} for ii, t in enumerate(xdict['tracks'])]
+        anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(list_mass_tracks, mz_tolerance_ppm=mz_tolerance_ppm)
+        
+        new = {
+            'sample_id': sample_id,
+            'input_file': infile,
+            'ion_mode': ion_mode,
+            'timestamp': timestamp,
+            'max_scan_number': max(xdict['rt_numbers']),
+            'list_mass_tracks': [{'id_number': ii, 'mz': t[0], 'intensity': t[1]} for ii, t in enumerate(xdict['tracks'])],
+            'anchor_mz_pairs': anchor_mz_pairs,
+            'number_anchor_mz_pairs': len(anchor_mz_pairs)
+
+        }
 
         if database_mode == 'ondisk':
-            to_return = {}
-            with open(outfile, 'wb') as f:
-                pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
+            outfile, to_return = save_to_disk(outfile, new)
         if database_mode == 'compressed':
-            outfile += ".gz"
-            to_return = {}
-            with gzip.GzipFile(outfile, 'wb', compresslevel=1) as f:
-                pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
+            outfile, to_return = save_to_disk(outfile + ".gz", new)
         elif database_mode == 'memory':
             to_return = new
+
         print("timestamp: ", timestamp)
         print("Extracted %s to %d mass tracks." %(os.path.basename(infile), len(new['list_mass_tracks'])))
         return {

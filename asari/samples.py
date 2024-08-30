@@ -6,8 +6,17 @@ import os
 import pandas as pd
 import functools
 from intervaltree import IntervalTree
-from functools import lru_cache
+from functools import lru_cache, partial
 from collections.abc import Iterable
+
+def save_to_disk(path, data):
+    if path.endswith(".pickle"):
+        with open(path, 'wb') as fh:
+            pickle.dump(data, fh, pickle.HIGHEST_PROTOCOL)
+    elif path.endswith(".pickle.gz"):
+        with gzip.GzipFile(path, 'wb', compresslevel=1) as fh:
+            pickle.dump(data, fh, pickle.HIGHEST_PROTOCOL)
+    return path, {}
 
 def load_from_disk(path):
     if path.endswith(".pickle"):
@@ -130,6 +139,7 @@ class SimpleSample:
             num_preload = self.experiment.parameters['multicores']
             start = SimpleSample.order_map[self.data_location]
             to_load = set(list(SimpleSample.sample_order[start: min(start + num_preload, len(SimpleSample.sample_order))]))
+            
             with mp.Pool(num_preload) as workers:
                 results = workers.map(load_from_disk, to_load)
             SimpleSample.mass_track_cache = dict(zip(to_load, [r['list_mass_tracks'] for r in results]))
@@ -169,20 +179,21 @@ class SimpleSample:
                                            round(0.5 * self.experiment.parameters['min_timepoints']),
                                            self.experiment.parameters['min_prominence_threshold'],
                                            self.experiment.parameters['wlen'],
-                                           self.experiment.parameters['signal_noise_ratio'],
+                                           self.experiment.parameters['signal_noise_ratio'] * 100,
                                            self.experiment.parameters['gaussian_shape'],
                                            .02,
                                            False,
                                            self.experiment.parameters['min_intensity_threshold'])
-                print(EP)
+                if EP:
+                    plt.scatter(range(len(t['intensity'])), t['intensity'], c='k')
+                    for p in EP:
+                        print(p['apex'], p['height'])
+                        plt.scatter(p['apex'], p['height'], c='r')
+                    plt.show()
+                print(kovat, len(EP))
+                for p in EP:
+                    print("\t", p)
 
-
-#        for nk in new_kovats:
-#            print(nk)
-#            if nk['agg_track'] is not None:
-#                plt.scatter(range(len(agg_track)), agg_track)
-#                plt.scatter(range(len(nk['agg_track'])), nk['agg_track'], c='r')
-#                plt.show()
         exit()
 
 
