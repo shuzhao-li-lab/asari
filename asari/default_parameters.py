@@ -14,10 +14,14 @@ PARAMETERS = {
     'project_name': 'asari_project',
     'outdir': 'output',
     'pickle': False,
-    'database_mode': 'auto',            # `auto` determined on sample number 
+    'database_mode': 'memory',            # `auto` determined on sample number 
                                         # 'ondisk', 'memory' (run in memory, only small studies), 
                                         # 'mongo' (MongoDB, requiring installation of DB server, to implement)
-    'multicores': 4,                    # number of cores allowed in parallel processing
+    
+    'multicores': 8,                    # number of cores allowed in parallel processing
+    'write_cache': 4 * 1024 ** 3,       # amount of memory in bytes used for mass track cache
+    'disk_cache': 100 * 1024 ** 3,        # amount of disk space allowed to be used before compressing stored mass tracks
+    'sparsify': True,                   # use sparse representations of mass tracks in memory for space saving                
 
     # mass parameters
     'mode': 'pos',                      # ionization mode

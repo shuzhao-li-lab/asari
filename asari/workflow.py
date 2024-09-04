@@ -17,7 +17,7 @@ from .experiment import ext_Experiment
 from .chromatograms import extract_massTracks_ 
 
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
-from .samples import save_to_disk, SimpleSample
+from .samples import SimpleSample
 
 
 # -----------------------------------------------------------------------------
@@ -202,29 +202,21 @@ def batch_EIC_from_samples_(sample_registry, parameters):
     --------
     single_sample_EICs_
     '''
-    started_preload = False
     shared_dict = {}
     iters = list(make_iter_parameters(sample_registry, parameters))
-    chunk = []
-    while iters:
-        for _ in range(parameters['multicores']):
-            try:
-                chunk.append(iters.pop())
-            except:
-                pass
-        with mp.Pool(parameters['multicores']) as workers:
-            results = workers.starmap(single_sample_EICs_, chunk)
-        for r in results:
-            shared_dict.update(r)
-            for _, sample_data in r.items():
-                SimpleSample.sample_order.append(sample_data['data_location'])
-                SimpleSample.sizes[sample_data['data_location']] = sample_data['size']
-                SimpleSample.order_map[sample_data['data_location']] = len(SimpleSample.order_map)
-            if not started_preload:
-                print("start preload")
-                SimpleSample.start_preloading()
-                started_preload = True
-    SimpleSample.stop_event_loop()
+    with mp.Pool(parameters['multicores']) as workers:
+        while iters:
+            batch = []
+            for _ in range(parameters['multicores']):
+                try:
+                    batch.append(iters.pop())
+                except:
+                    pass
+            for r in workers.imap(wrapped_EIC, batch):
+                sid, sam = r
+                SimpleSample.save(sam, parameters)
+                del sam['sample_data']
+                shared_dict[sid] = sam
     return shared_dict
 
 def single_sample_EICs_(sample_id, 
@@ -310,21 +302,16 @@ def single_sample_EICs_(sample_id,
             'max_scan_number': max(xdict['rt_numbers']),
             'list_mass_tracks': [{'id_number': ii, 'mz': t[0], 'intensity': t[1]} for ii, t in enumerate(xdict['tracks'])],
             'anchor_mz_pairs': anchor_mz_pairs,
-            'number_anchor_mz_pairs': len(anchor_mz_pairs)
+            'number_anchor_mz_pairs': len(anchor_mz_pairs),
+            'outfile': outfile
 
         }
 
-        if database_mode == 'ondisk':
-            outfile, to_return, size = save_to_disk(outfile, new)
-        elif database_mode == 'compressed':
-            outfile, to_return, size = save_to_disk(outfile + ".gz", new)
-        elif database_mode == 'memory':
-            outfile, to_return, size = "memory", new, 0
+        if database_mode == 'memory':
+            _, to_return, size = "memory", new, 0
 
-        print("timestamp: ", timestamp)
         print("Extracted %s to %d mass tracks." %(os.path.basename(infile), len(new['list_mass_tracks'])))
-        return {
-            sample_id: {
+        return sample_id,  {
                 "status:mzml_parsing": 'passed',
                 "status:eic": 'passed',
                 "data_location": outfile,
@@ -339,13 +326,10 @@ def single_sample_EICs_(sample_id,
                 "name": os.path.basename(infile).replace('.mzML', ''),
                 "size": size
             }
-        }
-
     except:
         # xml.etree.ElementTree.ParseError
         print("mzML processing error in sample %s, skipped." %infile)
-        return {
-            sample_id: {
+        return sample_id, {
                 "status:mzml_parsing": 'failed',
                 "status:eic": '',
                 "data_location": '',
@@ -358,7 +342,6 @@ def single_sample_EICs_(sample_id,
                 "sample_data": {},
                 "size": 0
             }
-        }
 
 
 # -----------------------------------------------------------------------------

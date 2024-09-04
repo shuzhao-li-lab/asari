@@ -6,55 +6,172 @@ import os
 import pandas as pd
 import functools
 from intervaltree import IntervalTree
-from functools import lru_cache, partial
-from collections.abc import Iterable
-import atexit
-import threading
 import gc
 import sys
-import asyncio
-import aiofiles
+import numpy as np
+import scipy
 
-def save_to_disk(path, data):
-    if path.endswith(".pickle"):
-        with open(path, 'wb') as fh:
-            pickle.dump(data, fh, pickle.HIGHEST_PROTOCOL)
-    elif path.endswith(".pickle.gz"):
-        with gzip.GzipFile(path, 'wb', compresslevel=1) as fh:
-            pickle.dump(data, fh, pickle.HIGHEST_PROTOCOL)
-    return path, {}, get_obj_size(data)
+class MassTrackCache():
+    def __init__(self, parameters) -> None:
+        self.cache = {}
+        self.limits = {
+            "memory": parameters['write_cache'],
+            "disk": parameters['disk_cache'],
+            "compress": np.inf
+        }
+        self.consumption = {
+            "memory": 0,
+            "disk": 0,
+            "compress": 0
+        }
+        self.key_sets = {
+            "memory": set(),
+            "disk": set(),
+            "compress": set()
+        }
+        self.pages = [[]]
+        self.page_size = parameters['multicores']
+        self.workers = mp.Pool(parameters['multicores'])
+        self.sparsify = parameters['sparsify']
 
-def load_from_disk(path, direct=True):
-    if path.endswith(".pickle"):
-        data = pickle.load(open(path, 'rb'))
-    elif path.endswith(".pickle.gz"):
-        data = pickle.load(gzip.GzipFile(path, 'rb'))
-    return path, data if not direct else data
+    def __setitem__(self, key, value): 
+        #print(round(cls.memory_use / cls.max_memory  * 100), round(cls.disk_use/(1024*2)))
+        if key not in self.cache:
+            if len(self.pages[-1]) == self.page_size:
+                self.pages.append([])
+            self.pages[-1].append(key)
+            mem_size = self.get_obj_size(value)
 
-def get_obj_size(obj):
-    marked = {id(obj)}
-    obj_q = [obj]
-    sz = 0
+            if self.sparsify:
+                for mass_track in value['list_mass_tracks']:
+                    mass_track['intensity'] = scipy.sparse.coo_array(mass_track['intensity'])
 
-    while obj_q:
-        sz += sum(map(sys.getsizeof, obj_q))
+            self.cache[key] = {
+                "value": value,
+                "disk": False,
+                "sparse": self.sparsify,
+                "page": len(self.pages) - 1,
+                "sizes": {
+                    "memory": mem_size,
+                    "disk": None,
+                    "compressed": None,
+                }
+            }
+            self.consumption['memory'] += mem_size
+            self.key_sets['memory'].add(key)
+        else:
+            self.cache[key]["value"] = value
+            self.key_sets['memory'].add(key)
+        self.evict()
 
-        # Lookup all the object referred to by the object in obj_q.
-        # See: https://docs.python.org/3.7/library/gc.html#gc.get_referents
-        all_refr = ((id(o), o) for o in gc.get_referents(*obj_q))
+    def __getitem__(self, key):
+        # Check if key is in cache
+        content = None
+        if key in self.key_sets['memory']:
+            content = self.cache[key]["value"]
+        elif key in self.key_sets['disk']:
+            page_keys = self.pages[self.cache[key]['page']]
+            results = self.workers.imap(self.load_from_disk, [self.cache[k]["disk"] for k in page_keys if k not in self.key_sets['memory']])
+            for k, value in zip(page_keys, results):
+                self.cache[k]["value"] = value
+                self.key_sets['memory'].add(key)
 
-        # Filter object that are already marked.
-        # Using dict notation will prevent repeated objects.
-        new_refr = {o_id: o for o_id, o in all_refr if o_id not in marked and not isinstance(o, type)}
+            # Return the requested key's value
+            content = self.cache[key]["value"]
+        else:
+            # Key not found in cache
+            raise KeyError(f"{key} not found in cache.")
+        if self.cache[key]['sparse'] is True:
+            for mass_track in content['list_mass_tracks']:
+                mass_track['intensity'] = mass_track['intensity'].todense()[0]
+        return content
 
-        # The new obj_q will be the ones that were not marked,
-        # and we will update marked with their ids so we will
-        # not traverse them again.
-        obj_q = new_refr.values()
-        marked.update(new_refr.keys())
-    return sz
+    def evict(self):
+        # Evict based on memory usage
+        if len(self.key_sets['memory']) > self.page_size:
+            if self.consumption['memory'] > .75 * self.limits['memory']:
+                on_disk_already = [x for x in self.key_sets['memory'] if x in self.key_sets['disk']]
+                print("evicting (fast): ")
+                for k in on_disk_already:
+                    print("\t", k)
+                    self.cache[k]["value"] = None
+                    self.key_sets['memory'].remove(k)
+                    self.consumption['memory'] -= self.cache[k]["sizes"]["memory"]
 
+                not_written = [x for x in self.key_sets['memory'] if x not in self.key_sets['disk']]
+                if not_written:
+                    print("evicting (slow): ")
+                    results = self.workers.starmap(self.save_to_disk, [(self.cache[k]['value']['outfile'], self.cache[k]['value']) for k in not_written])
+                    for k, (save_path, save_size) in zip(not_written, results):
+                        print("\t", k)
+                        self.cache[k]['value'] = None
+                        self.key_sets['memory'].remove(k)
+                        self.key_sets['disk'].add(k)
+                        self.cache[k]['disk'] = save_path
+                        self.cache[k]['sizes']['disk'] = save_size
+                        self.consumption['memory'] -= self.cache[k]["sizes"]["memory"]
+                        self.consumption['disk'] += save_size
+            
+            if self.consumption['disk'] > .75 * self.limits['disk']:
+                not_compressed = [x for x in self.key_sets['disk'] if x not in self.key_sets['compress']]
+                if not_compressed:
+                    results = self.workers.map(self.compress_on_disk, [self.cache[k]['disk'] for k in not_compressed])
+                    print("compressing (very slow): ")
+                    for k, (gz_path, gz_size) in zip(not_compressed, results): 
+                        print("\t", k)               
+                        self.cache[k]['disk'] = gz_path
+                        self.key_sets['compress'].add(k)
+                        self.consumption['disk'] -= self.cache[k]["sizes"]["disk"]
+                        self.consumption['compress'] += gz_size
+
+
+    @staticmethod
+    def compress_on_disk(file_path):
+        if not os.path.isfile(file_path):
+            raise FileNotFoundError(f"The file {file_path} does not exist.")
+        
+        output_file_path = f"{file_path}.gz"
+        
+        with open(file_path, 'rb') as f_in, gzip.open(output_file_path, 'wb') as f_out:
+            pickle_data = f_in.read()
+            f_out.write(pickle_data)
+        
+        return output_file_path, os.path.getsize(output_file_path)
+
+    @staticmethod
+    def save_to_disk(path, data):
+        if path.endswith(".pickle"):
+            with open(path, 'wb') as fh:
+                pickle.dump(data, fh, pickle.HIGHEST_PROTOCOL)
+        elif path.endswith(".pickle.gz"):
+            with gzip.GzipFile(path, 'wb', compresslevel=1) as fh:
+                pickle.dump(data, fh, pickle.HIGHEST_PROTOCOL)
+        return path, os.path.getsize(path)
     
+    @staticmethod
+    def load_from_disk(path):
+        if path.endswith(".pickle"):
+            with open(path, 'rb') as fh:
+                data = pickle.load(fh)
+        elif path.endswith(".pickle.gz"):
+            with gzip.GzipFile(path, 'rb') as fh:
+                data = pickle.load(fh)
+        return data
+
+    @staticmethod
+    def get_obj_size(obj):
+        marked = {id(obj)}
+        obj_q = [obj]
+        sz = 0
+        while obj_q:
+            sz += sum(map(sys.getsizeof, obj_q))
+            all_refr = ((id(o), o) for o in gc.get_referents(*obj_q))
+            new_refr = {o_id: o for o_id, o in all_refr if o_id not in marked and not isinstance(o, type)}
+            obj_q = new_refr.values()
+            marked.update(new_refr.keys())
+        return sz
+
+
 class SimpleSample:
     '''
     Lightweight class of an experimental sample to facilitate workflow.
@@ -64,87 +181,7 @@ class SimpleSample:
     Function to get mass tracks from a mzML file is in workflow.process_project and batch_EIC_from_samples_.
     Peaks and empCpds are determined in constructors.CompositeMap.
     '''
-
-    mass_track_cache = {}
-    sizes = {}
-    sample_order = []
-    order_map = {}
-    memory_limit = 50 * 1024 ** 3
-    memory_use = 0
-    enable_async_preload = True
-    loop = asyncio.new_event_loop()
-    _loop_thread = None
-    _cache_lock = threading.Lock()
-    memory_mode_achieved = False
-    
-
-    @classmethod
-    async def __load_from_disk_async(cls, path):
-        """
-        Asynchronously load data from disk.
-        
-        :param path: The file path to load.
-        :return: The loaded object.
-        """
-        if path.endswith(".pickle"):
-            return await asyncio.to_thread(pickle.load, open(path, 'rb'))
-        elif path.endswith(".pickle.gz"):
-            return await asyncio.to_thread(pickle.load, gzip.GzipFile(path, 'rb'))
-
-    @classmethod
-    def start_preloading(cls):
-            """
-            Start the background preloading process in a separate thread.
-            """
-            print("Starting preloading...")
-            atexit.register(cls.stop_event_loop)
-            import threading
-            # Run the event loop in a separate thread
-            if cls._loop_thread is None:
-                cls._loop_thread = threading.Thread(target=cls._run_event_loop, daemon=True)
-                cls._loop_thread.start()
-
-            asyncio.run_coroutine_threadsafe(cls._preload_files_async(), cls.loop)
-
-    @classmethod
-    def _run_event_loop(cls):
-        """
-        Run the event loop.
-        """
-        asyncio.set_event_loop(cls.loop)
-        cls.loop.run_forever()
-
-    @classmethod
-    def stop_event_loop(cls):
-        if cls.loop.is_running():
-            cls.loop.call_soon_threadsafe(cls.loop.stop)
-            cls._loop_thread.join()
-
-    @classmethod
-    async def _preload_files_async(cls):
-        """
-        Asynchronously preload files in the background.
-        """
-        while SimpleSample.enable_async_preload and cls.memory_use < cls.memory_limit:
-            for data_location in SimpleSample.sample_order:
-                if data_location not in SimpleSample.mass_track_cache:
-                    if cls.memory_use + cls.sizes[data_location] < cls.memory_limit:
-                        print("preloading: ", data_location)
-                        with cls._cache_lock:
-                            SimpleSample.mass_track_cache[data_location] = 'async_load'
-                        # Load the file asynchronously
-                        content = await cls.__load_from_disk_async(data_location)
-                        with cls._cache_lock:
-                            if SimpleSample.mass_track_cache[data_location] == 'async_load':
-                                print("preloaded: ", data_location)
-                                SimpleSample.mass_track_cache[data_location] = content['list_mass_tracks']
-                                cls.memory_use += cls.sizes[data_location]
-            await asyncio.sleep(0)  # Yield control to the event loop
-
-    #@classmethod
-    #def populate_order(cls, directory):
-        #cls.sample_order = sorted([directory + x for x in os.listdir(directory)])
-        #cls.order_map = {x: i for i, x in enumerate(cls.sample_order)}
+    _cached_mass_tracks = None
 
     def __init__(self, registry={}, experiment=None, database_mode='ondisk', mode='pos', is_reference=False):
         '''
@@ -169,9 +206,11 @@ class SimpleSample:
         For larger studies, m/z alignment is done via NN clustering, where m/z accuracy 
         is not checked during MassGrid construction. But it is checked during DB annotation.
         '''
+        if SimpleSample._cached_mass_tracks is None:
+            SimpleSample._cached_mass_tracks = MassTrackCache(self.experiment.parameters)
+
 
         self.__dict__.update(registry)
-        SimpleSample.sizes[self.data_location] = self.size
 
         self.experiment = experiment
         self.is_reference = is_reference 
@@ -186,7 +225,6 @@ class SimpleSample:
         # placeholder
         self.mz_calibration_function = None
         self._cached_mass_tracks = None
-        self.memory_mode_achieved = False
 
     @functools.cached_property
     def mz_tree(self):
@@ -225,165 +263,11 @@ class SimpleSample:
 
     @property
     def list_mass_tracks(self):
-        if SimpleSample.memory_mode_achieved:
-            #for k, v in SimpleSample.mass_track_cache.items():
-            #    print(k, type(v))
-            #    if isinstance(v, str):
-            #        print("\t", v)
-            #exit()
-            return SimpleSample.mass_track_cache[self.data_location]
-        elif self.sample_data:
-            return self.sample_data['list_mass_tracks']
-        elif self._cached_mass_tracks:
-            return self._cached_mass_tracks
-        else:
-            SimpleSample.stop_event_loop()
-            with SimpleSample._cache_lock:
-                to_del = []
-                for x, v in SimpleSample.mass_track_cache.items():
-                    if isinstance(v, str):
-                        to_del.append(x)
-                for x in to_del:
-                    del SimpleSample.mass_track_cache[x]
-                    
-                if self.data_location in SimpleSample.mass_track_cache:
-                    current_content = SimpleSample.mass_track_cache[self.data_location]
-                    if not isinstance(current_content, str):
-                        return current_content
-                SimpleSample.mass_track_cache[self.data_location] = 'sync_load'
-            start = SimpleSample.order_map[self.data_location]
-            to_load = [self.data_location]
-            if self.is_reference:
-                with SimpleSample._cache_lock:
-                    results = [load_from_disk(self.data_location, direct=True)]
-                    SimpleSample.mass_track_cache.update({x: y['list_mass_tracks'] for x,y in results})
-                    mass_tracks = SimpleSample.mass_track_cache[self.data_location]
-                    self._cached_mass_tracks = mass_tracks
-                    return mass_tracks
-            else:
-                with SimpleSample._cache_lock:
-                    # skip this if the reference sample as the reference sample can be requested out of order
-                    if not self.is_reference:
-                        ii = 0
-                        preloadable = set()
-                        for x in SimpleSample.sizes:
-                            if x != self.data_location:
-                                if x in SimpleSample.mass_track_cache:
-                                    if isinstance(SimpleSample.mass_track_cache[x], str):
-                                        preloadable.add(x)
-                                else:
-                                    preloadable.add(x)
-                        while preloadable:
-                            ii += 1
-                            to_preload = SimpleSample.sample_order[(start + ii) % len(SimpleSample.sample_order)]
-                            if to_preload in preloadable:
-                                preloadable.remove(to_preload)
-                                preload_size = SimpleSample.sizes[to_preload]
-                                chunk_mem_size = 0
-                                if SimpleSample.memory_use + preload_size < SimpleSample.memory_limit:
-                                    if to_preload not in SimpleSample.mass_track_cache:
-                                        to_load.append(to_preload)
-                                        chunk_mem_size += preload_size
-                                        SimpleSample.memory_use += preload_size
-                                        SimpleSample.mass_track_cache[to_preload] = 'sync_load'
-                                else:
-                                    break
-                with mp.Pool(min(self.experiment.parameters['multicores'], len(to_load))) as workers:
-                    results = workers.map(load_from_disk, to_load)
-                with SimpleSample._cache_lock:
-                    if SimpleSample.memory_use + min(SimpleSample.sizes.values()) > SimpleSample.memory_limit:    
-                        print("Dropping Cache")
-                        SimpleSample.mass_track_cache = {x: y['list_mass_tracks'] for x,y in results}
-                        SimpleSample.memory_use = chunk_mem_size
-                    else:
-                        print("Updating Cache")
-                        SimpleSample.mass_track_cache.update({x: y['list_mass_tracks'] for x,y in results})
-                    SimpleSample.stop_event_loop() # probably not needed
-                    if not [x for x in SimpleSample.sizes if x not in SimpleSample.mass_track_cache]:
-                        SimpleSample.memory_mode_achieved = True
-                    else:
-                        SimpleSample.start_preloading()
-                    return SimpleSample.mass_track_cache[self.data_location]
-    
-    def tracks_by_mz(self, query_mass):
-        track_set = set()
-        for x in self.mz_tree.at(float(query_mass) - 1.0072764665789):
-            track_set.add(x.data)
-        return track_set
-    
-    def retrieve_tracks_id(self, id):
-        if isinstance(id, Iterable):
-            return [self.retrieve_tracks_id(x) for x in id]
-        return self.retrieve_track_id(id)
+        return SimpleSample._cached_mass_tracks[self.data_location]['list_mass_tracks']
 
-    def retrieve_track_id(self, id):
-        import matplotlib.pyplot as plt
-        for x in self.list_mass_tracks:
-            if x['id_number'] == id:
-                return x
-    
-            
-    def find_kovats(self, kovats_csv="/Users/mitchjo/asari/asari/db/kovats.csv"):
-        import matplotlib.pyplot as plt
-        from .peaks import stats_detect_elution_peaks
-
-        kovats = pd.read_csv(kovats_csv)
-        for kovat in kovats.to_dict(orient='records'):
-            for t in self.retrieve_tracks_id(self.tracks_by_mz(kovat['mass'])):
-                EP = stats_detect_elution_peaks(t,                                           
-                                           len(t['intensity']), 
-                                           self.experiment.parameters['min_peak_height'],
-                                           self.experiment.parameters['min_peak_ratio'],
-                                           round(0.5 * self.experiment.parameters['min_timepoints']),
-                                           self.experiment.parameters['min_prominence_threshold'],
-                                           self.experiment.parameters['wlen'],
-                                           self.experiment.parameters['signal_noise_ratio'] * 100,
-                                           self.experiment.parameters['gaussian_shape'],
-                                           .02,
-                                           False,
-                                           self.experiment.parameters['min_intensity_threshold'])
-                if EP:
-                    plt.scatter(range(len(t['intensity'])), t['intensity'], c='k')
-                    for p in EP:
-                        print(p['apex'], p['height'])
-                        plt.scatter(p['apex'], p['height'], c='r')
-                    plt.show()
-                print(kovat, len(EP))
-                for p in EP:
-                    print("\t", p)
-
-        exit()
-
-    def find_kovats2(self, kovats_csv="/Users/mitchjo/asari/asari/db/kovats.csv"):
-        kovats = pd.read_csv(kovats_csv)
-        kovats_hits = []
-        for kovat in kovats.to_dict(orient='records'):
-            kovat_result = dict(kovat)
-            matching_track_ids = self.tracks_by_mz(kovat['mass'])
-            matching_tracks = self.retrieve_tracks_id(matching_track_ids)
-            likely_track = {'mass_track_id': None,
-                            'max_intensity': 0,
-                            'apex': None}
-            for m_t in matching_tracks:
-                apex_tracker = {
-                    'intensity': 0,
-                    'apex': None
-                }
-                for i, intensity in enumerate(m_t['intensity']):
-                    if intensity > apex_tracker['intensity']:
-                        apex_tracker['intensity'] = intensity 
-                        apex_tracker['apex'] = i
-                if apex_tracker['intensity'] > likely_track['max_intensity']:
-                    likely_track['mass_track_id'] = m_t['id_number']
-                    likely_track['max_intensity'] = apex_tracker['intensity']
-                    likely_track['apex'] = apex_tracker['apex']
-            if likely_track['apex']:
-                kovat_result.update(likely_track)
-                kovats_hits.append(kovat_result)
-        return kovats_hits
-                
-
-
-
-
+    @staticmethod
+    def save(data, parameters):
+        if SimpleSample._cached_mass_tracks is None:
+            SimpleSample._cached_mass_tracks = MassTrackCache(parameters)
+        SimpleSample._cached_mass_tracks[data['data_location']] = data['sample_data']
 
