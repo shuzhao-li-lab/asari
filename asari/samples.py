@@ -40,12 +40,11 @@ class MassTrackCache():
             if len(self.pages[-1]) == self.page_size:
                 self.pages.append([])
             self.pages[-1].append(key)
-            mem_size = self.get_obj_size(value)
 
             if self.sparsify:
                 for mass_track in value['list_mass_tracks']:
                     mass_track['intensity'] = scipy.sparse.coo_array(mass_track['intensity'])
-
+            mem_size = self.get_obj_size(value)
             self.cache[key] = {
                 "value": value,
                 "disk": False,
@@ -62,7 +61,9 @@ class MassTrackCache():
         else:
             self.cache[key]["value"] = value
             self.key_sets['memory'].add(key)
-        self.evict()
+        print(self.consumption['memory'], self.limits['memory'])
+        if len(self.key_sets['memory']) > self.page_size:
+            self.evict()
 
     def __getitem__(self, key):
         # Check if key is in cache
@@ -88,7 +89,8 @@ class MassTrackCache():
 
     def evict(self):
         # Evict based on memory usage
-        if len(self.key_sets['memory']) > self.page_size:
+        print(self.consumption['memory'], self.limits['memory'])
+        if True: #len(self.key_sets['memory']) > self.page_size:
             if self.consumption['memory'] > .75 * self.limits['memory']:
                 on_disk_already = [x for x in self.key_sets['memory'] if x in self.key_sets['disk']]
                 print("evicting (fast): ")

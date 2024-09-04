@@ -13,6 +13,7 @@ import pymzml
 import pickle
 import gzip
 
+from .peaks import audit_mass_track
 from .experiment import ext_Experiment
 from .chromatograms import extract_massTracks_ 
 
@@ -173,7 +174,8 @@ def make_iter_parameters(sample_registry, parameters):
             parameters['min_timepoints'], 
             parameters['min_peak_height'], 
             parameters['intensity_multiplier'], 
-            os.path.join(parameters['outdir'], 'pickle', os.path.basename(sample['input_file']).replace('.mzML', '')+'.pickle')
+            os.path.join(parameters['outdir'], 'pickle', os.path.basename(sample['input_file']).replace('.mzML', '')+'.pickle'),
+            parameters
             )
 
 
@@ -228,7 +230,8 @@ def single_sample_EICs_(sample_id,
                         min_timepoints, 
                         min_peak_height, 
                         intensity_multiplier,
-                        outfile):
+                        outfile,
+                        parameters):
     '''
     Extraction of mass tracks from a single sample. Used by multiprocessing in batch_EIC_from_samples_.
     `shared_dict` is used to pass back information, thus critical. Designed here as
@@ -292,7 +295,21 @@ def single_sample_EICs_(sample_id,
                     intensity_multiplier=intensity_multiplier)
         
         list_mass_tracks = [{'id_number': ii, 'mz': t[0], 'intensity': t[1]} for ii, t in enumerate(xdict['tracks'])]
+        for mass_track in list_mass_tracks:
+            audit_results = audit_mass_track(
+                mass_track['intensity'],
+                min_fwhm=round(0.5 * parameters['min_timepoints']),
+                min_intensity_threshold=parameters['min_intensity_threshold'],
+                min_peak_height=parameters['min_peak_height'],
+                min_peak_ratio=parameters['signal_noise_ratio']
+            )
+            _baseline_, noise_level, scaling_factor, min_peak_height, list_intensity = audit_results
+            mass_track['baseline'] = _baseline_
+            mass_track['noise_level'] = noise_level
+
+
         anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(list_mass_tracks, mz_tolerance_ppm=mz_tolerance_ppm)
+
 
         new = {
             'sample_id': sample_id,

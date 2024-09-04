@@ -151,6 +151,13 @@ class ext_Experiment:
         for reference_id in tqdm.tqdm(list(dict.fromkeys(list(sample_map.values())))):
             RI_maps[reference_id] = {}
             reference_instance = SimpleSample(self.sample_registry[reference_id], experiment=self)
+
+            for rt, scan_no in zip(reference_instance.list_retention_time, reference_instance.list_scan_numbers):
+                print(rt, scan_no)
+
+
+
+            exit()
             i = 0
             while i < max(RI_list[reference_instance.name]):
                 if i < min(RI_list[reference_instance.name]):
