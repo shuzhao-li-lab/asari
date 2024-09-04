@@ -63,6 +63,8 @@ class ext_Experiment:
         self.reference_sample_id = self.get_reference_sample_id()
         self.selected_unique_features = {}
 
+        self.RI_map = {}
+
     @property
     def output_dir(self):
         return self.parameters['outdir']
@@ -140,20 +142,39 @@ class ext_Experiment:
             association[non_RI_sample] = last_reference
         return association
     
-    def convert_to_RI(self, sample_map):
+    def populate_RI_lookup(self, sample_map):
         from .samples import SimpleSample
         import tqdm
+        import pandas as pd
+        RI_maps = {}
+        RI_list = pd.read_csv("/Users/mitchjo/asari/asari/RI_hints.csv")
         for reference_id in tqdm.tqdm(list(dict.fromkeys(list(sample_map.values())))):
+            RI_maps[reference_id] = {}
             reference_instance = SimpleSample(self.sample_registry[reference_id], experiment=self)
-            hits = reference_instance.find_kovats()
-            to_process = []
-            for sample_id, sample_reference in sample_map.items():
-                if sample_reference == reference_id:
-                    to_process.append(sample_id)
-            
-            for sample_id in to_process:
-                sample_instance = SimpleSample(self.sample_registry[sample_id], experiment=self)
-                sample_instance.list_mass_tracks
+            i = 0
+            while i < max(RI_list[reference_instance.name]):
+                if i < min(RI_list[reference_instance.name]):
+                    RI_maps[reference_id][i] = 0
+                else:
+                    this_n, next_n = None, None
+                    this_scan, next_scan = None, None
+                    for ri, scan_no in zip(RI_list['Index'], RI_list[reference_instance.name]):
+                        if i >= scan_no:
+                            this_n, this_scan = ri, scan_no
+                        else:
+                            next_n, next_scan = ri, scan_no
+                            break
+                    if this_n and next_n:
+                        RI_maps[reference_id][i] = 100 * (this_n + ((i-this_scan)/(next_scan - i)))
+                i += 1
+
+    def convert_to_RI(self, sample_map):
+        if not self.RI_map:
+            self.populate_RI_lookup(sample_map)
+        for k, v in sample_map.items():
+            print(k, v)
+
+
 
     def process_all_GC(self):
         sample_run_order = self.determine_acquisition_order()
