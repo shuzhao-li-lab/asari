@@ -212,12 +212,13 @@ def batch_EIC_from_samples_(sample_registry, parameters):
             except:
                 pass
         with mp.Pool(parameters['multicores']) as workers:
-            for r in workers.map(wrapped_EIC, batch):
-                sid, sam = r
-                SimpleSample.save(sam, parameters)
-                del sam['sample_data']
-                shared_dict[sid] = sam
+            results = workers.map(wrapped_EIC, batch)
             workers.terminate()
+        for r in results:
+            sid, sam = r
+            SimpleSample.save(sam, parameters)
+            del sam['sample_data']
+            shared_dict[sid] = sam
     return shared_dict
 
 def single_sample_EICs_(sample_id, 
