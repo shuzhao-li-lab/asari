@@ -41,12 +41,20 @@ def batch_deep_detect_elution_peaks(list_mass_tracks, number_of_scans, parameter
     '''
     FeatureList = []
     params = iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters)
-    with mp.Pool(parameters['multicores']) as pool:
-        results = pool.starmap(stats_detect_elution_peaks, params)
-    for peak_list in results:
-        FeatureList += peak_list
-    return FeatureList
-
+    try:
+        with mp.Pool(parameters['multicores']) as pool:
+            results = pool.starmap(stats_detect_elution_peaks, params)
+        for peak_list in results:
+            FeatureList += peak_list
+        return FeatureList
+    except BrokenPipeError:
+        # fall back if mp failed
+        for param in params:
+            for peak_list in stats_detect_elution_peaks(param):
+                FeatureList += peak_list
+        return FeatureList
+    except Exception as e:
+        print("Error occured during peak picking!")
 
 def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters):
     '''
@@ -73,13 +81,12 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
         wlen, snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold, 
         shared_list), ...]
     '''
-    iters = []
     min_prominence_ratio = 0.02          # only used on very high peaks
     iteration = False                    # a 2nd round of peak detection if enough remaining datapoints
     for mass_track in list_mass_tracks:
         if mass_track['intensity'].max() > parameters['min_peak_height']:
-            iters.append(
-                (mass_track, 
+            yield (
+                 mass_track, 
                  number_of_scans, 
                  parameters['min_peak_height'], 
                  parameters['min_peak_ratio'], 
@@ -91,8 +98,7 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
                  min_prominence_ratio, # only used on very high peaks
                  iteration, # a 2nd round of peak detection if enough remaining datapoints
                  parameters['min_intensity_threshold'])
-            )
-    return iters
+
 
 
 
