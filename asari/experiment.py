@@ -3,6 +3,7 @@ import sys
 import json
 import pickle
 import functools
+import pandas as pd
 
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
@@ -436,25 +437,31 @@ class ext_Experiment:
             \t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\
             \tname_1st_guess\tmatched_DB_shorts\tmatched_DB_records\n"
         
-        for _, V in dict_empCpds.items():
+        records = []
+        for V in dict_empCpds.values():
             name_1st_guess, matched_DB_shorts, matched_DB_records = '', '', ''
-            if 'list_matches' in V:
-                list_matches = V['list_matches']
-                if list_matches:
-                    name_1st_guess = KCD.mass_indexed_compounds[list_matches[0][0]]['compounds'][0]['name']
-                    matched_DB_shorts = ", ".join([ "(" + KCD.short_report_emp_cpd(xx[0]) + ")"  for xx in list_matches])
-                    matched_DB_records = ", ".join([str(xx) for xx  in list_matches])
+            list_matches = V.get('list_matches', None)
+            if list_matches:
+                name_1st_guess = KCD.mass_indexed_compounds[list_matches[0][0]]['compounds'][0]['name']
+                matched_DB_shorts = ", ".join([ "(" + KCD.short_report_emp_cpd(xx[0]) + ")"  for xx in list_matches])
+                matched_DB_records = ", ".join([str(xx) for xx  in list_matches])
 
             for peak in V['MS1_pseudo_Spectra']:
-                s += '\t'.join([str(x) for x in [
-                    peak['id_number'], peak['mz'], peak['rtime'], peak['apex'], 
-                    V['interim_id'], peak.get('ion_relation', ''),
-                    V['neutral_formula'], V['neutral_formula_mass'],
-                    name_1st_guess, matched_DB_shorts, matched_DB_records]]) + "\n"
-
+                records.append({
+                    "[peak]id_number": peak['id_number'],
+                    "mz": peak['mz'],
+                    "time": peak['rtime'],
+                    "apex": peak['apex'],
+                    "[EmpCpd]interim_id": V['interim_id'],
+                    "[EmpCpd]ion_relation": peak.get('ion_relation', ''),
+                    "neutral_formula": V['neutral_formula'],
+                    "neutral_formula_mass": V['neutral_formula_mass'],
+                    "name_1st_guess": name_1st_guess,
+                    "matched_DB_shorts": matched_DB_shorts,
+                    "matched_DB_records": matched_DB_records
+                })
         outfile = os.path.join(self.parameters['outdir'], export_file_name_prefix + '.tsv')
-        with open(outfile, encoding='utf-8', mode='w') as O:
-            O.write(s)
+        pd.DataFrame(records).to_csv(outfile, sep="\t")
 
         print("\nAnnotation of %d Empirical compounds was written to %s.\n\n" %(len(dict_empCpds), outfile))
 
@@ -529,6 +536,7 @@ class ext_Experiment:
 
         use_cols = [ 'id_number', 'mz', 'rtime', 'rtime_left_base', 'rtime_right_base', 'parent_masstrack_id', 
                     'peak_area', 'cSelectivity', 'goodness_fitting', 'snr', 'detection_counts' ] + good_samples
+        
         filtered_FeatureTable = self.CMAP.FeatureTable[use_cols]
         filtered_FeatureTable['mz'] = filtered_FeatureTable['mz'].round(4)
         filtered_FeatureTable['rtime'] = filtered_FeatureTable['rtime'].round(2)
@@ -587,10 +595,13 @@ class ext_Experiment:
         Export project parameters to project.json,
         which is also used by asari viz.
         '''
-        self.parameters['number_of_samples'] = self.number_of_samples
-        self.parameters['number_scans'] = self.number_scans
-        # Record of dropped samples. Right place in log, wrong name in parameters
-        self.parameters['dropped_samples'] = self.dropped_sample_names
+        self.parameters.update(
+            {
+            'number_of_samples': self.number_of_samples,
+            'number_scans': self.number_scans,
+            'dropped_samples': self.dropped_sample_names
+            }
+        )
         outfile = os.path.join(self.parameters['outdir'], 'project.json')
         with open(outfile, 'w', encoding='utf-8') as f:
             json.dump(self.parameters, f, cls=NpEncoder, ensure_ascii=False, indent=2)

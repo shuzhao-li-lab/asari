@@ -10,8 +10,6 @@ import time
 import multiprocessing as mp
 import os
 import pymzml
-import pickle
-import gzip
 
 from .peaks import audit_mass_track
 from .experiment import ext_Experiment
@@ -206,19 +204,20 @@ def batch_EIC_from_samples_(sample_registry, parameters):
     '''
     shared_dict = {}
     iters = list(make_iter_parameters(sample_registry, parameters))
-    with mp.Pool(parameters['multicores']) as workers:
-        while iters:
-            batch = []
-            for _ in range(parameters['multicores']):
-                try:
-                    batch.append(iters.pop())
-                except:
-                    pass
-            for r in workers.imap(wrapped_EIC, batch):
+    while iters:
+        batch = []
+        for _ in range(parameters['multicores']):
+            try:
+                batch.append(iters.pop())
+            except:
+                pass
+        with mp.Pool(parameters['multicores']) as workers:
+            for r in workers.map(wrapped_EIC, batch):
                 sid, sam = r
                 SimpleSample.save(sam, parameters)
                 del sam['sample_data']
                 shared_dict[sid] = sam
+            workers.terminate()
     return shared_dict
 
 def single_sample_EICs_(sample_id, 

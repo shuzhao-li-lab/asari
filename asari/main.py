@@ -209,7 +209,10 @@ def main(parameters=PARAMETERS):
     if args.ppm:
         parameters['mz_tolerance_ppm'] = args.ppm
     if args.cores:
-        parameters['multicores'] = min(mp.cpu_count(), args.cores)
+        if args.cores == -1:
+            parameters['multicores'] = mp.cpu_count()
+        else:
+            parameters['multicores'] = min(mp.cpu_count(), args.cores)
     if args.project:
         parameters['project_name'] = args.project
     if args.output:
