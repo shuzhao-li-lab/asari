@@ -9,6 +9,8 @@ import gc
 import sys
 import numpy as np
 import scipy
+import time
+from scipy import interpolate
 
 class MassTrackCache():
     def __init__(self, parameters) -> None:
@@ -41,7 +43,7 @@ class MassTrackCache():
     
     @property
     def not_written(self):
-        return [k for k in self.key_sets['memory']]
+        return [k for k in self.key_sets['memory'] if k not in self.key_sets["disk"]]
     
     @property
     def compressable(self):
@@ -49,11 +51,11 @@ class MassTrackCache():
 
     @property
     def memory_full(self):
-        return self.memory_use > self.limits['memory']
+        return self.memory_use > self.limits['memory'] * .75
     
     @property
     def disk_full(self):
-        return self.disk_use > self.limits['disk']
+        return self.disk_use > self.limits['disk'] * .75
 
     @property
     def page_full(self):
@@ -91,11 +93,11 @@ class MassTrackCache():
     def __getitem__(self, key):
         # Check if key is in cache
         content = None
-        if key in self.key_sets['memory'] and self.cache[key]["value"]:
-            content = self.cache[key]["value"]
+        cached_value = self.cache[key]["value"]
+        if cached_value:
+            return cached_value
         elif key in self.key_sets['disk']:
             page_keys = [k for k in self.pages[self.cache[key]['page']] if k not in self.key_sets['memory']]
-            
             try:
                 with mp.Pool(self.page_size) as workers:
                     results = workers.map(self.load_from_disk, [self.cache[k]["disk"] for k in page_keys])
@@ -104,12 +106,11 @@ class MassTrackCache():
                             content = value
                         self.cache[k]["value"] = value
                         self.key_sets['memory'].add(k)
-                    return content
             except BrokenPipeError:
-                result = self.load_from_disk(self.cache[key]['disk'])
-                self.cache[key]['value'] = result
+                value = self.load_from_disk(self.cache[key]['disk'])
+                self.cache[key]['value'] = value
                 self.key_sets['memory'].add(key)
-                return result
+                content = value
         else:
             # Key not found in cache
             raise KeyError(f"{key} not found in cache.")
@@ -120,61 +121,78 @@ class MassTrackCache():
 
     def evict(self):
         if self.page_full:
-            if True:
+            if self.memory_full:
                 print("evicting (fast): ")
                 for k in self.fast_evictable:
                     print("\t", k)
                     del self.cache[k]["value"]
-                    gc.collect()
                     self.cache[k]["value"] = None
                     self.key_sets['memory'].remove(k)
-
-
-                if True:
-                    with mp.Pool(self.page_size) as workers:
-                        print("evicting (slow): ")
-                        results = workers.starmap(self.save_to_disk,[(self.cache[k]['value']['outfile'], self.cache[k]['value']) for k in self.not_written])
-                        for k, (save_path, save_size) in zip(self.not_written, results):
-                            print("\t", k)
+                if self.memory_full:
+                    try:
+                        with mp.Pool(self.page_size) as workers:
+                            print("evicting (slow): ")
+                            results = workers.starmap(self.save_to_disk,[(self.cache[k]['value']['outfile'], self.cache[k]['value']) for k in self.not_written])
+                            for k, (save_path, save_size) in zip(self.not_written, results):
+                                print("\t", k)
+                                del self.cache[k]["value"]
+                                self.cache[k]['value'] = None
+                                self.key_sets['memory'].remove(k)
+                                self.key_sets['disk'].add(k)
+                                self.cache[k]['disk'] = save_path
+                                self.cache[k]['sizes']['disk'] = save_size
+                            workers.terminate()
+                    except BrokenPipeError:
+                        for to_evict in [(self.cache[k]['value']['outfile'], self.cache[k]['value']) for k in self.not_written]:
+                            save_path, save_size = self.save_to_disk(to_evict)
                             del self.cache[k]["value"]
-                            gc.collect()
                             self.cache[k]['value'] = None
                             self.key_sets['memory'].remove(k)
                             self.key_sets['disk'].add(k)
                             self.cache[k]['disk'] = save_path
                             self.cache[k]['sizes']['disk'] = save_size
-                        workers.terminate()
             
             if self.disk_full:
-                not_compressed = [x for x in self.key_sets['disk'] if x not in self.key_sets['compress']]
-                if not_compressed:
-                    with mp.Pool(self.page_size) as workers:
-                        results = workers.map(self.compress_on_disk, [self.cache[k]['disk'] for k in not_compressed])
-                        print("compressing (very slow): ")
-                        for k, (gz_path, gz_size) in zip(not_compressed, results): 
-                            print("\t", k)               
+                if self.compressable:
+                    try:
+                        with mp.Pool(self.page_size) as workers:
+                            results = workers.map(self.compress_on_disk, [self.cache[k]['disk'] for k in self.compressable])
+                            print("compressing (very slow): ")
+                            for k, (gz_path, gz_size) in zip(self.compressable, results): 
+                                print("\t", k)               
+                                self.cache[k]['disk'] = gz_path
+                                self.key_sets['compress'].add(k)
+                                self.cache[k]['sizes']['compress'] = gz_size
+                            workers.terminate()
+                    except BrokenPipeError:
+                        for to_compress in [self.cache[k]['disk'] for k in self.compressable]:
+                            gz_path, gz_size = self.compress_on_disk(to_compress)
                             self.cache[k]['disk'] = gz_path
                             self.key_sets['compress'].add(k)
                             self.cache[k]['sizes']['compress'] = gz_size
-                        workers.terminate()
+
+        gc.collect()
 
 
     @staticmethod
     def compress_on_disk(file_path):
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"The file {file_path} does not exist.")
-        
         output_file_path = f"{file_path}.gz"
+
         try:
-            with open(file_path, 'rb') as f_in:
-                data = pickle.load(f_in)
-                with gzip.open(output_file_path, 'wb') as f_out:
-                    pickle.dump(data, f_out)
+            f_in = open(file_path, 'rb')
+            f_out = gzip.open(output_file_path, 'wb', compresslevel=1)
+            pickle.dump(pickle.load(f_in), f_out)
+            f_in.close()
+            f_out.close()
+            time.sleep(1)
             os.remove(file_path)
+            return output_file_path, os.path.getsize(output_file_path)
         except:
-            print("failure compressing")
-        
-        return output_file_path, os.path.getsize(output_file_path)
+            print("failure_compressing")
+            return file_path, os.path.getsize(file_path)
+            
 
     @staticmethod
     def save_to_disk(path, data):
@@ -263,6 +281,9 @@ class SimpleSample:
         # placeholder
         self.mz_calibration_function = None
         self._reference_tracks = None
+
+        self.calibrations = []
+        self.reverse_calibrations = []
 
     @functools.cached_property
     def mz_tree(self):

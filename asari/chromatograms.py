@@ -346,6 +346,7 @@ def rt_lowess_calibration(good_landmark_peaks,
         See __hacked_lowess__.
     '''
     # force left and right ends, to prevent runaway curve functions
+    print(reference_rt_numbers)
     reference_rt_bound = max(reference_rt_numbers)
     sample_rt_bound = max(sample_rt_numbers)
     rt_rightend_ = 1.1 * sample_rt_bound
@@ -403,7 +404,11 @@ def clean_rt_calibration_points(rt_cal_pairs):
 
 def rt_lowess_calibration_debug(good_landmark_peaks, 
                           selected_reference_landmark_peaks, 
-                          sample_rt_numbers, reference_rt_numbers, num_iterations, sample_name, outdir):
+                          sample_rt_numbers, 
+                          reference_rt_numbers, 
+                          num_iterations, 
+                          sample_name, 
+                          outdir):
     '''
     This is the debug version of rt_lowess_calibration.
 
@@ -500,29 +505,6 @@ def __hacked_lowess__(yy, xx, frac, it, xvals):
     newx, newy = list(zip(*lxy))
     interf = interpolate.interp1d(newx, newy)
     return interf(xvals)
-
-
-def savitzky_golay_spline(good_landmark_peaks, selected_reference_landmark_peaks, sample_rt_numbers, reference_rt_numbers):
-    '''
-    Placeholder.
-    Modified Savitzky-Golay filter followed by spline fitting - pls follow format in rt_lowess.
-    Because our data are not equally spaced, sav-gol method may produce undesired errors.
-    # UnivariateSpline can't handle redundant values -
-    spl = UnivariateSpline(xx, yy, )
-    sample.rt_calibration_function = spl
-    # rt_remap_dict will be used for index mapping to the reference sample; 
-    for ii in sample.rt_numbers:
-        sample.rt_remap_dict[ii] = round(spl(ii), None)
-    '''
-    pass
-
-def dwt_rt_calibrate(good_landmark_peaks, selected_reference_landmark_peaks, sample_rt_numbers, reference_rt_numbers):
-    '''
-    Placeholder.
-    Not implemented.
-    '''
-    pass
-
 
 def remap_intensity_track(intensity_track, new, rt_cal_dict):
     '''

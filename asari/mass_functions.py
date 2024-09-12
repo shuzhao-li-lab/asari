@@ -58,7 +58,7 @@ def check_close_mzs(mzlist, ppm_tol=5):
 # Mass selectivity
 # -----------------------------------------------------------------------------
 
-def calculate_selectivity(sorted_mz_list, std_ppm=5):
+def calculate_selectivity(sorted_mz_list, std_ppm):
     '''
     To calculate m or d-selectivity for a list of m/z values, 
     which can be all features in an experiment or a database.
@@ -125,7 +125,7 @@ def calculate_selectivity(sorted_mz_list, std_ppm=5):
 # Mapping and Alignment methods
 # -----------------------------------------------------------------------------
 
-def mass_paired_mapping(list1, list2, std_ppm=5):
+def mass_paired_mapping(list1, list2, std_ppm):
     '''
     To find unambiguous matches of m/z values between two lists. 
     Nonunique matches are left out.
@@ -210,7 +210,7 @@ def mass_paired_mapping(list1, list2, std_ppm=5):
 
     return mapped, ratio_deltas
 
-def complete_mass_paired_mapping(list1, list2, std_ppm=5):
+def complete_mass_paired_mapping(list1, list2, std_ppm):
     '''
     To find best matched pairs of m/z values between two lists. 
     When multiple matches occur within std_ppm, this keeps the pair of closest m/z.
@@ -274,7 +274,7 @@ def complete_mass_paired_mapping(list1, list2, std_ppm=5):
     list2_unmapped = [x for x in range(len(list2)) if x not in [y[1] for y in mapped]]
     return mapped, list1_unmapped, list2_unmapped
 
-def all_mass_paired_mapping(list1, list2, std_ppm=5):
+def all_mass_paired_mapping(list1, list2, std_ppm):
     '''
     To find all matched pairs of m/z values between two lists. 
     When multiple matches occur within std_ppm, this keeps all pairs. 
@@ -345,7 +345,7 @@ def _find_all_mzmatches_centurion_indexed_list(query_mz, mz_centurion_tree, limi
                 
     return results
 
-def mass_paired_mapping_with_correction(list1, list2, std_ppm=5, correction_tolerance_ppm=1):
+def mass_paired_mapping_with_correction(list1, list2, std_ppm, correction_tolerance_ppm=1):
     '''
     To find unambiguous matches of m/z values between two lists, 
     with correciton on list2 if m/z shift exceeds correction_tolerance_ppm.
@@ -376,9 +376,11 @@ def mass_paired_mapping_with_correction(list1, list2, std_ppm=5, correction_tole
 
     return mapped, _r
 
-def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks, 
-                            SM_mzlist, SM_landmarks, 
-                            std_ppm=5, 
+def landmark_guided_mapping(REF_reference_mzlist, 
+                            REF_landmarks, 
+                            SM_mzlist, 
+                            SM_landmarks, 
+                            std_ppm, 
                             correction_tolerance_ppm=1
                             ):
     '''

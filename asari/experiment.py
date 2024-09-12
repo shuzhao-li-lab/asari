@@ -4,7 +4,10 @@ import json
 import pickle
 import functools
 import pandas as pd
-
+from scipy import interpolate
+from .chromatograms import __hacked_lowess__
+from scipy.ndimage import uniform_filter1d
+from statsmodels.nonparametric.smoothers_lowess import lowess
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
 from .default_parameters import adduct_search_patterns, \
@@ -63,8 +66,12 @@ class ext_Experiment:
         self.all_samples = self.all_sample_instances = []
         self.reference_sample_id = self.get_reference_sample_id()
         self.selected_unique_features = {}
-
+        self.mapping = None
         self.RI_map = {}
+
+    @property
+    def outdir(self):
+        return self.output_dir
 
     @property
     def output_dir(self):
@@ -90,7 +97,7 @@ class ext_Experiment:
     def number_scans(self):
         return max([self.sample_registry[k]['max_scan_number'] for k in self.valid_sample_ids]) + 1
         
-    def get_reference_sample_id(self):
+    def get_reference_sample_id(self, allowed_reference_names=None):
         '''
         get_reference_sample_id either by user specification, or
         using the sample of most number_anchor_mz_pairs.
@@ -105,7 +112,10 @@ class ext_Experiment:
                     return k
 
         elif self.sample_registry:
-            L = [(v['number_anchor_mz_pairs'], v['sample_id']) for v in self.sample_registry.values()]
+            if allowed_reference_names:
+                L = [(v['number_anchor_mz_pairs'], v['sample_id']) for v in self.sample_registry.values() if v['sample_id'] in allowed_reference_names]
+            else:
+                L = [(v['number_anchor_mz_pairs'], v['sample_id']) for v in self.sample_registry.values()]
             L.sort(reverse=True)
             ref = self.sample_registry[L[0][1]]
             self.parameters['reference'] = ref['input_file']
@@ -148,46 +158,64 @@ class ext_Experiment:
         import tqdm
         import pandas as pd
         RI_maps = {}
+        RI_models = {}
+        reverse_RI_models = {}
         RI_list = pd.read_csv("/Users/mitchjo/asari/asari/RI_hints.csv")
         for reference_id in tqdm.tqdm(list(dict.fromkeys(list(sample_map.values())))):
             RI_maps[reference_id] = {}
             reference_instance = SimpleSample(self.sample_registry[reference_id], experiment=self)
 
+            this_index, next_index = None, None
+            this_rt, next_rt = None, None
+
+            RTs, indexes, scan_nos = [], [], []
             for rt, scan_no in zip(reference_instance.list_retention_time, reference_instance.list_scan_numbers):
-                print(rt, scan_no)
+                for t, index in zip(RI_list['Index'], RI_list[reference_instance.name]):
+                    if rt >= t:
+                        this_rt, this_index = t, index
+                    else:
+                        next_rt, next_index = t, index
+                        break
+                if this_rt and next_rt:
+                    RTs.append(rt)
+                    index = 100 * (this_index + ((rt-this_rt)/(next_rt - rt)))
+                    indexes.append(index)
+                    scan_nos.append(scan_no)
+                    RI_maps[reference_id][rt] = 100 * (this_index + ((rt-this_rt)/(next_rt - rt)))
+            model = lowess(indexes, RTs)
+            model2 = lowess(indexes, scan_nos)
+            newx, newy = list(zip(*model))
+            interf = interpolate.interp1d(newx, newy)
+            RI_models[reference_id] = interf
 
+            newx, newy = list(zip(*model2))
+            reverse_RI_models[reference_id] = interpolate.interp1d(newy, newx)
 
+        self.RI_models = RI_models
+        self.reverse_RI_models = reverse_RI_models
 
-            exit()
-            i = 0
-            while i < max(RI_list[reference_instance.name]):
-                if i < min(RI_list[reference_instance.name]):
-                    RI_maps[reference_id][i] = 0
-                else:
-                    this_n, next_n = None, None
-                    this_scan, next_scan = None, None
-                    for ri, scan_no in zip(RI_list['Index'], RI_list[reference_instance.name]):
-                        if i >= scan_no:
-                            this_n, this_scan = ri, scan_no
-                        else:
-                            next_n, next_scan = ri, scan_no
-                            break
-                    if this_n and next_n:
-                        RI_maps[reference_id][i] = 100 * (this_n + ((i-this_scan)/(next_scan - i)))
-                i += 1
 
     def convert_to_RI(self, sample_map):
+        import matplotlib.pyplot as plt
         if not self.RI_map:
             self.populate_RI_lookup(sample_map)
         for k, v in sample_map.items():
-            print(k, v)
+            sam = self.sample_registry[k]
+            sam['list_retention_index'] = self.RI_models[v](sam['list_retention_time'])
+        
 
 
 
     def process_all_GC(self):
+        self.CMAP = CompositeMap(self)
         sample_run_order = self.determine_acquisition_order()
         mapping = self.associate_stds_samples(sample_run_order)
-        self.convert_to_RI(mapping)
+        self.mapping = mapping
+        self.populate_RI_lookup(mapping)
+        #self.convert_to_RI(mapping)
+        self.CMAP.construct_mass_grid()
+        self.CMAP.build_composite_tracks_GC()
+        self.CMAP.global_peak_detection()
 
 
     def process_all_LC(self):

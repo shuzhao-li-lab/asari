@@ -20,19 +20,19 @@ PARAMETERS = {
     
     'multicores': 8,                    # number of cores allowed in parallel processing
     'write_cache': 4 * 1024 ** 3,       # amount of memory in bytes used for mass track cache
-    'disk_cache': 0 * 1024 ** 3,      # amount of disk space allowed to be used before compressing stored mass tracks
+    'disk_cache': 400 * 1024 ** 3,      # amount of disk space allowed to be used before compressing stored mass tracks
     'sparsify': False,                  # use sparse representations of mass tracks in memory for space saving                
 
     # mass parameters
     'mode': 'pos',                      # ionization mode
     'mass_range': (50, 2000),
-    'mz_tolerance_ppm': 5,              # ppm, high selectivity meaning no overlap neighbors to confuse; 
+    'mz_tolerance_ppm': 10,              # ppm, high selectivity meaning no overlap neighbors to confuse; 
                                         # Low selectivity regions will be still inspected to determine the true number of features
 
     # chromatogram and peak parameters
     'min_timepoints': 6,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
     'signal_noise_ratio': 2,            # peak height at least x fold over local noise
-    'min_intensity_threshold': 1000,    # minimal intensity for mass track extraction, filtering baseline
+    'min_intensity_threshold': 100000,    # minimal intensity for mass track extraction, filtering baseline
     'min_peak_height': 100000,           # minimal peak height.
     'min_peak_ratio': 0.001,             # minimal ratio of a peak of the max height of its ROI, relevant to small peaks next to big ones.
     'wlen': 25,                         # window size for evaluating prominence in peaks. Important to resolve clustered narrow peaks.
