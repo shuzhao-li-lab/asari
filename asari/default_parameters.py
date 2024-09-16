@@ -14,13 +14,14 @@ PARAMETERS = {
     'project_name': 'asari_project',
     'outdir': 'output',
     'pickle': False,
-    'database_mode': 'memory',            # `auto` determined on sample number 
+    'database_mode': 'memory',          # `auto` determined on sample number 
                                         # 'ondisk', 'memory' (run in memory, only small studies), 
                                         # 'mongo' (MongoDB, requiring installation of DB server, to implement)
     
     'multicores': 8,                    # number of cores allowed in parallel processing
-    'write_cache': 4 * 1024 ** 3,       # amount of memory in bytes used for mass track cache
-    'disk_cache': 400 * 1024 ** 3,      # amount of disk space allowed to be used before compressing stored mass tracks
+    'target_memory_use': 4 * 1024 ** 3, # amount of memory in bytes used for mass track cache
+    'compress': True,                   # if true, compress mass track pickles when target disk use exceeded
+    'target_disk_use': 100 * 1024 ** 3, # amount of disk space allowed to be used before compressing stored mass tracks
     'sparsify': False,                  # use sparse representations of mass tracks in memory for space saving                
 
     # mass parameters
@@ -32,9 +33,9 @@ PARAMETERS = {
     # chromatogram and peak parameters
     'min_timepoints': 6,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
     'signal_noise_ratio': 2,            # peak height at least x fold over local noise
-    'min_intensity_threshold': 100000,    # minimal intensity for mass track extraction, filtering baseline
-    'min_peak_height': 100000,           # minimal peak height.
-    'min_peak_ratio': 0.001,             # minimal ratio of a peak of the max height of its ROI, relevant to small peaks next to big ones.
+    'min_intensity_threshold': 10000,   # minimal intensity for mass track extraction, filtering baseline
+    'min_peak_height': 100000,          # minimal peak height.
+    'min_peak_ratio': 0.001,            # minimal ratio of a peak of the max height of its ROI, relevant to small peaks next to big ones.
     'wlen': 25,                         # window size for evaluating prominence in peaks. Important to resolve clustered narrow peaks.
     'autoheight': False,                # min_peak_height can be estimated automatically by setting autoheight on in CLI  
     'gaussian_shape': 0.5,              # min cutoff of goodness of fitting to Gauss model

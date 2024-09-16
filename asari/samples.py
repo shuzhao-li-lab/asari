@@ -11,6 +11,7 @@ import numpy as np
 import scipy
 import time
 from scipy import interpolate
+from copy import deepcopy
 
 class MassTrackCache():
     def __init__(self, parameters) -> None:
@@ -22,6 +23,10 @@ class MassTrackCache():
         self.page_size = parameters['multicores']
         self.sparsify = parameters['sparsify']
         self.compress = parameters.get('compress', False)
+        self.memory_used = 0
+        self.disk_used = 0
+        self.memory_limit = parameters['target_memory_use']
+        self.disk_limit = parameters['target_disk_use']
 
     @property
     def fast_evictable(self):
@@ -40,8 +45,25 @@ class MassTrackCache():
         return len(self.in_memory) >= self.page_size
 
     def __setitem__(self, key, value): 
-        #print(round(cls.memory_use / cls.max_memory  * 100), round(cls.disk_use/(1024*2)))
-        if key not in self.cache:
+        self.add_key(key, value)
+        self.evict()
+
+    def delete_key(self, key):
+        del self.cache[key]["value"]
+        gc.collect()
+        self.cache[key]["value"] = None
+        if self.cache[key]["memsize"]:
+            self.memory_used -= self.cache[key]["memsize"]
+        self.in_memory.remove(key)
+
+    def quick_evict(self):
+        for k in self.in_memory.intersection(self.on_disk):
+            self.delete_key(k)
+
+    def add_key(self, key, value, size=None):
+        if key in self.cache:
+            self.cache[key]["value"] = value
+        else:
             if len(self.pages[-1]) == self.page_size:
                 self.pages.append([])
             self.pages[-1].append(key)
@@ -55,96 +77,81 @@ class MassTrackCache():
                 "disk": None,
                 "sparse": self.sparsify,
                 "page": len(self.pages) - 1,
-                "sizes": {
-                    "memory": self.get_obj_size(value),
-                    "disk": None,
-                    "compressed": None,
-                }
+                "memsize": self.get_obj_size(value),
+                "disksize": None
             }
-            self.in_memory.add(key)
-            self.evict()
-        else:
-            self.cache[key]["value"] = value
-            self.in_memory.add(key)
-            self.evict()
+        self.memory_used += self.cache[key]["memsize"]
+        self.in_memory.add(key)
 
+    def register_pickle(self, key, path, size=None):
+        self.cache[key]["disk"] = path
+        self.cache[key]["disksize"] = os.path.getsize(path)
+        self.disk_used += self.cache[key]["disksize"]
+        self.on_disk.add(key)
+
+    def register_compressed(self, key, path, size=None):
+        self.cache[key]["disk"] = path
+        if self.cache[key]["disksize"]:
+            self.disk_used -= self.cache[key]["disksize"]
+        self.compressed.add(key)
+            
     def __getitem__(self, key):
         # Check if key is in cache
         if key in self.in_memory:
-            return self.cache[key]["value"]
+            content = self.cache[key]["value"]
         else:
-            if key in self.on_disk:
-                if self.not_written:
-                    to_write = list(self.not_written)
-                    with mp.Pool(self.page_size) as workers:
-                        results = workers.starmap(self.save_to_disk,[(self.cache[k]['value']['outfile'], self.cache[k]['value']) for k in to_write])
-                    for k, (save_path, save_size) in zip(to_write, results):
-                        self.cache[key]["value"] = None
-                        self.in_memory.remove(k)
-                        self.cache[k]["disk"] = save_path
-                        self.on_disk.add(k)
-
-                page_keys = [k for k in self.pages[self.cache[key]['page']] if k not in list(self.in_memory)]
+            self.evict(force=False)
             try:
                 with mp.Pool(self.page_size) as workers:
-                    results = workers.map(self.load_from_disk, [self.cache[k]["disk"] for k in page_keys])
-                    for k, value in zip(page_keys, results):
+                    results = workers.map(self.load_from_disk, [self.cache[k]["disk"] for k in self.pages[self.cache[key]['page']]])
+                    workers.close()
+                    workers.join()
+                    for k, value in zip(self.pages[self.cache[key]['page']], results):
                         if k == key:
                             content = value
-                        self.cache[k]["value"] = value
-                        self.in_memory.add(k)
+                        self.add_key(k, value)
             except BrokenPipeError:
-                value = self.load_from_disk(self.cache[key]['disk'])
-                self.cache[key]['value'] = value
-                self.in_memory.add(key)
-                content = value
+                content = self.load_from_disk(self.cache[key]['disk'])
+                self.add_key(key, content)
         return content
     
-    def evict(self):
-        if self.page_full:
-            # delete those on disk already
-            if self.in_memory:
-                for k in list(self.in_memory):
-                    if k in self.on_disk:
-                        self.cache[k]["value"] = None
-                        self.in_memory.remove(k)
-            #write unwritten to disk
+    def evict(self, force=False):
+        print(self.memory_used, self.disk_used, (self.memory_used > self.memory_limit and self.page_full))
+        if (self.memory_used > self.memory_limit and self.page_full) or force:
+            self.quick_evict()
+
+        if (self.memory_used > self.memory_limit and self.page_full) or force:
             if self.in_memory:
                 try:
                     with mp.Pool(self.page_size) as workers:
                         print("evicting: ")
                         results = workers.starmap(self.save_to_disk,[(self.cache[k]['value']['outfile'], self.cache[k]['value']) for k in list(self.in_memory)])
-                        for k, (save_path, save_size) in zip(list(self.in_memory), results):
-                            self.cache[k]["value"] = None
-                            self.in_memory.remove(k)
-                            self.cache[k]["disk"] = save_path
-                            self.on_disk.add(k)
+                        workers.close()
+                        workers.join()
+                        for k, (save_path, _) in zip(list(self.in_memory), results):
+                            print("\t", k)
+                            self.delete_key(k)
+                            self.register_pickle(k, save_path)
                 except BrokenPipeError:
                     for to_evict in [(self.cache[k]['value']['outfile'], self.cache[k]['value']) for k in list(self.not_written)]:
                         save_path, _ = self.save_to_disk(to_evict)
-                        self.cache[k]['value'] = None
-                        self.in_memory.remove(k)
-                        self.cache[k]["disk"] = save_path
-                        self.on_disk.add(k)
-            if self.compress:
-                if self.compressable:
-                    try:
-                        with mp.Pool(self.page_size) as workers:
-                            results = workers.map(self.compress_on_disk, [self.cache[k]['disk'] for k in list(self.compressable)])
-                            print("compressing (very slow): ")
-                            for k, (gz_path, _) in zip(self.compressable, results): 
-                                print("\t", k)               
-                                self.cache[k]['disk'] = gz_path
-                                self.compressed.add(k)
-                            workers.terminate()
-                    except BrokenPipeError:
-                        for to_compress in [self.cache[k]['disk'] for k in list(self.compressable)]:
-                            gz_path, _ = self.compress_on_disk(to_compress)
-                            self.cache[k]['disk'] = gz_path
-                            self.compressed.add(k)
-
-        gc.collect()
-
+                        self.delete_key(to_evict)
+                        self.register_pickle(k, save_path)
+        if self.compress:
+            if self.disk_used > self.disk_limit: 
+                try:
+                    with mp.Pool(self.page_size) as workers:
+                        print("compressing (very slow)... ")
+                        results = workers.map(self.compress_on_disk, [self.cache[k]['disk'] for k in list(self.compressable)])
+                        workers.close()
+                        workers.join()
+                        for k, (gz_path, _) in zip(self.compressable, results): 
+                            print("\t", k)  
+                            self.register_compressed(k, gz_path)             
+                except BrokenPipeError:
+                    for to_compress in [self.cache[k]['disk'] for k in list(self.compressable)]:
+                        gz_path, _ = self.compress_on_disk(to_compress)
+                        self.register_compressed(k, gz_path)
 
     @staticmethod
     def compress_on_disk(file_path):
@@ -153,19 +160,16 @@ class MassTrackCache():
         output_file_path = f"{file_path}.gz"
 
         try:
-            f_in = open(file_path, 'rb')
-            f_out = gzip.open(output_file_path, 'wb', compresslevel=1)
-            pickle.dump(pickle.load(f_in), f_out)
-            f_in.close()
-            f_out.close()
-            time.sleep(1)
+            with open(file_path, 'rb') as f_in:
+                with gzip.open(output_file_path, 'wb', compresslevel=1) as f_out:
+                    pickle.dump(pickle.load(f_in), f_out)
             os.remove(file_path)
-            return output_file_path, os.path.getsize(output_file_path)
+            gc.collect()
+            return output_file_path, 0
         except:
             print("failure_compressing")
-            return file_path, os.path.getsize(file_path)
+            return file_path, 0
             
-
     @staticmethod
     def save_to_disk(path, data):
         if path.endswith(".pickle"):
@@ -174,7 +178,7 @@ class MassTrackCache():
         elif path.endswith(".pickle.gz"):
             with gzip.GzipFile(path, 'wb', compresslevel=1) as fh:
                 pickle.dump(data, fh, pickle.HIGHEST_PROTOCOL)
-        return path, os.path.getsize(path)
+        return path, 0
     
     @staticmethod
     def load_from_disk(path):
@@ -182,11 +186,13 @@ class MassTrackCache():
         if path.endswith(".pickle"):
             with open(path, 'rb') as fh:
                 data = pickle.load(fh)
+                fh.close()
         elif path.endswith(".pickle.gz"):
             with gzip.GzipFile(path, 'rb') as fh:
                 data = pickle.load(fh)
+                fh.close()
         return data
-
+    
     @staticmethod
     def get_obj_size(obj):
         marked = {id(obj)}
@@ -199,7 +205,6 @@ class MassTrackCache():
             obj_q = new_refr.values()
             marked.update(new_refr.keys())
         return sz
-
 
 class SimpleSample:
     '''
