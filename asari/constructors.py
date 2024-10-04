@@ -369,7 +369,7 @@ class CompositeMap:
         dictionary of scan number to retetion time in the reference_sample.
         '''
         X, Y = self.reference_sample.rt_numbers, self.reference_sample.list_retention_time
-        interf = interpolate.interp1d(X, Y, fill_value="extrapolate")
+        interf = interpolate.interp1d(X, Y, fill_value="extrapolate", bounds_error=False)
         return dict(zip(range(rt_length), interf(range(rt_length))))
 
     def construct_mass_grid(self):
@@ -428,8 +428,8 @@ class CompositeMap:
         for ii, SM in enumerate(self.experiment.all_samples):
             if ii not in self.experiment.mapping:
                 index_samples.append(SM)
-        self.good_reference_landmark_peaks = self.set_RT_reference(self.experiment.parameters['cal_min_peak_height'])
 
+        self.good_reference_landmark_peaks = self.set_RT_reference(self.experiment.parameters['cal_min_peak_height'])
 
         # align index standards
         master_index_sample = index_samples[0]
@@ -454,7 +454,7 @@ class CompositeMap:
                             good_landmark_peaks.append(Upeak)
                             selected_reference_landmark_peaks.append(self.good_reference_landmark_peaks[jj])
             _NN = len(good_landmark_peaks)
-            print("\tgood_landmarks: ", _NN)
+            print("\tgood_landmarks: ", index_sample.name, _NN)
             
             from .chromatograms import clean_rt_calibration_points
 
@@ -471,7 +471,7 @@ class CompositeMap:
             FRAC = max(0.2, min(FRAC, 0.6))    # bound frac in (0.2, 0.6)
 
             lowess_predicted = __hacked_lowess__(yy, xx, frac=FRAC, it=3, xvals=SM.list_scan_numbers)
-            interf = interpolate.interp1d(lowess_predicted, SM.list_scan_numbers, fill_value="extrapolate")
+            interf = interpolate.interp1d(lowess_predicted, SM.list_scan_numbers, fill_value="extrapolate", bounds_error=False)
             ref_interpolated = interf( master_index_sample.list_scan_numbers )
             lowess_predicted = [int(round(ii)) for ii in lowess_predicted]
 

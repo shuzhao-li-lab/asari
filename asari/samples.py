@@ -7,9 +7,7 @@ import functools
 from intervaltree import IntervalTree
 import gc
 import sys
-import numpy as np
 import scipy
-from copy import deepcopy
 import multiprocessing as mp
 
 class MassTrackCache():

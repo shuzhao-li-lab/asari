@@ -188,6 +188,8 @@ def main(parameters=PARAMETERS):
             help='Use LC or GC workflow, default is LC')
     parser.add_argument('--RI_substr', default="RTstd",
             help='Samples with this substring are kovats standards')
+    parser.add_argument('--RI_landmarks', default=None, 
+            help='Mapping of retention times to index values per RI sample')
     args = parser.parse_args()
     
     # update parameters from user specified yaml file

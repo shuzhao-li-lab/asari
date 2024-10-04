@@ -17,6 +17,9 @@ from .default_parameters import adduct_search_patterns, \
 from .mass_functions import all_mass_paired_mapping
 from .constructors import CompositeMap
 from .json_encoder import NpEncoder
+from .samples import SimpleSample
+import tqdm
+import pandas as pd
 
 try:
     import importlib.resources as pkg_resources
@@ -28,7 +31,6 @@ from . import db
 if not sys.warnoptions:
     import warnings
     warnings.simplefilter("ignore")
-
 
 class ext_Experiment:
     '''
@@ -154,9 +156,6 @@ class ext_Experiment:
         return association
     
     def populate_RI_lookup(self, sample_map):
-        from .samples import SimpleSample
-        import tqdm
-        import pandas as pd
         RI_maps = {}
         RI_models = {}
         reverse_RI_models = {}
@@ -185,12 +184,11 @@ class ext_Experiment:
             model = lowess(indexes, RTs)
             model2 = lowess(indexes, scan_nos)
             newx, newy = list(zip(*model))
-            interf = interpolate.interp1d(newx, newy)
+            interf = interpolate.interp1d(newx, newy, fill_value="extrapolate", bounds_error=False)
             RI_models[reference_id] = interf
-
             newx, newy = list(zip(*model2))
-            reverse_RI_models[reference_id] = interpolate.interp1d(newy, newx)
-
+            reverse_RI_models[reference_id] = interpolate.interp1d(newy, newx, fill_value="extrapolate", bounds_error=False)
+            
         self.RI_models = RI_models
         self.reverse_RI_models = reverse_RI_models
 
@@ -203,9 +201,6 @@ class ext_Experiment:
             sam = self.sample_registry[k]
             sam['list_retention_index'] = self.RI_models[v](sam['list_retention_time'])
         
-
-
-
     def process_all_GC(self):
         self.CMAP = CompositeMap(self)
         sample_run_order = self.determine_acquisition_order()
@@ -216,7 +211,6 @@ class ext_Experiment:
         self.CMAP.construct_mass_grid()
         self.CMAP.build_composite_tracks_GC()
         self.CMAP.global_peak_detection()
-
 
     def process_all_LC(self):
         self.CMAP = CompositeMap(self)
@@ -513,9 +507,7 @@ class ext_Experiment:
                 )
             else:
                 try:
-                    all_peaks = sorted([(peak['peak_area'], peak['goodness_fitting'], peak) 
-                                        for peak in V['MS1_pseudo_Spectra']],
-                                        reverse=True)
+                    all_peaks = sorted([(peak['peak_area'], peak['goodness_fitting'], peak) for peak in V['MS1_pseudo_Spectra']], reverse=True)
                     best_peak = all_peaks[0][2]
                 except TypeError:
                     best_peak = V['MS1_pseudo_Spectra'][0]
