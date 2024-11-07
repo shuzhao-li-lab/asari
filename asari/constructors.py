@@ -434,15 +434,13 @@ class CompositeMap:
         # align index standards
         master_index_sample = index_samples[0]
         for index_sample in index_samples:
-            candidate_landmarks = [self.MassGrid[index_sample.name].values[
-                        p['ref_id_num']] for p in 
-                        self.good_reference_landmark_peaks]
+            candidate_landmarks = [self.MassGrid[index_sample.name].values[p['ref_id_num']] for p in self.good_reference_landmark_peaks]
             good_landmark_peaks, selected_reference_landmark_peaks = [], []
             for jj in range(len(self.good_reference_landmark_peaks)):
                 ii = candidate_landmarks[jj]
                 if not pd.isna(ii):
                     ii = int(ii)
-                    this_mass_track = SM.list_mass_tracks[ii]
+                    this_mass_track = index_sample.list_mass_tracks[ii]
                     Upeak = quick_detect_unique_elution_peak(this_mass_track['intensity'], 
                                                             min_peak_height=self.experiment.parameters['cal_min_peak_height'], 
                                                             min_fwhm=3, 
@@ -458,7 +456,7 @@ class CompositeMap:
             
             from .chromatograms import clean_rt_calibration_points
 
-            sample_rt_bound = max(SM.list_scan_numbers)
+            sample_rt_bound = max(index_sample.list_scan_numbers)
             rt_rightend_ = 1.1 * sample_rt_bound
             xx, yy = [-0.1 * sample_rt_bound,]*3, [-0.1 * sample_rt_bound,]*3
             rt_cal = clean_rt_calibration_points(
@@ -470,13 +468,13 @@ class CompositeMap:
             FRAC = 0.6 - 0.004*(len(rt_cal)-50)
             FRAC = max(0.2, min(FRAC, 0.6))    # bound frac in (0.2, 0.6)
 
-            lowess_predicted = __hacked_lowess__(yy, xx, frac=FRAC, it=3, xvals=SM.list_scan_numbers)
-            interf = interpolate.interp1d(lowess_predicted, SM.list_scan_numbers, fill_value="extrapolate", bounds_error=False)
+            lowess_predicted = __hacked_lowess__(yy, xx, frac=FRAC, it=3, xvals=index_sample.list_scan_numbers)
+            interf = interpolate.interp1d(lowess_predicted, index_sample.list_scan_numbers, fill_value="extrapolate", bounds_error=False)
             ref_interpolated = interf( master_index_sample.list_scan_numbers )
             lowess_predicted = [int(round(ii)) for ii in lowess_predicted]
 
             rt_cal_dict = dict( 
-                [(x,y) for x,y in zip(SM.list_scan_numbers, lowess_predicted) if x!=y and 0<=y<=max(master_index_sample.list_scan_numbers)] )
+                [(x,y) for x,y in zip(index_sample.list_scan_numbers, lowess_predicted) if x!=y and 0<=y<=max(master_index_sample.list_scan_numbers)] )
 
             ref_interpolated = [int(round(ii)) for ii in ref_interpolated]
             reverse_rt_cal_dict = dict(

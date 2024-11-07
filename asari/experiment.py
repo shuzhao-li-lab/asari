@@ -136,7 +136,11 @@ class ext_Experiment:
 
     def determine_acquisition_order(self):
         sample_order_by_timestamp = [(k, v['acquisition_time']) for k,v in self.sample_registry.items()]
-        return sorted(sample_order_by_timestamp, key=lambda x: x[1])
+        try:
+            # fix this better in future
+            return sorted(sample_order_by_timestamp, key=lambda x: x[1])
+        except:
+            return sorted(sample_order_by_timestamp, key=lambda x: x[0])
     
     def associate_stds_samples(self, sample_run_order):
         association = {}
@@ -144,7 +148,8 @@ class ext_Experiment:
         last_reference = None
         for sample_id, runtime in sample_run_order:
             sample_name = self.sample_registry[sample_id]['name']
-            if self.parameters['RI_substr'] in sample_name:
+            RI_list = pd.read_csv("/Users/mitchjo/asari/RI_hits_walker.csv")
+            if sample_name in RI_list.columns:
                 last_reference = sample_id
                 for non_RI_sample in current_non_RI_samples:
                     association[non_RI_sample] = sample_id
@@ -159,28 +164,39 @@ class ext_Experiment:
         RI_maps = {}
         RI_models = {}
         reverse_RI_models = {}
-        RI_list = pd.read_csv("/Users/mitchjo/asari/asari/RI_hints.csv")
+        RI_list = pd.read_csv("/Users/mitchjo/asari/RI_hits_walker.csv")
+
         for reference_id in tqdm.tqdm(list(dict.fromkeys(list(sample_map.values())))):
+            print(reference_id)
             RI_maps[reference_id] = {}
             reference_instance = SimpleSample(self.sample_registry[reference_id], experiment=self)
 
-            this_index, next_index = None, None
-            this_rt, next_rt = None, None
+            prev_index, next_index = None, None
+            prev_rt, next_rt = None, None
 
             RTs, indexes, scan_nos = [], [], []
+
+
+
+
             for rt, scan_no in zip(reference_instance.list_retention_time, reference_instance.list_scan_numbers):
-                for t, index in zip(RI_list['Index'], RI_list[reference_instance.name]):
-                    if rt >= t:
-                        this_rt, this_index = t, index
-                    else:
-                        next_rt, next_index = t, index
+                RTs.append(rt)
+                scan_nos.append(scan_no)
+                print(rt, scan_no)
+                for index, index_rt in zip(RI_list['Index'], RI_list[reference_instance.name]):
+                    index, index_rt = int(index), float(index_rt)
+                    print("\t", index, index_rt)
+                    if rt > index_rt:
+                        prev_index, prev_rt = index, index_rt
+                    elif rt <= index_rt:
+                        _, next_rt = index, index_rt
                         break
-                if this_rt and next_rt:
-                    RTs.append(rt)
-                    index = 100 * (this_index + ((rt-this_rt)/(next_rt - rt)))
-                    indexes.append(index)
-                    scan_nos.append(scan_no)
-                    RI_maps[reference_id][rt] = 100 * (this_index + ((rt-this_rt)/(next_rt - rt)))
+                if next_rt is None:
+                    next_rt = max(reference_instance.list_retention_time) * 1.1
+                    _ = max(RI_list['Index']) + 1
+                RI_value = 100 * (prev_index + ((rt - prev_rt)/(next_rt - rt)))
+                indexes.append(RI_value)
+                RI_maps[reference_id][rt] = RI_value
             model = lowess(indexes, RTs)
             model2 = lowess(indexes, scan_nos)
             newx, newy = list(zip(*model))
