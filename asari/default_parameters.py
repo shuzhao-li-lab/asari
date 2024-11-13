@@ -32,7 +32,7 @@ PARAMETERS = {
 
     # chromatogram and peak parameters
     'min_timepoints': 6,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
-    'signal_noise_ratio': 2,            # peak height at least x fold over local noise
+    'signal_noise_ratio': 10,            # peak height at least x fold over local noise
     'min_intensity_threshold': 10000,   # minimal intensity for mass track extraction, filtering baseline
     'min_peak_height': 100000,          # minimal peak height.
     'min_peak_ratio': 0.001,            # minimal ratio of a peak of the max height of its ROI, relevant to small peaks next to big ones.

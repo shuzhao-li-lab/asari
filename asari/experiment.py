@@ -148,7 +148,7 @@ class ext_Experiment:
         last_reference = None
         for sample_id, runtime in sample_run_order:
             sample_name = self.sample_registry[sample_id]['name']
-            RI_list = pd.read_csv("/Users/mitchjo/asari/RI_hits_walker.csv")
+            RI_list = pd.read_csv(self.parameters['RI_landmarks'])
             if sample_name in RI_list.columns:
                 last_reference = sample_id
                 for non_RI_sample in current_non_RI_samples:
@@ -164,21 +164,15 @@ class ext_Experiment:
         RI_maps = {}
         RI_models = {}
         reverse_RI_models = {}
-        RI_list = pd.read_csv("/Users/mitchjo/asari/RI_hits_walker.csv")
+        RI_list = pd.read_csv(self.parameters['RI_landmarks'])
 
         for reference_id in tqdm.tqdm(list(dict.fromkeys(list(sample_map.values())))):
             print(reference_id)
             RI_maps[reference_id] = {}
             reference_instance = SimpleSample(self.sample_registry[reference_id], experiment=self)
-
             prev_index, next_index = None, None
             prev_rt, next_rt = None, None
-
             RTs, indexes, scan_nos = [], [], []
-
-
-
-
             for rt, scan_no in zip(reference_instance.list_retention_time, reference_instance.list_scan_numbers):
                 RTs.append(rt)
                 scan_nos.append(scan_no)
@@ -574,17 +568,21 @@ class ext_Experiment:
                     'peak_area', 'cSelectivity', 'goodness_fitting', 'snr', 'detection_counts' ] + good_samples
         
         filtered_FeatureTable = self.CMAP.FeatureTable[use_cols]
-        filtered_FeatureTable['mz'] = filtered_FeatureTable['mz'].round(4)
-        filtered_FeatureTable['rtime'] = filtered_FeatureTable['rtime'].round(2)
-        filtered_FeatureTable['rtime_left_base'] = filtered_FeatureTable['rtime_left_base'].round(2)
-        filtered_FeatureTable['rtime_right_base'] = filtered_FeatureTable['rtime_right_base'].round(2)
-        filtered_FeatureTable['cSelectivity'] = filtered_FeatureTable['cSelectivity'].round(2)
-        filtered_FeatureTable['goodness_fitting'] = filtered_FeatureTable['goodness_fitting'].round(2)
+
+        rounding_table = {
+            'mz': 4,
+            'rtime': 2,
+            'rtime_left_base': 2,
+            'rtime_right_base': 2,
+            'cSelectivity': 2,
+            'goodness_fitting': 2
+        }
+        for field, rounding_places in rounding_table.items():
+            filtered_FeatureTable[field] = filtered_FeatureTable[field].round(rounding_places)
 
         outfile = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
         filtered_FeatureTable.to_csv(outfile, index=False, sep="\t")
-        print("\nFeature table (%d x %d) was written to %s." %(
-                                filtered_FeatureTable.shape[0], number_of_samples, outfile))
+        print("\nFeature table (%d x %d) was written to %s." %(filtered_FeatureTable.shape[0], number_of_samples, outfile))
 
         # extract targeted m/z features
         if 'target' in self.parameters and self.parameters['target']:  
