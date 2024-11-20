@@ -320,28 +320,25 @@ def single_sample_EICs_(sample_id,
             'list_mass_tracks': [{'id_number': ii, 'mz': t[0], 'intensity': t[1]} for ii, t in enumerate(xdict['tracks'])],
             'anchor_mz_pairs': anchor_mz_pairs,
             'number_anchor_mz_pairs': len(anchor_mz_pairs),
-            'outfile': outfile
-
+            'outfile': outfile + ".gz" if database_mode == 'compressed' else outfile
         }
-
-        if database_mode == 'memory':
-            _, to_return, size = "memory", new, 0
 
         print("Extracted %s to %d mass tracks." %(os.path.basename(infile), len(new['list_mass_tracks'])))
         return sample_id,  {
                 "status:mzml_parsing": 'passed',
                 "status:eic": 'passed',
-                "data_location": outfile,
+                "data_location": outfile + ".gz" if database_mode == 'compressed' else outfile,
                 "max_scan_number": new['max_scan_number'],
                 "list_scan_numbers": xdict['rt_numbers'],
                 "list_retention_time": xdict["rt_times"],
                 "track_mzs": [(t['mz'], t['id_number']) for t in new['list_mass_tracks']],
                 "number_anchor_mz_pairs": new['number_anchor_mz_pairs'],
                 "anchor_mz_pairs": new['anchor_mz_pairs'],
-                "sample_data": to_return,
+                "sample_data": new,
                 "acquisition_time": timestamp,
                 "name": os.path.basename(infile).replace('.mzML', ''),
-                "size": size
+                "size": 0,
+                "database_mode": database_mode
             }
     except:
         # xml.etree.ElementTree.ParseError

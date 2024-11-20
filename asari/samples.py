@@ -3,8 +3,6 @@ import multiprocessing as mp
 from .mass_functions import flatten_tuplelist
 import gzip
 import os
-import functools
-from intervaltree import IntervalTree
 import gc
 import sys
 import scipy
@@ -86,28 +84,22 @@ class MassTrackCache():
     def evict(self, force=False):
         if len(self.in_memory) >= self.page_size or force:
             for k in self.in_memory.intersection(self.on_disk):
-                del self.cache[k]["value"]
-                self.in_memory.remove(k)
+                self.delete_key(k)
             if self.in_memory:
                 with mp.Pool(self.page_size) as workers:
                     print("evicting: ")
                     results = workers.starmap(self.save_to_disk, [(self.cache[k]['value']['outfile'], self.cache[k]['value']) for k in list(self.in_memory)])
-                    workers.close()
-                    workers.join()
                     for k, save_path in zip(list(self.in_memory), results):
-                        print("\t", k)
-                        del self.cache[k]["value"]
-                        self.in_memory.remove(k)
+                        print("\t evicted: ", k)
+                        self.delete_key(k)
                         self.register_pickle(k, save_path)
             if self.compress and self.disk_used > self.disk_limit:
                 to_compress = list(self.on_disk.difference(self.compressed))
                 with mp.Pool(self.page_size) as workers:
                     print("compressing (very slow)... ")
                     results = workers.map(self.compress_on_disk, [self.cache[k]['disk'] for k in to_compress])
-                    workers.close()
-                    workers.join()
                     for k, gz_path in zip(to_compress, results): 
-                        print("\t", k)  
+                        print("\t compressed: ", k)  
                         self.register_compressed(k, gz_path)             
 
     @staticmethod
@@ -171,7 +163,8 @@ class SimpleSample:
     Function to get mass tracks from a mzML file is in workflow.process_project and batch_EIC_from_samples_.
     Peaks and empCpds are determined in constructors.CompositeMap.
     '''
-    _cached_mass_tracks = None
+    _cached_mass_tracks = {}
+    _memory_mass_tracks = {}
 
     def __init__(self, registry={}, experiment=None, database_mode='ondisk', mode='pos', is_reference=False):
         '''
@@ -196,10 +189,6 @@ class SimpleSample:
         For larger studies, m/z alignment is done via NN clustering, where m/z accuracy 
         is not checked during MassGrid construction. But it is checked during DB annotation.
         '''
-        if SimpleSample._cached_mass_tracks is None:
-            SimpleSample._cached_mass_tracks = MassTrackCache(self.experiment.parameters)
-
-
         self.__dict__.update(registry)
 
         self.experiment = experiment
@@ -218,16 +207,6 @@ class SimpleSample:
 
         self.calibrations = []
         self.reverse_calibrations = []
-
-    @functools.cached_property
-    def mz_tree(self):
-        __mz_tree = IntervalTree()
-        mz_tol = self.experiment.mz_tolerance_ppm
-        for t in self.list_mass_tracks:
-            t_mz = t['mz']
-            t_mz_err = t_mz / 1e6 * mz_tol * 4
-            __mz_tree.addi(t_mz - t_mz_err, t_mz + t_mz_err, t['id_number'])
-        return __mz_tree
 
     @property
     def database_mode(self):
@@ -256,14 +235,34 @@ class SimpleSample:
 
     @property
     def list_mass_tracks(self):
-        if self.is_reference:
-            if self._reference_tracks is None: 
-                self._reference_tracks = SimpleSample._cached_mass_tracks[self.data_location]['list_mass_tracks']
+        if self.is_reference and self._reference_tracks:
             return self._reference_tracks
-        return SimpleSample._cached_mass_tracks[self.data_location]['list_mass_tracks']
+        
+        if not SimpleSample._cached_mass_tracks:
+            SimpleSample._cached_mass_tracks = MassTrackCache(self.experiment.parameters)
+        
+        modes = {
+            'smart': SimpleSample._cached_mass_tracks.__getitem__,
+            'ondisk': MassTrackCache.load_from_disk,
+            'compressed': MassTrackCache.load_from_disk,
+            'memory': SimpleSample._memory_mass_tracks.__getitem__
+        }
+
+        data = modes[self.experiment.parameters['database_mode']](self.data_location)
+        if self.is_reference:
+            self._reference_tracks = data['list_mass_tracks']
+        return data['list_mass_tracks']
+        
 
     @staticmethod
     def save(data, parameters):
-        if SimpleSample._cached_mass_tracks is None:
-            SimpleSample._cached_mass_tracks = MassTrackCache(parameters)
-        SimpleSample._cached_mass_tracks[data['data_location']] = data['sample_data']
+        if data['database_mode'] == 'smart':
+            if not SimpleSample._cached_mass_tracks:
+                SimpleSample._cached_mass_tracks = MassTrackCache(parameters)
+            SimpleSample._cached_mass_tracks[data['data_location']] = data['sample_data']
+        elif data['database_mode'] == 'ondisk':
+            MassTrackCache.save_to_disk(data['data_location'], data['sample_data'])
+        elif data['database_mode'] == 'compressed':
+            MassTrackCache.save_to_disk(data['data_location'], data['sample_data'])
+        elif data['database_mode'] == 'memory':
+            SimpleSample._memory_mass_tracks[data['data_location']] = data['sample_data']
