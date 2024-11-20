@@ -256,13 +256,14 @@ class SimpleSample:
 
     @staticmethod
     def save(data, parameters):
-        if data['database_mode'] == 'smart':
-            if not SimpleSample._cached_mass_tracks:
-                SimpleSample._cached_mass_tracks = MassTrackCache(parameters)
-            SimpleSample._cached_mass_tracks[data['data_location']] = data['sample_data']
-        elif data['database_mode'] == 'ondisk':
-            MassTrackCache.save_to_disk(data['data_location'], data['sample_data'])
-        elif data['database_mode'] == 'compressed':
-            MassTrackCache.save_to_disk(data['data_location'], data['sample_data'])
-        elif data['database_mode'] == 'memory':
-            SimpleSample._memory_mass_tracks[data['data_location']] = data['sample_data']
+        if not SimpleSample._cached_mass_tracks:
+            SimpleSample._cached_mass_tracks = MassTrackCache(parameters)
+
+        modes = {
+            'smart': SimpleSample._cached_mass_tracks.__setitem__,
+            'ondisk': MassTrackCache.save_to_disk,
+            'compressed': MassTrackCache.save_to_disk,
+            'memory': SimpleSample._memory_mass_tracks.__setitem__,
+        }
+
+        modes[data['database_mode']](data['data_location'], data['sample_data'])
