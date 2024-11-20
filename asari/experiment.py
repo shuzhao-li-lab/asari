@@ -165,7 +165,6 @@ class ext_Experiment:
         RI_models = {}
         reverse_RI_models = {}
         RI_list = pd.read_csv(self.parameters['RI_landmarks'])
-
         for reference_id in tqdm.tqdm(list(dict.fromkeys(list(sample_map.values())))):
             print(reference_id)
             RI_maps[reference_id] = {}
@@ -201,7 +200,6 @@ class ext_Experiment:
             
         self.RI_models = RI_models
         self.reverse_RI_models = reverse_RI_models
-
 
     def convert_to_RI(self, sample_map):
         import matplotlib.pyplot as plt
@@ -241,6 +239,7 @@ class ext_Experiment:
             if true, generate annotation files, export CMAP pickle and do QC plot;
             else skip annotating.
         '''
+        print("EXPORTING")
         self.CMAP.MassGrid.to_csv(
             os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
         if anno:

@@ -135,6 +135,7 @@ def main(parameters=PARAMETERS):
             help='print version and exit')
     parser.add_argument('run', metavar='subcommand', 
             help='one of the subcommands: analyze, process, xic, extract, annotate, join, viz')
+
     parser.add_argument('-m', '--mode', default='pos', 
             help='mode of ionization, pos or neg')
     parser.add_argument('--ppm', default=5, type=int, 
@@ -205,7 +206,8 @@ def main(parameters=PARAMETERS):
     parameters['autoheight'] = booleandict[args.autoheight]
     parameters['workflow'] = args.workflow
     parameters['RI_substr'] = args.RI_substr
-    
+    parameters['RI_landmarks'] = args.RI_landmarks
+
     if args.mode:
         parameters['mode'] = args.mode
     if args.ppm:
@@ -245,28 +247,20 @@ def main(parameters=PARAMETERS):
     # min_peak_height, min_prominence_threshold, cal_min_peak_height, min_intensity_threshold
     parameters = update_peak_detection_params(parameters, args)
 
-    if args.run == 'process':
-        process(parameters, args)
-    elif args.run == 'analyze':
-        # analyze a single sample file to get descriptions
-        analyze(parameters, args)
-    elif args.run == 'xic':
-        # Get XICs (mass tracks) from a folder of centroid mzML files.
-        xic(parameters, args)
-    elif args.run == 'extract':
-        # targeted extraction from a file designated by --target
-        extract(parameters, args)
-    elif args.run == 'annotate':
-        # Annotate a user supplied feature table
-        annotate(parameters, args)
-    elif args.run == 'join':
-        # input a list of directoreis, each a result of asari process
-        join(parameters, args)
-    elif args.run == 'viz':
-        # launch data dashboard
-        viz(parameters, args)
+    subcommands = {
+        'process': process, # pre-process a project
+        'analyze': analyze, # analyzing a single sample file for description
+        'xic': xic, # get XICs (mass tracks) from a folder of centroided mzML files
+        'annotate': annotate, # apply annotations to a feature table
+        'extract': extract, # targeted extraction on a signle file designated by --target
+        'join': join, # join two asari analyses
+        'viz': viz # vizualize asari results
+    }
+
+    if args.run in subcommands:
+        subcommands[args.run](parameters, args)
     else:
-        print("Expecting one of the subcommands: analyze, process, xic, annotate, join, viz.")
+        print("Expecting one of the subcommands: " + ",".join(list(subcommands.keys())))
 
 #
 # -----------------------------------------------------------------------------

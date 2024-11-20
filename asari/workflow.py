@@ -55,12 +55,12 @@ def process_project(list_input_files, parameters):
 def process_GC_project(EE, list_input_files, parameters):
     print("Processing Project using GC Workflow")
     EE.process_all_GC()
-    EE.export_all(anno=False)
+    EE.export_all(anno=True)
 
 def process_LC_project(EE, list_input_files, paramaters):
     print("Processing Project using LC Workflow")
     EE.process_all_LC()
-    EE.export_all(anno=False)
+    EE.export_all(anno=True)
 
 def read_project_dir(directory, file_pattern='.mzML'):
     '''

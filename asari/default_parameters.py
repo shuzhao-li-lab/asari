@@ -10,6 +10,10 @@
 # but they should be given via commandline arguments.
 # 
 
+# new parameters are of the format:
+# 'key' -> (type, full_arg, short_arg, default_value, help_text)
+
+
 PARAMETERS = {
     'project_name': 'asari_project',
     'outdir': 'output',
@@ -63,6 +67,7 @@ PARAMETERS = {
     # for annotation
     'check_isotope_ratio': False,
     'workflow': "LC",
+    'RI_landmarks': None
 
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
