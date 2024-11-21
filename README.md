@@ -29,9 +29,9 @@ Install
 
 Input
 =====
-Input data are centroid mzML files from LC-MS metabolomics. 
-We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
-Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats and .mzXML files.
+
+The default workflow, intended for LC-MS experiments, requires only centroided mzML files as input. These input data may be centroided using the ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
+Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats and .mzXML files. Other workflows may have other optional or mandatory inputs.
 
 MS/MS spectra are ignored by asari. 
 Our pipeline (https://pypi.org/project/pcpfm/) has annotation steps to use MS/MS data.
@@ -48,7 +48,11 @@ To process all mzML files under directory mydir/projectx_dir:
 
 `asari process --mode pos --input mydir/projectx_dir`
 
-To get statistical description on a single file (useful to understand data and parameters):
+Alternatively if given a list of absolute paths to mzML files:
+
+`asari process --mode pos --input mzML_path_list.txt`
+
+To get statistical description on a single file (useful to understand data and parameters)
 
 `asari analyze --input mydir/projectx_dir/file_to_analyze.mzML`
 
@@ -114,8 +118,12 @@ After data are processed, users can use `asari viz --input process_result_dir` t
 
 Parameters
 ==========
-Only one parameter in asari requires real attention, i.e., m/z precision is set at 5 ppm by default. 
-Most modern instruments are fine with 5 ppm, but one may want to change if needed.
+
+Only two parameters in Asari should be routinely modified. 
+
+The first is the mass accuracy of the instrument in ppm. By default this is set to 5 ppm which is suitable for many modern instruments. This can be modified by passing `--ppm <ppm_val>` to the Asari command.
+
+The Second is the workflow used for an experiment. The default workflow is optimized for LC-MS. Alternatively workflows may be specified using the `--workflow` parameter. Current options include 'LC' for default, or 'GC' for GC data with retention index standards. GC mode also requires passing the `--RI_landmarks` flag pointing to an appropriately formated file indicating the location of retention index standards. 
 
 Default ionization mode is `pos`. Change to `neg` if needed, by specifying `--mode neg` in command line.
 
@@ -174,7 +182,7 @@ Asari is designed to run > 1000 samples on a laptop computer. The performance is
 - Using Python numerical libraries and vector operations
 - Alignment of mass tracks uses clustering in larger sample size
 
-When a study has N (default 10) or fewer samples, the MassGrid assembly uses a slower algorithm to compensate statistical distribution.
+By default, experiments with 10 or fewer samples, will be processed entirely in memory and the MassGrid assembly uses a slower algorithm to compensate statistical distribution. Larger experiments are processed using ondisk data structures unless specified otherwise using the `--database_mode <mode>` flag. `memory` mode will keep all data in memory, super fast but few machines will have enough memory for a large experiment. `ondisk` keeps intermediates as pickle on disk, sacrificing some performance for scalability. `compressed` is like `ondisk` but the files are compressed before storage, saving considerable space at considerable computational cost. `smart` is a hybrid mode that uses a mixture of memory, ondisk and compressed but has higher overhead. `ondisk` is the current default but future versions will use `smart` instead.
 
 Future improvement can be made by implementing some functions, e.g. chromatogram building, in C.
 

@@ -484,6 +484,7 @@ class CompositeMap:
             index_sample.reverse_rt_cal_dict = reverse_rt_cal_dict
 
         for ii, SM in enumerate(self.experiment.all_samples):
+            list_mass_tracks = SM.list_mass_tracks
             print("Aligning: ", SM.name)
             if ii in self.experiment.mapping:
                 index_sample = self.experiment.all_samples[self.experiment.mapping[ii]]
@@ -507,10 +508,7 @@ class CompositeMap:
                     for k in mzlist:
                         ref_index = self.MassGrid[SM.name][k]
                         if not pd.isna(ref_index): # ref_index can be NA 
-                            _comp_dict[k] += remap_intensity_track( 
-                                SM.list_mass_tracks[int(ref_index)]['intensity'],  
-                                basetrack.copy(), SM.rt_cal_dict 
-                                )
+                            _comp_dict[k] += remap_intensity_track(list_mass_tracks[int(ref_index)]['intensity'],  basetrack.copy(), SM.rt_cal_dict)
         result = {k: {'id_number': k, 'mz': mzDict[k], 'intensity': v} for k,v in _comp_dict.items()}
         self.composite_mass_tracks = result
 
@@ -558,6 +556,7 @@ class CompositeMap:
             self.export_reference_sample()
 
         for SM in self.experiment.all_samples:
+            sample_mass_tracks = SM.list_mass_tracks
             print("   ", SM.name)
 
             if SM.is_reference:
@@ -569,7 +568,7 @@ class CompositeMap:
                     else:
                         cal_func = rt_lowess_calibration
 
-                    self.calibrate_sample_RT(SM, SM.list_mass_tracks, 
+                    self.calibrate_sample_RT(SM, sample_mass_tracks, 
                                         calibration_fuction=cal_func,
                                         cal_min_peak_height=cal_min_peak_height, 
                                         MIN_PEAK_NUM=MIN_PEAK_NUM,
@@ -580,11 +579,8 @@ class CompositeMap:
             if not self.experiment.parameters['drop_unaligned_samples'] or SM.is_rt_aligned:
                 for k in mzlist:
                     ref_index = self.MassGrid[SM.name][k]
-                    if not pd.isna(ref_index): # ref_index can be NA 
-                        _comp_dict[k] += remap_intensity_track( 
-                            SM.list_mass_tracks[int(ref_index)]['intensity'],  
-                            basetrack.copy(), SM.rt_cal_dict 
-                            )
+                    if not pd.isna(ref_index): # ref_index can be NA
+                        _comp_dict[k] += remap_intensity_track(sample_mass_tracks[int(ref_index)]['intensity'],  basetrack.copy(), SM.rt_cal_dict )
                         
         result = {k: {'id_number': k, 'mz': mzDict[k], 'intensity': v} for k,v in _comp_dict.items()}
         self.composite_mass_tracks = result
