@@ -23,7 +23,6 @@ PARAMETERS = {
                                         # 'mongo' (MongoDB, requiring installation of DB server, to implement)
     
     'multicores': 8,                    # number of cores allowed in parallel processing
-    'target_memory_use': 4 * 1024 ** 3, # amount of memory in bytes used for mass track cache
     'compress': True,                   # if true, compress mass track pickles when target disk use exceeded
     'target_disk_use': 100 * 1024 ** 3, # amount of disk space allowed to be used before compressing stored mass tracks
     'sparsify': False,                  # use sparse representations of mass tracks in memory for space saving                

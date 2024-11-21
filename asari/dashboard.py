@@ -102,7 +102,6 @@ def cmapplot_mass_tracks(cmap, rt_list, color, track_id_number):
     plot.opts(active_tools=['box_zoom'], ylabel="Intensity (composite)", )
     return plot
 
-
 def convert_dict_html(d, title=''):
     '''
     Convert a peak dictionary into readable HTML.
@@ -118,7 +117,6 @@ def convert_dict_html(d, title=''):
     for x in info:
         s += "<ul>" + ' '.join([str(ii) for ii in x]) + "</ul>"
     return s
-
 
 def convert_dict_markdown(d, title=''):
     '''
@@ -331,10 +329,8 @@ def dashboard(project_desc, cmap, epd, Ftable):
     #
     default_mz = round(a_good_peak['mz'], 4)
     min_mz, max_mz = Ftable['mz'].min(), Ftable['mz'].max()
-    mz_slider = pn.widgets.FloatSlider(name='Find by closest m/z', value=default_mz, 
-                        step=0.001, start=min_mz, end=max_mz,)
-    mz_selector = pn.widgets.FloatInput(name='', value=default_mz, 
-                        step=0.001, start=min_mz, end=max_mz,)
+    mz_slider = pn.widgets.FloatSlider(name='Find by closest m/z', value=default_mz, step=0.001, start=min_mz, end=max_mz,)
+    mz_selector = pn.widgets.FloatInput(name='', value=default_mz, step=0.001, start=min_mz, end=max_mz,)
     mz_selector.link(mz_slider, value='value')
     mz_slider.link(mz_selector, value='value')
 
@@ -366,19 +362,81 @@ def dashboard(project_desc, cmap, epd, Ftable):
             trackplot *= peak_Area
         return trackplot
 
-    display_track_info = pn.bind(
-        track_info_by_mz, mz=mz_selector,
-        )
-    plot_masstracks_mz = pn.bind(
-        cmapplot_track_by_mz, mz=mz_selector,
-        )
+    display_track_info = pn.bind(track_info_by_mz, mz=mz_selector,)
+    plot_masstracks_mz = pn.bind(cmapplot_track_by_mz, mz=mz_selector,)
 
     mz_browser = pn.Column(
         "## View composite mass track by m/z",
-        pn.Row( pn.Column(mz_slider, mz_selector),
-                display_track_info ),
-        plot_masstracks_mz,
+        pn.Row(pn.Column(mz_slider, mz_selector), display_track_info), plot_masstracks_mz,
         )
+
+    #
+    # frag spectrum browser
+    #
+
+    min_rt, max_rt = Ftable['rtime'].min(), Ftable['rtime'].max()
+    min_mz, max_mz = Ftable['mz'].min(), Ftable['mz'].max()
+    rt_range_slider = pn.widgets.FloatSlider(name='coelute_tol', value=1, step=0.05, start=0, end=10)
+    rt_slider = pn.widgets.FloatSlider(name='rtime', value=min_rt * 1.05, step=0.01, start=min_rt, end=max_rt)
+    #rt_range_slider.link(rt_range_slider, value='value')
+    #rt_slider = rt_slider.link(rt_slider, value='value')
+
+    # Function to generate the scatter plot based on retention times
+    def features_by_rt(rtime, rtime_tol):
+        Fsub = Ftable[Ftable['rtime'].between(rtime - rtime_tol, rtime + rtime_tol)]
+        if Fsub.empty:
+            return hv.Scatter([], []).opts(title="No features found in this range.")
+        else:
+            return Fsub.hvplot.scatter(
+                x='mz', 
+                y='peak_area', 
+                logy=True, 
+                size=10, 
+                title=f"Features near RT: {rtime} ± {rtime_tol}",
+                xlabel="m/z",
+                ylabel="Peak Area",
+                xlim=(min_mz * .95, max_mz * 1.05)
+            ).opts(active_tools=['box_zoom'])
+
+    def features_by_rt_with_lines(rtime, rtime_tol):
+        # Filter features based on retention time
+        Fsub = Ftable[Ftable['rtime'].between(rtime - rtime_tol, rtime + rtime_tol)]
+        
+        if Fsub.empty:
+            return hv.Overlay([]).opts(title="No features found in this range.")
+        else:
+            # Prepare the data for horizontal lines
+            segments_data = pd.DataFrame({
+                'x': Fsub['mz'],
+                'y0': 0,                # Start Y position is always 0
+                'y1': Fsub['peak_area'], # End Y position is the peak area
+            })
+
+            # Create a horizontal line plot using hv.Segments
+            return hv.Segments(segments_data, kdims=['x', 'y0', 'x', 'y1']).opts(
+                xlabel="m/z",
+                ylabel="Peak Area",
+                title=f"Features near RT: {rtime} ± {rtime_tol}",
+                color="blue",
+                line_width=2,
+                active_tools=['box_zoom'],
+                xlim=(min_mz * .95, max_mz * 1.05)
+            )
+
+    display_frag = pn.bind(features_by_rt_with_lines, rtime=rt_slider, rtime_tol=rt_range_slider)    # Create the RT browser interface
+    frag_browser = pn.Column(
+        "## Fragment Spectrum Browser",
+        pn.pane.HTML('''<p> Interpretation of fragmentation spectra depends on experimental conditions </p>
+                    <p> For soft ionization (e.g., ESI), these spectra represent adducts, in-source fragments, and isotopologues </p>
+                    <p> For hard ionization (e.g., EI/MALDI), these spectra also include fragmentation products
+                    '''),
+        pn.Row(rt_slider, rt_range_slider),
+        display_frag,
+    )
+
+    print(rt_slider)
+
+
 
     disclaimer = pn.pane.HTML('''<p>Dangerous data. Use at your own risk.</p>
     <p>Asari source code is hosted at <a href="https://github.com/shuzhao-li/asari" target="_blank">https://github.com/shuzhao-li/asari</a>.
@@ -392,6 +450,7 @@ def dashboard(project_desc, cmap, epd, Ftable):
                 summary,
                 feature_browser,
                 mz_browser,
+                frag_browser,
                 disclaimer,
                 ], 
         )

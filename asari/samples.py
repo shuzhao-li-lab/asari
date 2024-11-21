@@ -3,10 +3,12 @@ import multiprocessing as mp
 from .mass_functions import flatten_tuplelist
 import gzip
 import os
-import gc
-import sys
 import scipy
 import multiprocessing as mp
+import shutil
+
+# shutil.disk_usage(path)
+
 
 class MassTrackCache():
     def __init__(self, parameters) -> None:
@@ -16,10 +18,10 @@ class MassTrackCache():
         self.compressed = set()
         self.pages = [[]]
         self.page_size = parameters['multicores']
-        self.sparsify = parameters['sparsify']
+        self.sparsify = parameters.get('sparsify', False)
         self.compress = parameters.get('compress', False)
         self.disk_used = 0
-        self.disk_limit = 50 * 1024 ** 3
+        self.disk_limit = parameters.get('target_disk_use', 50 * 1024 ** 3)
 
     def __setitem__(self, key, value): 
         self.add_key(key, value)
@@ -28,7 +30,7 @@ class MassTrackCache():
     def delete_key(self, key):
         del self.cache[key]["value"]
         self.in_memory.remove(key)
-        gc.collect()
+        #gc.collect()
 
 
     def add_key(self, key, value, size=None):
@@ -48,7 +50,6 @@ class MassTrackCache():
                 "disk": None,
                 "sparse": self.sparsify,
                 "page": len(self.pages) - 1,
-                "memsize": self.get_obj_size(value),
                 "disksize": None
             }
         self.in_memory.add(key)
@@ -73,8 +74,6 @@ class MassTrackCache():
             self.evict(force=False)
             with mp.Pool(self.page_size) as workers:
                 results = workers.map(self.load_from_disk, [self.cache[k]["disk"] for k in self.pages[self.cache[key]['page']]])
-                workers.close()
-                workers.join()
                 for k, value in zip(self.pages[self.cache[key]['page']], results):
                     if k == key:
                         content = value
@@ -120,39 +119,14 @@ class MassTrackCache():
             
     @staticmethod
     def save_to_disk(path, data):
-        if path.endswith(".pickle"):
-            with open(path, 'wb') as fh:
-                pickle.dump(data, fh, pickle.HIGHEST_PROTOCOL)
-        elif path.endswith(".pickle.gz"):
-            with gzip.GzipFile(path, 'wb', compresslevel=1) as fh:
-                pickle.dump(data, fh, pickle.HIGHEST_PROTOCOL)
+        with gzip.open(path, 'wb') if path.endswith(".gz") else open(path, 'wb') as f:
+            pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
         return path
-    
+
     @staticmethod
     def load_from_disk(path):
-        print("loading: ", path)
-        if path.endswith(".pickle"):
-            with open(path, 'rb') as fh:
-                data = pickle.load(fh)
-                fh.close()
-        elif path.endswith(".pickle.gz"):
-            with gzip.GzipFile(path, 'rb') as fh:
-                data = pickle.load(fh)
-                fh.close()
-        return data
-    
-    @staticmethod
-    def get_obj_size(obj):
-        marked = {id(obj)}
-        obj_q = [obj]
-        sz = 0
-        while obj_q:
-            sz += sum(map(sys.getsizeof, obj_q))
-            all_refr = ((id(o), o) for o in gc.get_referents(*obj_q))
-            new_refr = {o_id: o for o_id, o in all_refr if o_id not in marked and not isinstance(o, type)}
-            obj_q = new_refr.values()
-            marked.update(new_refr.keys())
-        return sz
+        with gzip.open(path, 'rb') if path.endswith(".gz") else open(path, 'rb') as f:
+            return pickle.load(f)
 
 class SimpleSample:
     '''
