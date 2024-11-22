@@ -401,10 +401,7 @@ def dashboard(project_desc, cmap, epd, Ftable):
     def features_by_rt_with_lines(rtime, rtime_tol):
         # Filter features based on retention time
         Fsub = Ftable[Ftable['rtime'].between(rtime - rtime_tol, rtime + rtime_tol)]
-        
-        if Fsub.empty:
-            return hv.Overlay([]).opts(title="No features found in this range.")
-        else:
+        try:
             # Prepare the data for horizontal lines
             segments_data = pd.DataFrame({
                 'x': Fsub['mz'],
@@ -422,6 +419,8 @@ def dashboard(project_desc, cmap, epd, Ftable):
                 active_tools=['box_zoom'],
                 xlim=(min_mz * .95, max_mz * 1.05)
             )
+        except:
+            return hv.Overlay([]).opts(title="No features found in this range.")
 
     display_frag = pn.bind(features_by_rt_with_lines, rtime=rt_slider, rtime_tol=rt_range_slider)    # Create the RT browser interface
     frag_browser = pn.Column(
@@ -433,10 +432,6 @@ def dashboard(project_desc, cmap, epd, Ftable):
         pn.Row(rt_slider, rt_range_slider),
         display_frag,
     )
-
-    print(rt_slider)
-
-
 
     disclaimer = pn.pane.HTML('''<p>Dangerous data. Use at your own risk.</p>
     <p>Asari source code is hosted at <a href="https://github.com/shuzhao-li/asari" target="_blank">https://github.com/shuzhao-li/asari</a>.
