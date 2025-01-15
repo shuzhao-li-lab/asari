@@ -2,6 +2,7 @@ import argparse
 from yaml import load, Loader
 import multiprocessing as mp
 import os
+import sys
 
 from asari import __version__
 from .workflow import (get_mz_list, 
@@ -180,8 +181,12 @@ def main(parameters=PARAMETERS):
     parser.add_argument('--drop_unaligned_samples', default=False, 
             help='Drop samples that fail RT alignment from composite map.')
 
-    args = parser.parse_args()
-    
+    try:
+        args = parser.parse_args()
+    except:
+        parser.print_help()
+        raise SystemExit
+
     # update parameters from user specified yaml file
     if args.parameters:
         parameters.update(
