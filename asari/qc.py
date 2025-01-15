@@ -59,7 +59,9 @@ def get_dataframe_from_file(infile, header=0, index_col=0, sep='\t', max_col=21)
     -------
     Panda data frame
     '''
-    return pd.read_table(infile, header=header, index_col=index_col, sep=sep,
-                         usecols=range(max_col)
-                         )
+    df = pd.read_table(infile, header=header, index_col=index_col, sep=sep)
+    if len(df.columns) > max_col:
+        print(f"[asari.qc] Warning: too many columns ({len(df.columns)}), truncating to {max_col}.")
+        df = df.iloc[:, :max_col]
+    return df
 

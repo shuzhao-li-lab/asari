@@ -4,6 +4,11 @@ import tempfile
 import time
 import hashlib
 from asari.utils import sizeof_fmt, checksum_file, wait_with_pbar, get_ionization_mode_mzml, bulk_process
+from collections import namedtuple
+import requests
+import zipfile
+import io
+import os
 
 class TestUtils(unittest.TestCase):
 
@@ -26,8 +31,26 @@ class TestUtils(unittest.TestCase):
         self.assertTrue(1.9 <= end_time - start_time <= 2.1)
 
     def test_get_ionization_mode_mzml(self):
-        # todo - this needs to be implemented
-        pass
+
+        os.makedirs("./Datasets", exist_ok=True)
+
+        datasets = [
+            "https://github.com/shuzhao-li-lab/data/raw/main/data/MT02Dataset.zip",
+        ]
+
+        for dataset in datasets:
+            r = requests.get(dataset)
+            if dataset.endswith(".zip"):
+                z = zipfile.ZipFile(io.BytesIO(r.content))
+                z.extractall("./Datasets/")
+            else:
+                with open("./Datasets/" + os.path.basename(dataset), 'bw+') as out_fh:
+                    out_fh.write(r.content)
+        
+        mzml_file = namedtuple("mzml_file", ["path"])
+        to_test = mzml_file(path="./Datasets/MT02Dataset/batch11_MT_20210805_005.mzML")
+        mode = get_ionization_mode_mzml(to_test)
+        self.assertEqual(mode, "pos")
 
     @staticmethod
     def dummy_command(x):

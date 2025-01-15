@@ -32,17 +32,18 @@ def wait_with_pbar(wait=5):
 def get_ionization_mode_mzml(mzml_file, limit=50):
     ion_modes = set()
     i = 0
-    for spec in pymzml.run.Reader(mzml_file.path):
-        i += 1
-        assert 'positive scan' in spec or 'negative scan' in spec
-        if spec['positive scan']:
-            ion_modes.add("pos")
-        else:
-            ion_modes.add("neg")
-        if len(ion_modes) > 1:
-            return "mixed"
-        if i > limit:
-            break
+    with pymzml.run.Reader(mzml_file.path) as reader:
+        for spec in reader:
+            i += 1
+            assert 'positive scan' in spec or 'negative scan' in spec
+            if spec['positive scan']:
+                ion_modes.add("pos")
+            else:
+                ion_modes.add("neg")
+            if len(ion_modes) > 1:
+                return "mixed"
+            if i > limit:
+                break
     return list(ion_modes)[0]
 
 def bulk_process(command, arguments, dask_ip=False, jobs_per_worker=False, job_multiplier=1):
