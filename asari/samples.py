@@ -1,4 +1,5 @@
 import pickle
+import zipfile
 from .mass_functions import flatten_tuplelist
 
 class SimpleSample:
@@ -47,6 +48,7 @@ class SimpleSample:
         self.anchor_mz_pairs = registry['anchor_mz_pairs']
         self.rt_numbers = registry['list_scan_numbers']
         self.list_retention_time = registry['list_retention_time']
+        self.compressed = self.experiment.parameters['compress']
 
         if self.database_mode == 'memory':
             self.list_mass_tracks = registry['sample_data']['list_mass_tracks']
@@ -120,28 +122,11 @@ class SimpleSample:
         '''
         Retrieve sample data from local pickle file.
         '''
-        with open(self.data_location, 'rb') as f:
-            sample_data = pickle.load(f)
+        if self.compressed:
+            with zipfile.ZipFile(self.data_location, 'r') as z:
+                with z.open(z.namelist()[0]) as f:
+                    sample_data = pickle.load(f)
+        else:
+            with open(self.data_location, 'rb') as f:
+                sample_data = pickle.load(f)
         return sample_data
-
-    def push_to_db(self, cursor):
-        '''
-        Placeholder.
-
-        Parameters
-        ----------
-        cursor - database cursor instance
-            cursor to interact with database
-        '''
-        pass
-
-    def retrieve_from_db(self, cursor):
-        '''
-        Placeholder.
-
-        Parameters
-        ----------
-        cursor - database cursor instance
-            cursor to interact with database
-        '''
-        pass

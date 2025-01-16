@@ -17,6 +17,8 @@ from .utils import bulk_process
 
 
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
+from scipy import sparse
+import zipfile
 
 
 # -----------------------------------------------------------------------------
@@ -75,7 +77,7 @@ def process_project(list_input_files, parameters):
     shared_dict = batch_EIC_from_samples_(sample_registry, parameters)
     if shared_dict:
         for sid, sam in sample_registry.items():
-            sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'], sam['max_scan_number'], sam['list_scan_numbers'], sam['list_retention_time'], sam['track_mzs'], sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'], sam['sample_data'] = shared_dict[sid]
+            sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'], sam['max_scan_number'], sam['list_scan_numbers'], sam['list_retention_time'], sam['track_mzs'], sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'], sam['sample_data'], sam['sparsified'] = shared_dict[sid]
             sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
         
         EE = ext_Experiment(sample_registry, parameters)
@@ -120,12 +122,8 @@ def register_samples(list_input_files):
     ------
     sample_registry, a dictionary of integer sample id's to filepaths
     '''
-    sample_registry = {}
-    ii = 0
-    for file in sorted(list_input_files):
-        sample_registry[ii] = {'sample_id': ii, 'input_file': file}
-        ii += 1
-    return sample_registry
+    return {ii : {'sample_id': ii, 'input_file': file} for ii, file in enumerate(list_input_files)}
+
 
 def create_export_folders(parameters, time_stamp):
     '''
@@ -166,7 +164,7 @@ def remove_intermediate_pickles(parameters):
 # -----------------------------------------------------------------------------
 # Mass track (EIC) extraction, multi-core parralization via multiprocessing
 
-def make_iter_parameters(sample_registry, parameters, shared_dict):
+def make_iter_parameters(sample_registry, parameters):
     '''
     Generate iterables for multiprocess.starmap for getting sample mass tracks.
 
@@ -205,6 +203,7 @@ def make_iter_parameters(sample_registry, parameters, shared_dict):
             min_peak_height, 
             parameters['intensity_multiplier'], 
             outfile,
+            parameters['compress']
             )
         )
     return iters
@@ -232,7 +231,7 @@ def batch_EIC_from_samples_(sample_registry, parameters):
     single_sample_EICs_
     '''
     shared_dict = {}
-    iters = make_iter_parameters(sample_registry, parameters, shared_dict)
+    iters = make_iter_parameters(sample_registry, parameters)
     for result in bulk_process(single_sample_EICs_, iters, dask_ip=False):
         shared_dict.update(result)
     return dict(shared_dict)
@@ -289,10 +288,9 @@ def single_sample_EICs_(job):
     batch_EIC_from_samples_, make_iter_parameters
     '''
     
-    sample_id, infile, ion_mode, database_mode, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, intensity_multiplier, outfile = job
+    sample_id, infile, ion_mode, database_mode, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, intensity_multiplier, outfile, compress = job
     
-    new = {'sample_id': sample_id, 'input_file': infile, 'ion_mode': ion_mode,}
-    list_mass_tracks = []
+    new = {'sample_id': sample_id, 'input_file': infile, 'ion_mode': ion_mode, 'list_mass_tracks': []}
     track_mzs = []
     try:
         exp = pymzml.run.Reader(infile)
@@ -303,32 +301,36 @@ def single_sample_EICs_(job):
                     min_peak_height=min_peak_height,
                     intensity_multiplier=intensity_multiplier)
         new['max_scan_number'] = max(xdict['rt_numbers'])
-        ii = 0
         # already in asc ending order of m/z from extract_massTracks_, get_thousandth_regions
-        for track in xdict['tracks']:                         
-            list_mass_tracks.append( {
+
+        for ii, track in enumerate(xdict['tracks']):
+            new['list_mass_tracks'].append( {
                 'id_number': ii, 
                 'mz': track[0],
                 # 'rt_scan_numbers': track[1],       # format changed after v1.5
                 'intensity': track[1], 
                 } )
             track_mzs.append( (track[0], ii) )       # keep a reconrd in sample registry for fast MassGrid align
-            ii += 1
 
-        new['list_mass_tracks'] = list_mass_tracks
-        anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(list_mass_tracks, mz_tolerance_ppm=mz_tolerance_ppm)
+        anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(new['list_mass_tracks'], mz_tolerance_ppm=mz_tolerance_ppm)
         # find_mzdiff_pairs_from_masstracks is not too sensitive to massTrack format
         new['anchor_mz_pairs'] = anchor_mz_pairs
         new['number_anchor_mz_pairs'] = len(anchor_mz_pairs)
         print("Extracted %s to %d mass tracks." %(os.path.basename(infile), ii))
         if database_mode == 'ondisk':
-            with open(outfile, 'wb') as f:
-                pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
+            if not compress:
+                with open(outfile, 'wb') as f:
+                    pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
+            else:
+                with zipfile.ZipFile(outfile + '.zip', 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    outfile += ".zip"
+                    with zipf.open(os.path.basename(outfile), 'w') as f:
+                        pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
             return {sample_id: ('passed', 'passed', outfile,
                                             new['max_scan_number'], xdict['rt_numbers'], xdict['rt_times'],
                                             track_mzs,
                                             new['number_anchor_mz_pairs'], anchor_mz_pairs,  
-                                            {})} 
+                                            {}, compress)} 
             
 
         elif database_mode == 'memory':
@@ -336,14 +338,14 @@ def single_sample_EICs_(job):
                                             new['max_scan_number'], xdict['rt_numbers'], xdict['rt_times'],
                                             track_mzs,
                                             new['number_anchor_mz_pairs'], anchor_mz_pairs,  
-                                            new)}
+                                            new, compress)}
 
 
     except:
         # xml.etree.ElementTree.ParseError
         print("mzML processing error in sample %s, skipped." %infile)
 
-        return {new['sample_id']: ('failed', '', '', 0, [], [], [], 0, [], {})}
+        return {new['sample_id']: ('failed', '', '', 0, [], [], [], 0, [], {}, compress)}
 
 
 # -----------------------------------------------------------------------------

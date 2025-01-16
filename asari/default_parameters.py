@@ -61,6 +61,10 @@ PARAMETERS = {
     'check_isotope_ratio': False,
 
 
+    #computational improvements
+    'sparsify_mass_tracks': False,
+
+
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # 'max_rtime': 300,                   # retention time range (chromatography) in seconds, to auto populate
     # 'prominence_window': 101,           # not used now; no need to modify  

@@ -177,6 +177,8 @@ def main(parameters=PARAMETERS):
             help='Toggle on debug mode for retention alignment: output align figures and reference features.')
     parser.add_argument('--intensity_multiplier', default=1, 
             help='Multiply observed intensities by this value, for debug use only, may help with TOF data')
+    parser.add_argument('--compress', default=False, 
+            help='Compress mass tracks to reduce disk usage, default is False')
     # use True in data mining
     parser.add_argument('--drop_unaligned_samples', default=False, 
             help='Drop samples that fail RT alignment from composite map.')
@@ -223,6 +225,8 @@ def main(parameters=PARAMETERS):
         parameters['wlen'] = args.wlen
     if args.intensity_multiplier:
         parameters['intensity_multiplier'] = int(args.intensity_multiplier)
+    if args.compress:
+        parameters['compress'] = booleandict[args.compress]
         
     # Not useful as chromatogram.clean_rt_calibration_points filters outliers
     if args.max_retention_shift:
@@ -234,7 +238,6 @@ def main(parameters=PARAMETERS):
     # update peak detection parameters by autoheight then CLI args
     # min_peak_height, min_prominence_threshold, cal_min_peak_height, min_intensity_threshold
     parameters = update_peak_detection_params(parameters, args)
-    parameters['database_mode'] = 'ondisk'
 
     if args.run == 'process':
         process(parameters, args)
@@ -251,7 +254,7 @@ def main(parameters=PARAMETERS):
         # Annotate a user supplied feature table
         annotate(parameters, args)
     elif args.run == 'join':
-        # input a list of directoreis, each a result of asari process
+        # input a list of directories, each a result of asari process
         join(parameters, args)
     elif args.run == 'viz':
         # launch data dashboard
@@ -262,7 +265,6 @@ def main(parameters=PARAMETERS):
         print("\t2. GC, pass `--workflow GC` to enable")
     else:
         print("Expecting one of the subcommands: analyze, process, xic, annotate, join, viz, list_workflows.")
-
 #
 # -----------------------------------------------------------------------------
 #
