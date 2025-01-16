@@ -1,9 +1,8 @@
 '''
 Functions for elution peak detection and evaluation.
 '''
-
-import multiprocessing as mp
 import numpy as np
+
 from scipy.signal import detrend, find_peaks 
 from scipy.optimize import curve_fit 
 
