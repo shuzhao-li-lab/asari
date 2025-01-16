@@ -10,6 +10,20 @@ import time
 import hashlib
 import pymzml
 
+def build_boolean_dict():
+    return {
+        'T': True, 
+        'F': False, 
+        1: True, 
+        0: False, 
+        'True': True, 
+        'False': False, 
+        'TRUE': True, 
+        'FALSE': False, 
+        'true': True, 
+        'false': False
+    }
+
 def sizeof_fmt(num, suffix="B"):
     for unit in ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"):
         if abs(num) < 1024.0:
@@ -48,7 +62,7 @@ def get_ionization_mode_mzml(mzml_file, limit=50):
 
 def bulk_process(command, arguments, dask_ip=True, jobs_per_worker=False, job_multiplier=1):
     if arguments:
-        if dask_ip:
+        if dask_ip and False:
             print("HERE")
             try:
                 from dask.distributed import Client, as_completed, progress

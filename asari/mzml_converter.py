@@ -1,11 +1,10 @@
 import os
 import subprocess
-import multiprocessing as mp
+from zipfile import ZipFile
 
 import requests
 
-from zipfile import ZipFile
-from MetabolicAtlas.utils import bulk_process
+from .utils import bulk_process
 
 
 class mzMLconverter:

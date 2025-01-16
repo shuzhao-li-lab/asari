@@ -52,6 +52,7 @@ def extract_massTracks_(ms_expt,
     '''
     alldata = []
     rt_times = []           # in seconds
+    ms2_spectra = []
     ii = 0
     for spec in ms_expt:
         if spec.ms_level == 1:                         # MS Level 1 only
@@ -65,6 +66,8 @@ def extract_massTracks_(ms_expt,
             mzs = spec.mz[good_positions]
             alldata += [(mz, ii, inten) for mz, inten in zip(mzs, intensities)]
             ii += 1
+        elif spec.ms_level == 2:
+            ms2_spectra.append(spec)
 
     #print("extracted %d valide data points." %len(alldata))
     mzTree = {}
@@ -99,6 +102,7 @@ def extract_massTracks_(ms_expt,
         'rt_numbers': rt_numbers,
         'rt_times': rt_times,
         'tracks': updated_tracks,
+        'ms2_spectra': ms2_spectra
     }
 
 

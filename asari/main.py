@@ -1,31 +1,17 @@
 import argparse
-from yaml import load, Loader
 import multiprocessing as mp
 import os
-import sys
+import yaml
 
 from asari import __version__
-from .workflow import (get_mz_list, 
-                       process_project, 
-                       process_xics, 
-                       read_project_dir)
+from .workflow import (get_mz_list, process_project, process_xics, read_project_dir)
 from .default_parameters import PARAMETERS
 from .dashboard import read_project, dashboard
 from .analyze import estimate_min_peak_height, analyze_single_sample
 from .annotate_user_table import annotate_user_featuretable
+from .utils import build_boolean_dict
 
-booleandict = {
-    'T': True, 
-    'F': False, 
-    1: True, 
-    0: False, 
-    'True': True, 
-    'False': False, 
-    'TRUE': True, 
-    'FALSE': False, 
-    'true': True, 
-    'false': False
-    }
+booleandict = build_boolean_dict()
 
 PARAMETERS['asari_version'] = __version__
 
@@ -200,7 +186,7 @@ def main(parameters=PARAMETERS):
     # update parameters from user specified yaml file
     if args.parameters:
         parameters.update(
-            load(open(args.parameters).read(), Loader=Loader)
+            yaml.load(open(args.parameters).read(), Loader=yaml.Loader)
         )
         
     parameters['multicores'] = min(mp.cpu_count(), parameters['multicores'])

@@ -3,6 +3,8 @@ Functions for subcommand `annotate`
 '''
 import json
 
+from jms.io import read_table_to_peaks
+
 from .experiment import (ext_Experiment,
                          ExperimentalEcpdDatabase, 
                          adduct_search_patterns, 
@@ -11,7 +13,6 @@ from .experiment import (ext_Experiment,
 from .default_parameters import extended_adducts
 from .json_encoder import NpEncoder
 
-from jms.io import read_table_to_peaks
 
 
 def annotate_user_featuretable(infile, parameters, rtime_tolerance=2):

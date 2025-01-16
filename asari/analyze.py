@@ -6,11 +6,12 @@ import random
 import pymzml
 import numpy as np
 
+from mass2chem.search import find_mzdiff_pairs_from_masstracks
+
 from .chromatograms import extract_massTracks_ 
 from .experiment import ext_Experiment
 from .mass_functions import flatten_tuplelist
 
-from mass2chem.search import find_mzdiff_pairs_from_masstracks
 
 
 
