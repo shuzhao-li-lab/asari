@@ -30,7 +30,15 @@ booleandict = {
 PARAMETERS['asari_version'] = __version__
 
 def __run_process__(parameters, args):
-    
+    needs_conversion = []
+    for x in os.listdir(args.input):
+        if x.endswith('.raw'):
+            needs_conversion.append(x)
+    if needs_conversion:
+        from .mzml_converter import mzMLconverter
+        converter = mzMLconverter()
+        converter.bulk_convert(needs_conversion)
+
     # main process function
     list_input_files = read_project_dir(args.input)
     if not list_input_files:
