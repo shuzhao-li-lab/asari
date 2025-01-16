@@ -24,6 +24,8 @@ PARAMETERS = {
     'mass_range': (50, 2000),
     'mz_tolerance_ppm': 5,              # ppm, high selectivity meaning no overlap neighbors to confuse; 
                                         # Low selectivity regions will be still inspected to determine the true number of features
+    'correction_tolerance_ppm': 1,      # ppm cutoff for deciding to run mass calibration, for correcting mass accuracy in MS1
+
 
     # chromatogram and peak parameters
     'min_timepoints': 6,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
@@ -35,7 +37,7 @@ PARAMETERS = {
     'autoheight': False,                # min_peak_height can be estimated automatically by setting autoheight on in CLI  
     'gaussian_shape': 0.5,              # min cutoff of goodness of fitting to Gauss model
     'peak_area': 'sum',                 # `sum` for simple sum, `auc` for area under the curve, `gauss` for gaussian
-    
+
     # retention time alignment
     'reference': None,
     'rt_align_method': 'lowess',        # 'lowess', 'tolerance', or to implement           

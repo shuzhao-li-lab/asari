@@ -1,24 +1,18 @@
 '''
 Classes of MassGrid and CompositeMap.
 '''
+
 import pandas as pd
+import numpy as np
+
 from scipy import interpolate
 from scipy.ndimage import maximum_filter1d
-import numpy as np
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
 
-from .mass_functions import (flatten_tuplelist, 
-                             landmark_guided_mapping, 
-                             calculate_selectivity)
-from .chromatograms import (nn_cluster_by_mz_seeds,
-                            rt_lowess_calibration_debug, 
-                            rt_lowess_calibration, 
-                            remap_intensity_track)
-from .peaks import (quick_detect_unique_elution_peak,
-                    batch_deep_detect_elution_peaks,
-                    get_gaussian_peakarea_on_intensity_list)
+from .mass_functions import (flatten_tuplelist, landmark_guided_mapping, calculate_selectivity)
+from .chromatograms import (nn_cluster_by_mz_seeds,rt_lowess_calibration_debug, rt_lowess_calibration, remap_intensity_track)
+from .peaks import (quick_detect_unique_elution_peak, batch_deep_detect_elution_peaks, get_gaussian_peakarea_on_intensity_list)
 from .samples import SimpleSample
-
 
 class MassGrid:
     '''
@@ -26,7 +20,7 @@ class MassGrid:
     This shares similarity to FeatureMap in OpenMS, but the correspondence 
     in asari takes adavantage of high m/z resolution first before feature detection.
     '''
-    def __init__(self, cmap=None, experiment=None):
+    def __init__(self, cmap, experiment):
         '''
         Initiating MassGrid by linking to CompositeMap and ext_Experiment instances.
 
@@ -158,7 +152,7 @@ class MassGrid:
         self.experiment.all_samples.append(reference_sample)
 
 
-    def add_sample(self, sample, database_cursor=None):
+    def add_sample(self, sample):
         '''
         This adds a sample to MassGrid, including the m/z alignment of the sample against the 
         existing reference m/z values in the MassGrid.
@@ -183,7 +177,12 @@ class MassGrid:
         mzlist = [x[0] for x in sample.track_mzs]
         new_reference_mzlist, new_reference_map2, updated_REF_landmarks, _r = \
             landmark_guided_mapping(
-                list(self.MassGrid['mz']), self._mz_landmarks_, mzlist, sample._mz_landmarks_
+                list(self.MassGrid['mz']), 
+                self._mz_landmarks_, 
+                mzlist, 
+                sample._mz_landmarks_,
+                std_ppm = self.experiment.parameters['mz_tolerance_ppm'],
+                correction_tolerance_ppm = self.experiment.parameters['correction_tolerance_ppm']
                 )
 
         NewGrid = pd.DataFrame(
@@ -200,7 +199,7 @@ class MassGrid:
         self.experiment.all_samples.append(sample)
 
 
-    def bin_track_mzs(self, tl, reference_id):
+    def bin_track_mzs(self, tl, reference_id=None):
         '''
         Bin all track m/z values into centroids via clustering, to be used to build massGrid.
 
@@ -289,8 +288,7 @@ class CompositeMap:
         '''
         self.experiment = experiment
         self._number_of_samples_ = experiment.number_of_samples
-        self.list_sample_names = [experiment.sample_registry[ii]['name'] 
-                                  for ii in experiment.valid_sample_ids]
+        self.list_sample_names = [experiment.sample_registry[ii]['name'] for ii in experiment.valid_sample_ids]
 
         # designated reference sample; all RT is aligned to this sample
         self.reference_sample_instance = self.reference_sample = \

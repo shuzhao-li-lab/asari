@@ -72,18 +72,25 @@ def process_project(list_input_files, parameters):
         
     # samples are processed to mass tracks (EICs) here
     shared_dict = batch_EIC_from_samples_(sample_registry, parameters)
-    for sid, sam in sample_registry.items():
-        sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'
-            ], sam['max_scan_number'], sam['list_scan_numbers'], sam['list_retention_time'
-            ], sam['track_mzs'
-            ], sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'
-            ], sam['sample_data'] = shared_dict[sid]
-
-        sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
-    
-    EE = ext_Experiment(sample_registry, parameters)
-    EE.process_all()
-    EE.export_all(anno=parameters["anno"])
+    if shared_dict:
+        for sid, sam in sample_registry.items():
+            sam['status:mzml_parsing'], 
+            sam['status:eic'], 
+            sam['data_location'], 
+            sam['max_scan_number'], 
+            sam['list_scan_numbers'], 
+            sam['list_retention_time'], 
+            sam['track_mzs'], 
+            sam['number_anchor_mz_pairs'], 
+            sam['anchor_mz_pairs'], 
+            sam['sample_data'] = shared_dict[sid]
+            sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
+        
+        EE = ext_Experiment(sample_registry, parameters)
+        EE.process_all()
+        EE.export_all(anno=parameters["anno"])
+    else:
+        raise Exception("No data was processed, check the input files.")
 
     if not parameters['pickle'] and parameters['database_mode'] != 'memory':
         remove_intermediate_pickles(parameters)
