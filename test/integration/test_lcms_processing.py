@@ -6,6 +6,17 @@ import pandas as pd
 import subprocess
 import unittest
 import json
+import atexit
+import shutil
+
+
+def cleanup(p):
+    for root, dirs, files in os.walk(os.path.dirname(p)):
+        for dir in dirs:
+            if dir.startswith("asari_MT02_results"):
+                shutil.rmtree(os.path.join(root, dir))
+    shutil.rmtree("./Datasets")
+atexit.register(cleanup(__file__))
 
 class TestLCMSProcessing(unittest.TestCase):
     def __init__(self, methodName = "runTest"):
@@ -81,6 +92,3 @@ class TestLCMSProcessing(unittest.TestCase):
         self.assertTrue(os.path.exists(empCpds), "Annotated empirical compounds not found")
         with open(empCpds) as f:
             self.assertIsInstance(json.load(f), dict, "Annotated empirical compounds not found")
-
-if __name__ == "__main__":
-    unittest.main()
