@@ -9,14 +9,14 @@ import json
 import atexit
 import shutil
 
+os.makedirs("./Datasets", exist_ok=True)
 
-def cleanup(p):
-    for root, dirs, files in os.walk(os.path.dirname(p)):
+@atexit.register
+def cleanup():
+    for root, dirs, files in os.walk("."):
         for dir in dirs:
             if dir.startswith("asari_MT02_results"):
                 shutil.rmtree(os.path.join(root, dir))
-    shutil.rmtree("./Datasets")
-atexit.register(cleanup(__file__))
 
 class TestLCMSProcessing(unittest.TestCase):
     def __init__(self, methodName = "runTest"):
@@ -43,6 +43,7 @@ class TestLCMSProcessing(unittest.TestCase):
                 with open("./Datasets/" + os.path.basename(dataset), 'bw+') as out_fh:
                     out_fh.write(r.content)
         
+
 
     def run_asari(self):
         command = [
