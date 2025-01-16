@@ -7,13 +7,14 @@ Heavy lifting is in constructors.CompositeMap,
 Annotation is facilitated by jms-metabolite-services, mass2chem. 
 '''
 import time
-import multiprocessing as mp
 import os
 import pymzml
 import pickle
 
 from .experiment import ext_Experiment
 from .chromatograms import extract_massTracks_ 
+from .utils import bulk_process
+
 
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
 
@@ -74,16 +75,7 @@ def process_project(list_input_files, parameters):
     shared_dict = batch_EIC_from_samples_(sample_registry, parameters)
     if shared_dict:
         for sid, sam in sample_registry.items():
-            sam['status:mzml_parsing'], 
-            sam['status:eic'], 
-            sam['data_location'], 
-            sam['max_scan_number'], 
-            sam['list_scan_numbers'], 
-            sam['list_retention_time'], 
-            sam['track_mzs'], 
-            sam['number_anchor_mz_pairs'], 
-            sam['anchor_mz_pairs'], 
-            sam['sample_data'] = shared_dict[sid]
+            sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'], sam['max_scan_number'], sam['list_scan_numbers'], sam['list_retention_time'], sam['track_mzs'], sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'], sam['sample_data'] = shared_dict[sid]
             sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
         
         EE = ext_Experiment(sample_registry, parameters)
@@ -201,12 +193,18 @@ def make_iter_parameters(sample_registry, parameters, shared_dict):
     min_timepoints = parameters['min_timepoints']
     min_peak_height = parameters['min_peak_height']
     for sample in sample_registry.values():
-        outfile = os.path.join(parameters['outdir'], 'pickle', 
-                               os.path.basename(sample['input_file']).replace('.mzML', '')+'.pickle')
-        iters.append(
-            (sample['sample_id'], sample['input_file'], parameters['mode'], parameters['database_mode'],
-            mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, parameters['intensity_multiplier'], outfile,
-            shared_dict
+        outfile = os.path.join(parameters['outdir'], 'pickle', os.path.basename(sample['input_file']).replace('.mzML', '')+'.pickle')
+        iters.append((
+            sample['sample_id'], 
+            sample['input_file'], 
+            parameters['mode'], 
+            parameters['database_mode'],
+            mz_tolerance_ppm, 
+            min_intensity, 
+            min_timepoints, 
+            min_peak_height, 
+            parameters['intensity_multiplier'], 
+            outfile,
             )
         )
     return iters
@@ -233,19 +231,13 @@ def batch_EIC_from_samples_(sample_registry, parameters):
     --------
     single_sample_EICs_
     '''
-    with mp.Manager() as manager:
-        shared_dict = manager.dict()
-        iters = make_iter_parameters(sample_registry, parameters, shared_dict)
-        # print("Number of processes ", number_processes)
-        with mp.Pool( parameters['multicores'] ) as pool:
-            pool.starmap( single_sample_EICs_, iters )
+    shared_dict = {}
+    iters = make_iter_parameters(sample_registry, parameters, shared_dict)
+    for result in bulk_process(single_sample_EICs_, iters, dask_ip=False):
+        shared_dict.update(result)
+    return dict(shared_dict)
 
-        _d = dict(shared_dict)
-    return _d
-
-def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
-                    mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, intensity_multiplier, outfile, 
-                    shared_dict):
+def single_sample_EICs_(job):
     '''
     Extraction of mass tracks from a single sample. Used by multiprocessing in batch_EIC_from_samples_.
     `shared_dict` is used to pass back information, thus critical. Designed here as
@@ -296,6 +288,9 @@ def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
     --------
     batch_EIC_from_samples_, make_iter_parameters
     '''
+    
+    sample_id, infile, ion_mode, database_mode, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, intensity_multiplier, outfile = job
+    
     new = {'sample_id': sample_id, 'input_file': infile, 'ion_mode': ion_mode,}
     list_mass_tracks = []
     track_mzs = []
@@ -309,7 +304,7 @@ def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
                     intensity_multiplier=intensity_multiplier)
         new['max_scan_number'] = max(xdict['rt_numbers'])
         ii = 0
-        # already in ascending order of m/z from extract_massTracks_, get_thousandth_regions
+        # already in asc ending order of m/z from extract_massTracks_, get_thousandth_regions
         for track in xdict['tracks']:                         
             list_mass_tracks.append( {
                 'id_number': ii, 
@@ -325,31 +320,30 @@ def single_sample_EICs_(sample_id, infile, ion_mode, database_mode,
         # find_mzdiff_pairs_from_masstracks is not too sensitive to massTrack format
         new['anchor_mz_pairs'] = anchor_mz_pairs
         new['number_anchor_mz_pairs'] = len(anchor_mz_pairs)
-
+        print("Extracted %s to %d mass tracks." %(os.path.basename(infile), ii))
         if database_mode == 'ondisk':
-            shared_dict[new['sample_id']] = ('passed', 'passed', outfile,
-                                            new['max_scan_number'], xdict['rt_numbers'], xdict['rt_times'],
-                                            track_mzs,
-                                            new['number_anchor_mz_pairs'], anchor_mz_pairs,  
-                                            {} )  
             with open(outfile, 'wb') as f:
                 pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
-
-        elif database_mode == 'memory':
-            shared_dict[new['sample_id']] = ('passed', 'passed', outfile,
+            return {sample_id: ('passed', 'passed', outfile,
                                             new['max_scan_number'], xdict['rt_numbers'], xdict['rt_times'],
                                             track_mzs,
                                             new['number_anchor_mz_pairs'], anchor_mz_pairs,  
-                                            new )
+                                            {})} 
+            
 
-        print("Extracted %s to %d mass tracks." %(os.path.basename(infile), ii))
+        elif database_mode == 'memory':
+            return {sample_id: ('passed', 'passed', outfile,
+                                            new['max_scan_number'], xdict['rt_numbers'], xdict['rt_times'],
+                                            track_mzs,
+                                            new['number_anchor_mz_pairs'], anchor_mz_pairs,  
+                                            new)}
+
 
     except:
         # xml.etree.ElementTree.ParseError
-        shared_dict[new['sample_id']] = ('failed', '', '', 
-                                            0, [], [], [], 0, [], 
-                                            {})
         print("mzML processing error in sample %s, skipped." %infile)
+
+        return {new['sample_id']: ('failed', '', '', 0, [], [], [], 0, [], {})}
 
 
 # -----------------------------------------------------------------------------
@@ -381,8 +375,7 @@ def process_xics(list_input_files, parameters):
     create_export_folders(parameters, time_stamp)
     # samples are processed to mass tracks (EICs) here
     shared_dict = batch_EIC_from_samples_(sample_registry, parameters)
-    print("XICs were stored as pickle objects under %s" 
-          %os.path.join(parameters['outdir'], 'pickle'))
+    print("XICs were stored as pickle objects under %s" %os.path.join(parameters['outdir'], 'pickle'))
 
 # -----------------------------------------------------------------------------
 # main workflow for `extract`, short cut by passing mzlist to parameters['target']

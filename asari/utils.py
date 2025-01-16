@@ -46,16 +46,17 @@ def get_ionization_mode_mzml(mzml_file, limit=50):
                 break
     return list(ion_modes)[0]
 
-def bulk_process(command, arguments, dask_ip=False, jobs_per_worker=False, job_multiplier=1):
+def bulk_process(command, arguments, dask_ip=True, jobs_per_worker=False, job_multiplier=1):
     if arguments:
         if dask_ip:
+            print("HERE")
             try:
                 from dask.distributed import Client, as_completed, progress
             except:
                 raise ImportError("Dask must be installed to use dask_ip=True")
-            client = Client("tcp://localhost:8786")
-            client.scatter(arguments)
-            client.scatter(command)
+            client = Client("tcp://192.168.1.127:8786")
+            #client.scatter(arguments)
+            #client.scatter(command)
             results = []
             if jobs_per_worker == 'auto':
                 total_thread = sum(worker_info['nthreads'] for worker_info in client.scheduler_info()['workers'].values())
@@ -107,4 +108,4 @@ def bulk_process(command, arguments, dask_ip=False, jobs_per_worker=False, job_m
                 pbar = tqdm.tqdm(client.imap(command, arguments), total=len(arguments), desc="processing...")
                 return [x for x in pbar]
     else:
-        return []
+        raise Exception("No Arguments Provided")

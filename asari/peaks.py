@@ -7,8 +7,8 @@ import numpy as np
 from scipy.signal import detrend, find_peaks 
 from scipy.optimize import curve_fit 
 
-from .chromatograms import (smooth_moving_average, 
-                            smooth_lowess)
+from .chromatograms import (smooth_moving_average, smooth_lowess)
+from .utils import bulk_process
 
 # -----------------------------------------------------------------------------
 # multicore processing for peak detection
@@ -39,17 +39,12 @@ def batch_deep_detect_elution_peaks(list_mass_tracks, number_of_scans, parameter
     --------
     stats_detect_elution_peaks
     '''
-    with mp.Manager() as manager:
-        shared_list = manager.list()
-        iters = iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters, shared_list)
-        with mp.Pool( parameters['multicores'] ) as pool:
-            # call peak detection function here
-            pool.starmap( stats_detect_elution_peaks, iters )
+    iters = iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters)
+    results = bulk_process(stats_detect_elution_peaks, iters, dask_ip=False)
+    return [item for sublist in results for item in sublist]
 
-        FeatureList = list(shared_list)
-    return FeatureList
 
-def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters, shared_list):
+def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters):
     '''
     Generate iterables for multiprocess.starmap for running elution peak detection.
 
@@ -91,7 +86,7 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
                 (mass_track, number_of_scans, min_peak_height, min_peak_ratio, 
                 min_fwhm, min_prominence_threshold, wlen, 
                 snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold, 
-                shared_list)
+                )
             )
     return iters
 
@@ -100,10 +95,10 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
 # Statistics guided peak detection
 # -----------------------------------------------------------------------------
 
-def stats_detect_elution_peaks(mass_track, number_of_scans, 
-                min_peak_height, min_peak_ratio, min_fwhm, min_prominence_threshold,
-                wlen, snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold,
-                shared_list):
+
+def stats_detect_elution_peaks(job):
+    
+    
     '''
     Statistics guided peak detection. 
     This is the main method in asari for detecting elution peaks on a mass track.
@@ -158,6 +153,13 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
     The peakshape is calculated on cleaned mass track.
     SNR is computed on local noise (average of up to 100 nonpeak data points on each side of a peak).
     '''
+
+    mass_track, number_of_scans, min_peak_height, \
+        min_peak_ratio, min_fwhm, min_prominence_threshold, \
+        wlen, snr, peakshape, min_prominence_ratio, \
+        iteration, min_intensity_threshold = job
+
+
     list_json_peaks, list_peaks = [], []
     list_scans = np.arange(number_of_scans)
     _baseline_, noise_level, scaling_factor, min_peak_height, list_intensity = audit_mass_track(
@@ -208,9 +210,7 @@ def stats_detect_elution_peaks(mass_track, number_of_scans,
                 if peak['snr'] >= snr:
                     peak['height'] = int(peak['height'])
                     list_peaks.append(peak)
-
-    shared_list += list_peaks
-
+    return list_peaks
 
 def compute_noise_by_flanks(peak, 
                             list_intensity, 

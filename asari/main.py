@@ -234,6 +234,7 @@ def main(parameters=PARAMETERS):
     # update peak detection parameters by autoheight then CLI args
     # min_peak_height, min_prominence_threshold, cal_min_peak_height, min_intensity_threshold
     parameters = update_peak_detection_params(parameters, args)
+    parameters['database_mode'] = 'ondisk'
 
     if args.run == 'process':
         process(parameters, args)
@@ -255,8 +256,12 @@ def main(parameters=PARAMETERS):
     elif args.run == 'viz':
         # launch data dashboard
         viz(parameters, args)
+    elif args.run == 'list_workflows':
+        print("Available Worfklows:")
+        print("\t1. LC - default option")
+        print("\t2. GC, pass `--workflow GC` to enable")
     else:
-        print("Expecting one of the subcommands: analyze, process, xic, annotate, join, viz.")
+        print("Expecting one of the subcommands: analyze, process, xic, annotate, join, viz, list_workflows.")
 
 #
 # -----------------------------------------------------------------------------
