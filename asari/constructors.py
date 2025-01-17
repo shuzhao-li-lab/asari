@@ -4,6 +4,8 @@ Classes of MassGrid and CompositeMap.
 
 import pandas as pd
 import numpy as np
+import os
+import csv
 
 from scipy import interpolate
 from scipy.ndimage import maximum_filter1d
@@ -60,7 +62,8 @@ class MassGrid:
         sample_ids.pop(self.experiment.reference_sample_id)
         for sid in sample_ids:
             SM = SimpleSample(self.experiment.sample_registry[sid],
-                experiment=self.experiment, database_mode=self.experiment.database_mode, 
+                experiment=self.experiment, 
+                database_mode=self.experiment.database_mode, 
                 mode=self.experiment.mode)
             self.add_sample(SM)
 
@@ -481,13 +484,13 @@ class CompositeMap:
 
 
     def calibrate_sample_RT(self, 
-                                sample, 
-                                list_mass_tracks,
-                                calibration_fuction=rt_lowess_calibration, 
-                                cal_min_peak_height=100000,
-                                MIN_PEAK_NUM=15,
-                                MAX_RETENTION_SHIFT=np.inf,
-                                NUM_ITERATIONS=3):
+                            sample, 
+                            list_mass_tracks,
+                            calibration_fuction=rt_lowess_calibration, 
+                            cal_min_peak_height=100000,
+                            MIN_PEAK_NUM=15,
+                            MAX_RETENTION_SHIFT=np.inf,
+                            NUM_ITERATIONS=3):
         '''
         Calibrate/align retention time per sample.
 
@@ -804,8 +807,7 @@ class CompositeMap:
         rtime_landmarks = [self.dict_scan_rtime[p['apex']] for p in 
                         self.good_reference_landmark_peaks]
         reference_sample_name = self.reference_sample.name
-        import os
-        import csv
+
         # example: batch14_MT_20210808_087_mz_rtime_landmarks.csv
         referece_path = os.path.join(self.experiment.parameters['outdir'], 'export', reference_sample_name + '_mz_rtime_landmarks.csv')
         with open(referece_path, 'w', newline='') as file:

@@ -50,7 +50,7 @@ PARAMETERS = {
     'max_retention_shift': None,        # landmark peak pairs with a scan number delta greater than this are not used for RT calibration
     'num_lowess_iterations': 3,         # number of lowess iterations to perform for RT calibration, higher values take longer but less sensitive to outliers
     # Number of samples dictates workflow 
-    'project_sample_number_small': 0,  # 10
+    'project_sample_number_small': 10,  # 10
     
     # default output names
     'output_feature_table': 'Feature_table.tsv',
@@ -62,7 +62,7 @@ PARAMETERS = {
 
 
     #computational improvements
-    'sparsify_mass_tracks': False,
+    'compress': False,
 
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

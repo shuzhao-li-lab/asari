@@ -234,7 +234,7 @@ def batch_EIC_from_samples_(sample_registry, parameters):
     iters = make_iter_parameters(sample_registry, parameters)
     for result in bulk_process(single_sample_EICs_, iters, dask_ip=False):
         shared_dict.update(result)
-    return dict(shared_dict)
+    return shared_dict
 
 def single_sample_EICs_(job):
     '''
