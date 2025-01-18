@@ -176,6 +176,8 @@ def main(parameters=PARAMETERS):
     # use True in data mining
     parser.add_argument('--drop_unaligned_samples', default=False, 
             help='Drop samples that fail RT alignment from composite map.')
+    parser.add_argument('--import_pickle', default=False,
+            help='Import pickle files for faster processing')
 
     try:
         args = parser.parse_args()

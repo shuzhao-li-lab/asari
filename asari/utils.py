@@ -10,6 +10,15 @@ import time
 import hashlib
 import pymzml
 
+def validate_mzml_file(file):
+    try:
+        with pymzml.run.Reader(file) as reader:
+            for spec in reader:
+                pass
+    except:
+        return False
+    return True
+
 def build_boolean_dict():
     return {
         'T': True, 
