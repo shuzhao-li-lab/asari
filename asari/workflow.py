@@ -89,7 +89,7 @@ def process_project(list_input_files, parameters):
     else:
         raise Exception("No data was processed, check the input files.")
 
-    if not parameters['pickle'] and parameters['database_mode'] != 'memory':
+    if not parameters['keep_intermediates'] and parameters['database_mode'] != 'memory':
         remove_intermediate_pickles(parameters)
 
 def read_project_dir(directory, file_pattern='.mzML'):
@@ -204,7 +204,6 @@ def make_iter_parameters(sample_registry, parameters):
             min_intensity, 
             min_timepoints, 
             min_peak_height, 
-            parameters['intensity_multiplier'], 
             outfile,
             parameters['compress'],
             parameters
@@ -292,7 +291,7 @@ def single_sample_EICs_(job):
     batch_EIC_from_samples_, make_iter_parameters
     '''
     
-    sample_id, infile, ion_mode, database_mode, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, intensity_multiplier, outfile, compress, parameters = job
+    sample_id, infile, ion_mode, database_mode, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, outfile, compress, parameters = job
     database_mode = 'ondisk'
     if True:
     #try:
@@ -303,8 +302,7 @@ def single_sample_EICs_(job):
                     mz_tolerance_ppm=mz_tolerance_ppm, 
                     min_intensity=min_intensity, 
                     min_timepoints=min_timepoints, 
-                    min_peak_height=min_peak_height,
-                    intensity_multiplier=intensity_multiplier)
+                    min_peak_height=min_peak_height)
         new['max_scan_number'] = max(xdict['rt_numbers'])
         # already in asc ending order of m/z from extract_massTracks_, get_thousandth_regions
         

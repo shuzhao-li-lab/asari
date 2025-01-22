@@ -13,6 +13,7 @@ os.makedirs("./Datasets", exist_ok=True)
 
 @atexit.register
 def cleanup():
+    return
     for root, dirs, files in os.walk("."):
         for dir in dirs:
             if dir.startswith("asari_MT02_results"):

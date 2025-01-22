@@ -67,7 +67,7 @@ def update_peak_detection_params(parameters, args):
         except ValueError as err:
             print("Problems with input files: {0}. Back to default min_peak_height.".format(err))
             
-    elif args.min_peak_height:
+    elif args and args.min_peak_height:
         try:
             parameters['min_peak_height'] = float(args.min_peak_height)
         except:
@@ -76,19 +76,19 @@ def update_peak_detection_params(parameters, args):
     parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
     parameters['cal_min_peak_height'] = 10 * parameters['min_peak_height']
 
-    if args.min_prominence_threshold:
+    if args and args.min_prominence_threshold:
         try:
             parameters['min_prominence_threshold'] = float(args.min_prominence_threshold)
         except ValueError as err:
             print("Problems with specified min_prominence_threshold. Back to default min_prominence_threshold.")
 
-    if args.cal_min_peak_height:
+    if args and args.cal_min_peak_height:
         try:
             parameters['cal_min_peak_height'] = float(args.cal_min_peak_height)
         except ValueError as err:
             print("Problems with specified cal_min_peak_height. Back to default cal_min_peak_height.")
 
-    if args.min_intensity_threshold:
+    if args and args.min_intensity_threshold:
         try:
             parameters['min_intensity_threshold'] = float(args.min_intensity_threshold)
         except ValueError as err:
@@ -149,7 +149,7 @@ def main(parameters=PARAMETERS):
             help='determines the number of rt points used when calculating peak prominence')
     parser.add_argument('--max_retention_shift', default=None,
             help='alignment is attempted only using peak pairs differing by this value in seconds or fewer')
-    parser.add_argument('--num_lowess_iterations', type=int, default=1,
+    parser.add_argument('--num_lowess_iterations', type=int, default=3,
             help='number of lowess iterations attempted during alignment')
     parser.add_argument('--autoheight', default=False,
             help='automatic determining min peak height')
@@ -163,14 +163,12 @@ def main(parameters=PARAMETERS):
             help='signal below this value is removed before peak picking')
     parser.add_argument('--peak_area', default='sum',
             help='peak area calculation, sum, auc or gauss for area under the curve')
-    parser.add_argument('--pickle', default=False, 
-            help='keep all intermediate pickle files, ondisk mode only.')
+    parser.add_argument('--keep_intermediates', default=False, 
+            help='keep all intermediate files, ondisk mode only.')
     parser.add_argument('--anno', default=True, 
             help='perform default annotation after processing data')
     parser.add_argument('--debug_rtime_align', default=False, 
             help='Toggle on debug mode for retention alignment: output align figures and reference features.')
-    parser.add_argument('--intensity_multiplier', default=1, 
-            help='Multiply observed intensities by this value, for debug use only, may help with TOF data')
     parser.add_argument('--compress', default=False, 
             help='Compress mass tracks to reduce disk usage, default is False')
     # use True in data mining
@@ -211,8 +209,8 @@ def main(parameters=PARAMETERS):
         parameters['outdir'] = os.path.abspath(args.output)
     if args.peak_area:
         parameters['peak_area'] = args.peak_area
-    if args.pickle:
-        parameters['pickle'] = booleandict[args.pickle]
+    if args.keep_intermediates:
+        parameters['keep_intermediates'] = booleandict[args.keep_intermediates]
     if args.anno:
         parameters['anno'] = booleandict[args.anno]
     if args.reference:
@@ -221,18 +219,13 @@ def main(parameters=PARAMETERS):
         parameters['database_mode'] = args.database_mode
     if args.wlen:
         parameters['wlen'] = args.wlen
-    if args.intensity_multiplier:
-        parameters['intensity_multiplier'] = int(args.intensity_multiplier)
     if args.compress:
         parameters['compress'] = booleandict[args.compress]
     if args.storage_format:
         assert args.storage_format in ['pickle', 'json'], "Storage format must be either pickle or json."
         parameters['storage_format'] = args.storage_format
-                
-    # Not useful as chromatogram.clean_rt_calibration_points filters outliers
-    if args.max_retention_shift:
-        parameters['max_retention_shift'] = float(args.max_retention_shift)
-        
+
+
     if args.num_lowess_iterations:
         parameters['num_lowess_iterations'] = args.num_lowess_iterations
 

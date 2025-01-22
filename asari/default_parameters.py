@@ -13,8 +13,8 @@
 PARAMETERS = {
     'project_name': 'asari_project',
     'outdir': 'output',
-    'pickle': False,
-    'database_mode': 'auto',            # `auto` determined on sample number 
+    'keep_intermediates': False,        # if true, keep on-disk intermediates            
+    'database_mode': 'ondisk',          # `auto` determined on sample number 
                                         # 'ondisk', 'memory' (run in memory, only small studies), 
                                         # 'mongo' (MongoDB, requiring installation of DB server, to implement)
     'multicores': 4,                    # number of cores allowed in parallel processing
@@ -42,6 +42,7 @@ PARAMETERS = {
     'reference': None,
     'rt_align_method': 'lowess',        # 'lowess', 'tolerance', or to implement           
     'rt_align_on': True,                # False to bypass retention time alignment
+    'debug_rtime_align': False,         # to plot RT alignment diagnostics
     'drop_unaligned_samples': False,    # Drop samples that fail RT alignment from composite map
     'rtime_tolerance': 50,              # feature rtime shift threshold under 10 seconds; or 10% of rtime   
     'cal_min_peak_height': 100000,      # minimal peak height required for peaks used for RT calibration
@@ -49,32 +50,23 @@ PARAMETERS = {
                                         # Samples with fewer selected peaks are dropped out.
     'max_retention_shift': None,        # landmark peak pairs with a scan number delta greater than this are not used for RT calibration
     'num_lowess_iterations': 3,         # number of lowess iterations to perform for RT calibration, higher values take longer but less sensitive to outliers
-    # Number of samples dictates workflow 
-    'project_sample_number_small': 0,  # 10
+    'project_sample_number_small': 10,  # Number of samples dictates workflow, default 10
     
+
+    # for annotation
+    'anno': True,                      # to annotate features
+    'check_isotope_ratio': False,
+
+
+    #computational improvements
+    'compress': False,                 # if True, compress intermediate files ondisk
+    'storage_format': 'pickle',         # 'pickle' or 'json', json is safer but bigger
+
     # default output names
     'output_feature_table': 'Feature_table.tsv',
     'mass_grid_mapping': "_mass_grid_mapping.csv",
     'annotation_filename': "Annotation_table.tsv",
     'json_empricalCompounds': "_empCpd_json.json",
-    # for annotation
-    'check_isotope_ratio': False,
-
-
-    #computational improvements
-    'compress': False,
-    'storage_format': 'pickle' 
-
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    # 'max_rtime': 300,                   # retention time range (chromatography) in seconds, to auto populate
-    # 'prominence_window': 101,           # not used now; no need to modify  
-    # 'cache_mass_traces': False,         # to save memory if not using DB; turn on if need to plot and diagnose
-    # 'init_samples_number': 3,           # initiation samples,
-    # 'initiation_samples': [],           # if user to specify N samples to initiate data processing, 
-                                          # otherwise they are chosen automatically
-    # 'project_sample_number_large': 1000, # not used now
-    # 
     }
     
 
