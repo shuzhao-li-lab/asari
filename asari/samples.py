@@ -1,5 +1,7 @@
 import pickle
 import zipfile
+import json_tricks as json
+
 from .mass_functions import flatten_tuplelist
 
 class SimpleSample:
@@ -125,8 +127,15 @@ class SimpleSample:
         if self.compressed:
             with zipfile.ZipFile(self.data_location, 'r') as z:
                 with z.open(z.namelist()[0]) as f:
-                    sample_data = pickle.load(f)
+                    if z.namelist()[0].endswith('.pickle'):
+                        sample_data = pickle.load(f)
+                    elif z.namelist()[0].endswith('.json'):
+                        sample_data = json.loads(f.read().decode('utf-8'))
         else:
-            with open(self.data_location, 'rb') as f:
-                sample_data = pickle.load(f)
+            if self.data_location.endswith('.pickle'):
+                with open(self.data_location, 'rb') as f:
+                    sample_data = pickle.load(f)
+            elif self.data_location.endswith('.json'):
+                with open(self.data_location, 'r') as f:
+                    sample_data = json.load(f)
         return sample_data

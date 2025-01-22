@@ -178,6 +178,8 @@ def main(parameters=PARAMETERS):
             help='Drop samples that fail RT alignment from composite map.')
     parser.add_argument('--import_pickle', default=False,
             help='Import pickle files for faster processing')
+    parser.add_argument('--storage_format', default='pickle',
+            help='Storage format for intermediate files, pickle or json')
 
     try:
         args = parser.parse_args()
@@ -223,7 +225,10 @@ def main(parameters=PARAMETERS):
         parameters['intensity_multiplier'] = int(args.intensity_multiplier)
     if args.compress:
         parameters['compress'] = booleandict[args.compress]
-        
+    if args.storage_format:
+        assert args.storage_format in ['pickle', 'json'], "Storage format must be either pickle or json."
+        parameters['storage_format'] = args.storage_format
+                
     # Not useful as chromatogram.clean_rt_calibration_points filters outliers
     if args.max_retention_shift:
         parameters['max_retention_shift'] = float(args.max_retention_shift)

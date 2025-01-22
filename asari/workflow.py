@@ -10,6 +10,8 @@ import time
 import os
 import pymzml
 import pickle
+import json_tricks as json
+
 
 from .experiment import ext_Experiment
 from .chromatograms import extract_massTracks_ 
@@ -291,7 +293,9 @@ def single_sample_EICs_(job):
     '''
     
     sample_id, infile, ion_mode, database_mode, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, intensity_multiplier, outfile, compress, parameters = job
-    try:
+    database_mode = 'ondisk'
+    if True:
+    #try:
         new = {'sample_id': sample_id, 'input_file': infile, 'ion_mode': ion_mode, 'list_mass_tracks': []}
         track_mzs = []
         exp = pymzml.run.Reader(infile)
@@ -333,21 +337,38 @@ def single_sample_EICs_(job):
         new['anchor_mz_pairs'] = anchor_mz_pairs
         new['number_anchor_mz_pairs'] = len(anchor_mz_pairs)
         print("Extracted %s to %d mass tracks." %(os.path.basename(infile), ii))
+        data_filepath = outfile
         if database_mode == 'ondisk':
             if not compress:
-                with open(outfile, 'wb') as f:
-                    pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
-                with open(outfile.replace(".pickle", "_ms2.pickle"), 'wb') as f:
-                    pickle.dump(xdict['ms2_spectra'], f, pickle.HIGHEST_PROTOCOL)
-            else:
-                with zipfile.ZipFile(outfile + '.zip', 'w', zipfile.ZIP_DEFLATED) as zipf:
-                    outfile += ".zip"
-                    with zipf.open(os.path.basename(outfile), 'w') as f:
+                if parameters['storage_format'] == 'pickle':
+                    data_filepath = outfile
+                    ms2_filepath = outfile.replace(".pickle", "_ms2.pickle")
+                    with open(outfile, 'wb') as f:
                         pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
-                    with zipf.open(os.path.basename(outfile).replace(".pickle", "_ms2.pickle"), 'w') as f:
+                    with open(outfile.replace(".pickle", "_ms2.pickle"), 'wb') as f:
                         pickle.dump(xdict['ms2_spectra'], f, pickle.HIGHEST_PROTOCOL)
-
-            return {sample_id: ('passed', 'passed', outfile,
+                elif parameters['storage_format'] == 'json':
+                    data_filepath = outfile.replace(".pickle", ".json")
+                    ms2_filepath = outfile.replace(".pickle", "_ms2.json")
+                    with open(outfile.replace(".pickle", ".json"), 'w') as f:
+                        json.dump(new, f)
+                    with open(outfile.replace(".pickle", "_ms2.json"), 'w') as f:
+                        json.dump(xdict['ms2_spectra'], f)
+            else:
+                data_filepath = outfile.replace(".pickle", ".zip")
+                with zipfile.ZipFile(data_filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    if parameters['storage_format'] == 'pickle':
+                        with zipf.open(os.path.basename(outfile), 'w') as f:
+                            pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
+                        with zipf.open(os.path.basename(outfile).replace(".pickle", "_ms2.pickle"), 'w') as f:
+                            pickle.dump(xdict['ms2_spectra'], f, pickle.HIGHEST_PROTOCOL)
+                    elif parameters['storage_format'] == 'json':
+                        with zipf.open(os.path.basename(outfile).replace(".pickle", ".json"), 'w') as f:
+                            f.write(json.dumps(new).encode('utf-8'))
+                        with zipf.open(os.path.basename(outfile).replace(".pickle", "_ms2.json"), 'w') as f:
+                            f.write(json.dumps(xdict['ms2_spectra']).encode('utf-8'))
+            print("\tExtracted to %s, %s MiB." % (data_filepath, round(os.path.getsize(data_filepath)/1024/1024, 2)))
+            return {sample_id: ('passed', 'passed', data_filepath,
                                             new['max_scan_number'], xdict['rt_numbers'], xdict['rt_times'],
                                             track_mzs,
                                             new['number_anchor_mz_pairs'], anchor_mz_pairs,  
@@ -360,9 +381,9 @@ def single_sample_EICs_(job):
                                             track_mzs,
                                             new['number_anchor_mz_pairs'], anchor_mz_pairs,  
                                             new, compress)}
-    except Exception as e:
-        print("Failed to extract: %s." %os.path.basename(infile))
-        return {sample_id: ('failed', 'failed', None, None, None, None, None, None, None, None, compress)}
+    #except Exception as e:
+    #    print("Failed to extract: %s." %os.path.basename(infile))
+    #    return {sample_id: ('failed', 'failed', None, None, None, None, None, None, None, None, compress)}
 
 
 
