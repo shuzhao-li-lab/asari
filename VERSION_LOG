@@ -1,0 +1,13 @@
+v1.13.2 -> v1.14.0
+    fixed issue with hard code mz ppm in add_sample (thanks yufongpeng)
+    added unit and integration testing for the LC-workflow
+    made cmap and experiment non-optional for MassGrid construction
+    removed unused database_cursor for add_sample
+    made reference_id optional in bin_track_mzs
+    remove database_cursor from simplesample
+    added compression support
+    mass track audit results are exported in mass track pickles
+    restart option allows reuse of extracted pickles (experimental, not fully tested)
+    unified asari ecosystem framework for parallelism replaces mp.Pool, future dask integration feasible (scheduled for v2)
+    
+
