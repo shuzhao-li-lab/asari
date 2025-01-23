@@ -32,12 +32,20 @@ PARAMETERS = {
     'min_timepoints': 6,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
     'signal_noise_ratio': 2,            # peak height at least x fold over local noise
     'min_intensity_threshold': 1000,    # minimal intensity for mass track extraction, filtering baseline
-    'min_peak_height': 100000,           # minimal peak height.
-    'min_peak_ratio': 0.001,             # minimal ratio of a peak of the max height of its ROI, relevant to small peaks next to big ones.
+    'min_peak_height': 100000,          # minimal peak height.
+    'min_peak_ratio': 0.001,            # minimal ratio of a peak of the max height of its ROI, relevant to small peaks next to big ones.
     'wlen': 25,                         # window size for evaluating prominence in peaks. Important to resolve clustered narrow peaks.
     'autoheight': False,                # min_peak_height can be estimated automatically by setting autoheight on in CLI  
     'gaussian_shape': 0.5,              # min cutoff of goodness of fitting to Gauss model
     'peak_area': 'sum',                 # `sum` for simple sum, `auc` for area under the curve, `gauss` for gaussian
+
+    # autoheight parameters
+    'min_min_peak_height': 1,           # in autoheight mode, this sets a lower bound on the minimum peak height it can return
+                                        #    notice, that this value is 1 by default, which means that the minimum peak height is not limited by default
+    'dynamic_range': 1000,              # maximal intensity of a peak over the minimal intensity of a peak
+    'num_files_to_check': None,           # number of files to check for autoheight estimation, if None, all files are checked
+
+
 
     # retention time alignment
     'reference': None,

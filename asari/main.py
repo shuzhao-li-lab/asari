@@ -61,8 +61,11 @@ def viz(parameters, args):
 
 def update_peak_detection_params(parameters, args):
     if parameters['autoheight']:
+        if parameters['reuse_intermediates']:
+            print("autoheight and reuse_intermediates are mutually exclusive.")
+            raise SystemExit
         try:
-            parameters['min_peak_height'] = estimate_min_peak_height(read_project_dir(args.input))
+            parameters['min_peak_height'] = estimate_min_peak_height(read_project_dir(args.input), parameters)
             parameters['min_intensity_threshold'] = parameters['min_peak_height'] / 10
         except ValueError as err:
             print("Problems with input files: {0}. Back to default min_peak_height.".format(err))
