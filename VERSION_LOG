@@ -6,12 +6,14 @@ v1.13.2 -> v1.14.0
     new features:
         added compression support
         JSON alternative to pickle, compression compatible. 
+        hardened, but still experimental, autoheight with parallelization
         unified asari ecosystem framework for parallelism replaces mp.Pool, future dask integration feasible (scheduled for v2)
         ^^^ this achieves contention-less multiprocessing by preventing shared data structures. 
         use all cores by passing `-c 0`
         mass track audit results are exported in mass track pickles
         restart option allows reuse of extracted pickles (experimental, not fully tested)
         added command to list possible workflows and clarified that mzML files must be centroided (thanks NchuYj)
+        added helper function in utils for investigating peak_area and feature intensity patterns (thanks YuanyeChi)
 
     misc. code improvements
         added unit and integration testing for the LC-workflow
@@ -20,8 +22,8 @@ v1.13.2 -> v1.14.0
         made reference_id optional in bin_track_mzs
         remove database_cursor from simplesample
         remove intensity multiplier as too hacky for TOF, need a better solution. (thanks Steve Barnes for testing this with me)
-        remove max_retention_shift as not useful (thanks Shuzhao)
-        use np.argmin in clustering for better performance O(N log N) -> O(N) (thanks Shuzhao)
+        remove max_retention_shift as not useful (thanks Shuzhao-Li)
+        use np.argmin in clustering for better performance O(N log N) -> O(N) (thanks Shuzhao-Li)
         additional computational improvements for mz clustering (vectorization)
         vectorize gap detection (will need to migrate this change to Asari-X too)
 
