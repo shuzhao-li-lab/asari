@@ -123,7 +123,7 @@ def get_ionization_mode_mzml(mzml_file, limit=50):
                 break
     return list(ion_modes)[0]
 
-def bulk_process(command, arguments, dask_ip=True, jobs_per_worker=False, job_multiplier=1):
+def bulk_process(command, arguments, dask_ip=False, jobs_per_worker=False, job_multiplier=1):
     if arguments:
         if dask_ip and False:
             print("HERE")

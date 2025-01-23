@@ -139,7 +139,7 @@ def main(parameters=PARAMETERS):
             help='project name')
     parser.add_argument('-p', '--parameters', 
             help='Custom paramter file in YAML. Use parameters.yaml as template.')
-    parser.add_argument('-c', '--cores', type=int, 
+    parser.add_argument('-c', '--multicores', type=int, default=0, 
             help='nunmber of CPU cores intented to use')
     parser.add_argument('-f', '--reference', 
             help='designated reference file for alignments')
@@ -192,7 +192,11 @@ def main(parameters=PARAMETERS):
             yaml.load(open(args.parameters).read(), Loader=yaml.Loader)
         )
         
-    parameters['multicores'] = min(mp.cpu_count(), parameters['multicores'])
+    if parameters['multicores'] == 0:
+        parameters['multicores'] = mp.cpu_count()
+    else:
+        parameters['multicores'] = min(mp.cpu_count(), parameters['multicores'])
+
     parameters['input'] = args.input
     parameters['debug_rtime_align'] = booleandict[args.debug_rtime_align]
     parameters['drop_unaligned_samples'] = booleandict[args.drop_unaligned_samples]
@@ -202,11 +206,12 @@ def main(parameters=PARAMETERS):
         parameters['mode'] = args.mode
     if args.ppm:
         parameters['mz_tolerance_ppm'] = args.ppm
-    if args.cores:
-        if args.cores == 0:
-            print("`cores` must be greater than 0. Using all available cores.")
+    if args.multicores >= 0:
+        if args.multicores == 0:
+            print("Using all available cores.")
             parameters['multicores'] = mp.cpu_count()
-        parameters['multicores'] = min(mp.cpu_count(), args.cores)
+        else:
+            parameters['multicores'] = min(mp.cpu_count(), args.multicores)
     if args.project:
         parameters['project_name'] = args.project
     if args.output:
@@ -243,7 +248,7 @@ def main(parameters=PARAMETERS):
     # update peak detection parameters by autoheight then CLI args
     # min_peak_height, min_prominence_threshold, cal_min_peak_height, min_intensity_threshold
     parameters = update_peak_detection_params(parameters, args)
-
+    
     if args.run == 'process':
         process(parameters, args)
     elif args.run == 'analyze':

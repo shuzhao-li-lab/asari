@@ -69,6 +69,10 @@ class SimpleSample:
         self.mz_calibration_function = None
                                    
 
+    @staticmethod
+    def get_mass_tracks_for_sample(sample):
+        return sample.get_masstracks_and_anchors()
+
     def get_masstracks_and_anchors(self):
         '''
         Retrieve list_mass_tracks for this sample if not alrady in memory.

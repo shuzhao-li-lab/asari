@@ -434,35 +434,45 @@ class CompositeMap:
         if self.experiment.parameters['debug_rtime_align']:
             self.export_reference_sample()
 
+        batches = [[]]
         for SM in self.experiment.all_samples:
-            print("   ", SM.name)
-            list_mass_tracks = SM.get_masstracks_and_anchors()
+            if len(batches[-1]) == self.experiment.parameters['multicores']:
+                batches.append([])
+            batches[-1].append(SM)
+        assert batches[-1], "Empty batch"
 
-            if SM.is_reference:
-                print("\t\tgood_reference_landmark_peaks: ", len(self.good_reference_landmark_peaks))
-            else:
-                if self.experiment.parameters['rt_align_on']:
-                    if self.experiment.parameters['debug_rtime_align']:
-                        cal_func = rt_lowess_calibration_debug
-                    else:
-                        cal_func = rt_lowess_calibration
 
-                    self.calibrate_sample_RT(SM, list_mass_tracks, 
-                                        calibration_fuction=cal_func,
-                                        cal_min_peak_height=cal_min_peak_height, 
-                                        MIN_PEAK_NUM=MIN_PEAK_NUM,
-                                        MAX_RETENTION_SHIFT=MAX_RETENTION_SHIFT,
-                                        NUM_ITERATIONS=NUM_ITERATIONS)
+    
+        from .utils import bulk_process
+        for batch in batches:
+            list_of_list_mass_tracks = bulk_process(SimpleSample.get_mass_tracks_for_sample, batch)
+            for (SM, list_mass_tracks) in zip(batch, list_of_list_mass_tracks):
+                print("   ", SM.name)
+                if SM.is_reference:
+                    print("\t\tgood_reference_landmark_peaks: ", len(self.good_reference_landmark_peaks))
+                else:
+                    if self.experiment.parameters['rt_align_on']:
+                        if self.experiment.parameters['debug_rtime_align']:
+                            cal_func = rt_lowess_calibration_debug
+                        else:
+                            cal_func = rt_lowess_calibration
 
-            # option to skip sample if not aligned
-            if not self.experiment.parameters['drop_unaligned_samples'] or SM.is_rt_aligned:
-                for k in mzlist:
-                    ref_index = self.MassGrid[SM.name][k]
-                    if not pd.isna(ref_index): # ref_index can be NA 
-                        _comp_dict[k] += remap_intensity_track( 
-                            list_mass_tracks[int(ref_index)]['intensity'],  
-                            basetrack.copy(), SM.rt_cal_dict 
-                            )
+                        self.calibrate_sample_RT(SM, list_mass_tracks, 
+                                            calibration_fuction=cal_func,
+                                            cal_min_peak_height=cal_min_peak_height, 
+                                            MIN_PEAK_NUM=MIN_PEAK_NUM,
+                                            MAX_RETENTION_SHIFT=MAX_RETENTION_SHIFT,
+                                            NUM_ITERATIONS=NUM_ITERATIONS)
+
+                # option to skip sample if not aligned
+                if not self.experiment.parameters['drop_unaligned_samples'] or SM.is_rt_aligned:
+                    for k in mzlist:
+                        ref_index = self.MassGrid[SM.name][k]
+                        if not pd.isna(ref_index): # ref_index can be NA 
+                            _comp_dict[k] += remap_intensity_track( 
+                                list_mass_tracks[int(ref_index)]['intensity'],  
+                                basetrack.copy(), SM.rt_cal_dict 
+                                )
 
         result = {}
         for k,v in _comp_dict.items():

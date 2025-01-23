@@ -146,7 +146,6 @@ def create_export_folders(parameters, time_stamp):
 
     if parameters['reuse_intermediates']:
         parameters['tmp_pickle_dir'] = os.path.abspath(parameters['reuse_intermediates'])
-        print(parameters['tmp_pickle_dir'])
         assert os.path.exists(os.path.abspath(parameters['reuse_intermediates'])), "The reuse_intermediates directory does not exist."
     else:
         parameters['tmp_pickle_dir'] = os.path.join(parameters['outdir'], 'pickle')
