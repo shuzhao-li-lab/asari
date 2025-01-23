@@ -74,6 +74,20 @@ Alternative to a standalone command, to run as a module via Python interpreter, 
 
 `python3 -m asari.main process --mode pos --input mydir/projectx_dir`
 
+Workflow Selection - GC or LC
+=============================
+
+Asari was developed initially for LC data only. V1.14 is the last version of asari to be LC-Only. As of >V1.14, asari can be
+ran in GC mode by passing `--workflow GC` at runtime or the corresponding parameter when using it as a module in your own scripts. 
+
+This will require other parameters in the future. 
+
+To see the list of possible workflows:
+
+`asari list_workflows`
+
+By default, Asari runs the LC workflow. 
+
 Output
 ======
 A typical run on disk may generatae a directory like this
@@ -102,8 +116,13 @@ The filtering decisions are left to end users.
 
 The `pickle` folder keeps intermediate files during processing.
 They are removed after the processing by default, to save disk space.
-Users can choose to keep them by specifying `--pickle True`.
 
+Users can choose to keep them by specifying `--keep_intermediates True`.
+
+Optionally, users may chose to save intermediates as json files using `--storage_format json`
+which may be safer than using pickle at the expense of additional disk space. `--compress true`
+will store the files in individual zip files saving disk space. Enabling compression can be 
+intensive on the CPU/memory subsystem of your machine, use with care. 
 
 Dashboard
 =========
@@ -178,11 +197,26 @@ When a study has N (default 10) or fewer samples, the MassGrid assembly uses a s
 
 Future improvement can be made by implementing some functions, e.g. chromatogram building, in C.
 
+Mass Track extraction is one of the most costly steps, if you wish to reanalyze data with a new version of asari, previous
+analyses can be re-ran using the `--reuse_intermediates=<asari_intermediates_directory>`. Currently the ppm tolerance and parameters
+need to be the same for the extraction and this is not enforced. Use at your own risk. This can also be used to kickstart an
+analysis. If you have 4 batches of samples, and are presented with a 5th, the intermediates of the previous runs can be used. 
+This is storage intensive, however, with compression enabled, it is tractable. Remember, disk space is relatively cheap compared
+to your time. Future improvement will implement a more reusable format without the same parameter assumption. 
+
 Platforms, Anaconda and Docker
 ==============================
 **Desktop vs Cloud**
 
 Python itself is used on Windows, Mac and Linux. Users may encouter problems related to Python not to asari, in which cases your best option is to find your local IT friend. We are a small team of scientists. There is no plan to build a desktop graphic application, but we do a lot of cloud computing. If you don't like command lines (many people don't), please feel free to try out the web server (https://asari.app). The free server has a quota. Please contact us if you find yourself in need of substantial cloud resources.
+
+**Dask Clusters**
+
+Starting in V1.14, the framework exists to parallelize asari across multiple systems in a distributed manner via Dask.  Asari is largely I/O bound even on single machines, so architecture of the cluster is key to performance. Consider using a fast interconnect such as >10Gbe ethernet or infiniband. All nodes must mount an NFS share for storing experiment data (like local Asari but the target is a network share). Consider using an NVMe based array with ZFS for this purpose to enable real performance gains from the distributed version.
+
+To enable, run as module and pass `dask_ip=<DASK_SCHEDULER>:<PORT>` in the experiment parameters. 
+
+Note, you probably DO NOT NEED THIS for your experimental data, this is for processing repository scale data. As of V1.14, support is experimental, use at your own risk.
 
 **Anaconda and conda, virtual environments**
 

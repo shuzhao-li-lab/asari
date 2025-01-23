@@ -141,10 +141,18 @@ def create_export_folders(parameters, time_stamp):
         a time_stamp string to prevent overwriting existing projects
     '''
     parameters['outdir'] = '_'.join([parameters['outdir'], parameters['project_name'], time_stamp]) 
-    parameters['tmp_pickle_dir'] = os.path.join(parameters['outdir'], 'pickle')
     os.mkdir(parameters['outdir'])
-    os.mkdir(parameters['tmp_pickle_dir'])
     os.mkdir(os.path.join(parameters['outdir'], 'export'))
+
+    if parameters['reuse_intermediates']:
+        parameters['tmp_pickle_dir'] = os.path.abspath(parameters['reuse_intermediates'])
+        print(parameters['tmp_pickle_dir'])
+        assert os.path.exists(os.path.abspath(parameters['reuse_intermediates'])), "The reuse_intermediates directory does not exist."
+    else:
+        parameters['tmp_pickle_dir'] = os.path.join(parameters['outdir'], 'pickle')
+        os.mkdir(parameters['tmp_pickle_dir'])
+
+
 
 def remove_intermediate_pickles(parameters):
     '''
@@ -294,11 +302,28 @@ def single_sample_EICs_(job):
     sample_id, infile, ion_mode, database_mode, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, outfile, compress, parameters = job
     database_mode = 'ondisk'
     if True:
-    #try:
+        if parameters['reuse_intermediates']:
+            for file in os.listdir(parameters['reuse_intermediates']):
+                if os.path.basename(file).split(".")[0] == os.path.basename(outfile).split(".")[0]:
+                    print("Reusing Intermediate: %s." %file)
+                    from .samples import SimpleSample
+                    new = SimpleSample.load_intermediate(os.path.join(parameters['reuse_intermediates'], file))
+                    return {sample_id: ('passed', 
+                                        'passed', 
+                                        os.path.join(parameters['reuse_intermediates'], file),
+                                        new['max_scan_number'], 
+                                        new['xdict']['rt_numbers'], 
+                                        new['xdict']['rt_times'],
+                                        new['track_mzs'],
+                                        new['number_anchor_mz_pairs'], 
+                                        new['anchor_mz_pairs'],  
+                                        {}, 
+                                        zipfile.is_zipfile(file))} 
+                
         new = {'sample_id': sample_id, 'input_file': infile, 'ion_mode': ion_mode, 'list_mass_tracks': []}
         track_mzs = []
-        exp = pymzml.run.Reader(infile)
-        xdict = extract_massTracks_(exp, 
+        
+        xdict = extract_massTracks_(infile, 
                     mz_tolerance_ppm=mz_tolerance_ppm, 
                     min_intensity=min_intensity, 
                     min_timepoints=min_timepoints, 
@@ -329,56 +354,62 @@ def single_sample_EICs_(job):
                     }
                 })
             track_mzs.append( (track[0], ii) )       # keep a reconrd in sample registry for fast MassGrid align
+        print("Extracted %s to %d mass tracks." %(os.path.basename(infile), ii))
 
         anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(new['list_mass_tracks'], mz_tolerance_ppm=mz_tolerance_ppm)
         # find_mzdiff_pairs_from_masstracks is not too sensitive to massTrack format
         new['anchor_mz_pairs'] = anchor_mz_pairs
         new['number_anchor_mz_pairs'] = len(anchor_mz_pairs)
-        print("Extracted %s to %d mass tracks." %(os.path.basename(infile), ii))
+        new['xdict'] = xdict
+        new['track_mzs'] = track_mzs
+        new['ms2_spectra'] = xdict['ms2_spectra']
+
         data_filepath = outfile
         if database_mode == 'ondisk':
             if not compress:
                 if parameters['storage_format'] == 'pickle':
                     data_filepath = outfile
-                    ms2_filepath = outfile.replace(".pickle", "_ms2.pickle")
                     with open(outfile, 'wb') as f:
                         pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
-                    with open(outfile.replace(".pickle", "_ms2.pickle"), 'wb') as f:
-                        pickle.dump(xdict['ms2_spectra'], f, pickle.HIGHEST_PROTOCOL)
                 elif parameters['storage_format'] == 'json':
                     data_filepath = outfile.replace(".pickle", ".json")
-                    ms2_filepath = outfile.replace(".pickle", "_ms2.json")
                     with open(outfile.replace(".pickle", ".json"), 'w') as f:
                         json.dump(new, f)
-                    with open(outfile.replace(".pickle", "_ms2.json"), 'w') as f:
-                        json.dump(xdict['ms2_spectra'], f)
             else:
                 data_filepath = outfile.replace(".pickle", ".zip")
                 with zipfile.ZipFile(data_filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     if parameters['storage_format'] == 'pickle':
                         with zipf.open(os.path.basename(outfile), 'w') as f:
                             pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
-                        with zipf.open(os.path.basename(outfile).replace(".pickle", "_ms2.pickle"), 'w') as f:
-                            pickle.dump(xdict['ms2_spectra'], f, pickle.HIGHEST_PROTOCOL)
                     elif parameters['storage_format'] == 'json':
                         with zipf.open(os.path.basename(outfile).replace(".pickle", ".json"), 'w') as f:
                             f.write(json.dumps(new).encode('utf-8'))
-                        with zipf.open(os.path.basename(outfile).replace(".pickle", "_ms2.json"), 'w') as f:
-                            f.write(json.dumps(xdict['ms2_spectra']).encode('utf-8'))
             print("\tExtracted to %s, %s MiB." % (data_filepath, round(os.path.getsize(data_filepath)/1024/1024, 2)))
-            return {sample_id: ('passed', 'passed', data_filepath,
-                                            new['max_scan_number'], xdict['rt_numbers'], xdict['rt_times'],
-                                            track_mzs,
-                                            new['number_anchor_mz_pairs'], anchor_mz_pairs,  
-                                            {}, compress)} 
+            return {sample_id: ('passed', 
+                                'passed', 
+                                data_filepath,
+                                new['max_scan_number'], 
+                                xdict['rt_numbers'], 
+                                xdict['rt_times'],
+                                track_mzs,
+                                new['number_anchor_mz_pairs'], 
+                                anchor_mz_pairs,  
+                                {}, 
+                                compress)} 
             
 
         elif database_mode == 'memory':
-            return {sample_id: ('passed', 'passed', outfile,
-                                            new['max_scan_number'], xdict['rt_numbers'], xdict['rt_times'],
-                                            track_mzs,
-                                            new['number_anchor_mz_pairs'], anchor_mz_pairs,  
-                                            new, compress)}
+            return {sample_id: ('passed', 
+                                'passed', 
+                                outfile,
+                                new['max_scan_number'], 
+                                xdict['rt_numbers'], 
+                                xdict['rt_times'],
+                                track_mzs,
+                                new['number_anchor_mz_pairs'], 
+                                anchor_mz_pairs,  
+                                new, 
+                                compress)}
     #except Exception as e:
     #    print("Failed to extract: %s." %os.path.basename(infile))
     #    return {sample_id: ('failed', 'failed', None, None, None, None, None, None, None, None, compress)}

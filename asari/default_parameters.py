@@ -13,7 +13,8 @@
 PARAMETERS = {
     'project_name': 'asari_project',
     'outdir': 'output',
-    'keep_intermediates': False,        # if true, keep on-disk intermediates            
+    'keep_intermediates': False,        # if true, keep on-disk intermediates       
+    'reuse_intermediates': None,        # if provided as a path, reuse intermediates  with same basename as input mzML files to skip extraction.
     'database_mode': 'ondisk',          # `auto` determined on sample number 
                                         # 'ondisk', 'memory' (run in memory, only small studies), 
                                         # 'mongo' (MongoDB, requiring installation of DB server, to implement)

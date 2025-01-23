@@ -8,6 +8,7 @@ Low selectivity regions will be still inspected to determine the true number of 
 '''
 from operator import itemgetter
 import numpy as np
+import pymzml
 
 from scipy import interpolate
 from scipy.ndimage import uniform_filter1d
@@ -24,7 +25,7 @@ INTENSITY_DATA_TYPE = np.int64
 # mass Tracks
 # -----------------------------------------------------------------------------
 
-def extract_massTracks_(ms_expt, 
+def extract_massTracks_(infile, 
                         mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, 
                         min_peak_height=1000):
     '''
@@ -54,6 +55,7 @@ def extract_massTracks_(ms_expt,
     rt_times = []           # in seconds
     ms2_spectra = []
     ii = 0
+    ms_expt = exp = pymzml.run.Reader(infile)
     for spec in ms_expt:
         if spec.ms_level == 1:                         # MS Level 1 only
             rt_times.append(spec.scan_time_in_minutes()*60)

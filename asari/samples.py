@@ -119,23 +119,28 @@ class SimpleSample:
                 return self.retrieve_from_db()
         '''
         return self._retrieve_from_disk()
-
+    
     def _retrieve_from_disk(self):
+        return SimpleSample.load_intermediate(self.data_location)
+
+    @staticmethod
+    def load_intermediate(data_location):
         '''
         Retrieve sample data from local pickle file.
         '''
-        if self.compressed:
-            with zipfile.ZipFile(self.data_location, 'r') as z:
+        print("Loading intermediate: ", data_location)
+        if zipfile.is_zipfile(data_location):
+            with zipfile.ZipFile(data_location, 'r') as z:
                 with z.open(z.namelist()[0]) as f:
                     if z.namelist()[0].endswith('.pickle'):
                         sample_data = pickle.load(f)
                     elif z.namelist()[0].endswith('.json'):
                         sample_data = json.loads(f.read().decode('utf-8'))
         else:
-            if self.data_location.endswith('.pickle'):
-                with open(self.data_location, 'rb') as f:
+            if data_location.endswith('.pickle'):
+                with open(data_location, 'rb') as f:
                     sample_data = pickle.load(f)
-            elif self.data_location.endswith('.json'):
-                with open(self.data_location, 'r') as f:
+            elif data_location.endswith('.json'):
+                with open(data_location, 'r') as f:
                     sample_data = json.load(f)
         return sample_data

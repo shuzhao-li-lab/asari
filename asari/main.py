@@ -102,11 +102,13 @@ def main(parameters=PARAMETERS):
 
         * analyze: analyze a single mzML file to print summary of statistics and recommended parameters.
         * process: LC-MS data preprocessing
-        * xic: construct mass trakcs (chromatogram) from mzML files
+        * xic: construct mass tracks (chromatogram) from mzML files
         * extract: targeted extraction of given m/z list
         * annotate: annotate a list of features
         * join: merge multiple processed projects (possibly split a large dataset)
         * viz: start interactive data visualization and exploration.
+
+    all mzML files should be centroided.
 
     Parameters
     ----------
@@ -171,10 +173,9 @@ def main(parameters=PARAMETERS):
             help='Toggle on debug mode for retention alignment: output align figures and reference features.')
     parser.add_argument('--compress', default=False, 
             help='Compress mass tracks to reduce disk usage, default is False')
-    # use True in data mining
     parser.add_argument('--drop_unaligned_samples', default=False, 
-            help='Drop samples that fail RT alignment from composite map.')
-    parser.add_argument('--import_pickle', default=False,
+            help='Drop samples that fail RT alignment from composite map., recommend true for data mining')
+    parser.add_argument('--reuse_intermediates', default=None,
             help='Import pickle files for faster processing')
     parser.add_argument('--storage_format', default='pickle',
             help='Storage format for intermediate files, pickle or json')
@@ -202,6 +203,9 @@ def main(parameters=PARAMETERS):
     if args.ppm:
         parameters['mz_tolerance_ppm'] = args.ppm
     if args.cores:
+        if args.cores == 0:
+            print("`cores` must be greater than 0. Using all available cores.")
+            parameters['multicores'] = mp.cpu_count()
         parameters['multicores'] = min(mp.cpu_count(), args.cores)
     if args.project:
         parameters['project_name'] = args.project
@@ -216,15 +220,19 @@ def main(parameters=PARAMETERS):
     if args.reference:
         parameters['reference'] = args.reference
     if args.database_mode:
+        assert args.database_mode in ['auto', 'ondisk', 'memory'], "Database mode must be either auto, ondisk, or memory."
         parameters['database_mode'] = args.database_mode
     if args.wlen:
         parameters['wlen'] = args.wlen
     if args.compress:
+        assert args.compress in ['True', 'False'], "Compress must be either True or False."
         parameters['compress'] = booleandict[args.compress]
     if args.storage_format:
         assert args.storage_format in ['pickle', 'json'], "Storage format must be either pickle or json."
         parameters['storage_format'] = args.storage_format
-
+    if args.reuse_intermediates:
+        parameters['reuse_intermediates'] = args.reuse_intermediates
+        parameters['keep_intermediates'] = True
 
     if args.num_lowess_iterations:
         parameters['num_lowess_iterations'] = args.num_lowess_iterations
