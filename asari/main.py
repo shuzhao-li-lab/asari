@@ -215,6 +215,7 @@ def main(parameters=PARAMETERS):
         parameters['peak_area'] = args.peak_area
     if args.keep_intermediates:
         parameters['keep_intermediates'] = booleandict[args.keep_intermediates]
+        parameters['database_mode'] = 'ondisk'
     if args.anno:
         parameters['anno'] = booleandict[args.anno]
     if args.reference:
@@ -227,12 +228,14 @@ def main(parameters=PARAMETERS):
     if args.compress:
         assert args.compress in ['True', 'False'], "Compress must be either True or False."
         parameters['compress'] = booleandict[args.compress]
+        parameters['database_mode'] = 'ondisk'
     if args.storage_format:
         assert args.storage_format in ['pickle', 'json'], "Storage format must be either pickle or json."
         parameters['storage_format'] = args.storage_format
     if args.reuse_intermediates:
         parameters['reuse_intermediates'] = args.reuse_intermediates
         parameters['keep_intermediates'] = True
+        parameters['database_mode'] = 'ondisk'
 
     if args.num_lowess_iterations:
         parameters['num_lowess_iterations'] = args.num_lowess_iterations

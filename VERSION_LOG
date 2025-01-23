@@ -21,3 +21,12 @@ v1.13.2 -> v1.14.0
         remove database_cursor from simplesample
         remove intensity multiplier as too hacky for TOF, need a better solution. (thanks Steve Barnes for testing this with me)
         remove max_retention_shift as not useful (thanks Shuzhao)
+        use np.argmin in clustering for better performance O(N log N) -> O(N) (thanks Shuzhao)
+        additional computational improvements for mz clustering (vectorization)
+        vectorize gap detection (will need to migrate this change to Asari-X too)
+
+    next version:
+        next version is planned to be v1.14.1 for any hotfixes for v1.14.0
+        GC-support for v2.0
+        join command for v2.0
+        more advanced alignment soon.
