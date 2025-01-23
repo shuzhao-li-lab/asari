@@ -802,11 +802,22 @@ def cleanup_peak_cluster(cluster_peaks):
         return cluster_peaks
     elif len(cluster_peaks) == 2:
         [peak1, peak2] = cluster_peaks
-        bases = list(set([peak1['left_base'], peak1['right_base'], 
-                          peak2['left_base'], peak2['right_base']]))
+
+        bases = list([peak1['left_base'], peak1['right_base'], peak2['left_base'], peak2['right_base']])
+        print(bases)
         bases.sort()
-        peak1['left_base'], peak1['right_base'] = bases[:2]
-        peak2['left_base'], peak2['right_base'] = bases[-2:]
+        peak1['left_base'], peak1['right_base'] = bases[0], bases[1]
+        peak2['left_base'], peak2['right_base'] = bases[2], bases[3]
+        print(peak1['left_base'], peak1['apex'], peak1['right_base'])
+        if peak1['left_base'] < peak1['apex'] < peak1['right_base']:
+            pass
+        else:
+            peak1['apex'] = int(0.5 * (peak1['left_base'] + peak1['right_base']))
+        print(peak2['left_base'], peak2['apex'], peak2['right_base'])
+        if peak2['left_base'] < peak2['apex'] < peak2['right_base']:
+            pass
+        else:
+            peak2['apex'] = int(0.5 * (peak2['left_base'] + peak2['right_base']))
         return [peak1, peak2]
     else:
         return [_merge_peak_cluster(cluster_peaks)]
