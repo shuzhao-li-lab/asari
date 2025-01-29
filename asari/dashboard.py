@@ -55,8 +55,15 @@ def read_project(datadir, load_sample_limit=20):
     else:
         Ftable = pd.read_csv( os.path.join(datadir, 'export', 'full_Feature_table.tsv'), 
                                 sep='\t', index_col=0, header=0 )
+        
+    if 'number_of_samples' in project_desc and project_desc['number_of_samples'] > load_sample_limit:
+        Ptable = pd.read_csv( os.path.join(datadir, 'prefererred_Feature_table.tsv'), 
+                                sep='\t', index_col=0, header=0, usecols=range(10 + load_sample_limit) )
+    else:
+        Ptable = pd.read_csv( os.path.join(datadir, 'prefererred_Feature_table.tsv'), 
+                                sep='\t', index_col=0, header=0 )
 
-    return project_desc, cmap, epd, Ftable
+    return project_desc, cmap, epd, Ftable, Ptable
 
 def plot_xic(xics, mz_dict, track_id):
     '''

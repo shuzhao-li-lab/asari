@@ -60,8 +60,13 @@ def join(parameters, args):
 
 def viz(parameters, args):
     datadir = args.input
-    project_desc, cmap, epd, Ftable = read_project(datadir)
-    dashboard(project_desc, cmap, epd, Ftable)
+    project_desc, cmap, epd, Ftable, Ptable = read_project(datadir)
+    if args.table_for_viz == 'full':
+        dashboard(project_desc, cmap, epd, Ftable)
+    elif args.table_for_viz == 'preferred':
+        dashboard(project_desc, cmap, epd, Ptable)
+    else:
+        raise ValueError("Table for visualization must be either 'preferred' or 'full'.")
 
 def qc_report(parameters, args):
     list_input_files = read_project_dir(args.input)
@@ -195,6 +200,8 @@ def main(parameters=PARAMETERS):
             help='Spike-in standards for QC report - JSON formatted list of lists (name, mz, rt - not checked currently)')
     parser.add_argument('--convert_raw', default=False,
             help='Convert found .raw files to mzML format before processing')
+    parser.add_argument('--table_for_viz', default='preferred',
+            help='Table to use for visualization, preferred or full')
 
     try:
         args = parser.parse_args()
@@ -261,6 +268,8 @@ def main(parameters=PARAMETERS):
         parameters['spikeins'] = args.spikeins
     if args.num_lowess_iterations:
         parameters['num_lowess_iterations'] = args.num_lowess_iterations
+    if args.table_for_viz:
+        parameters['table_for_viz'] = args.table_for_viz
 
     # update peak detection parameters by autoheight then CLI args
     # min_peak_height, min_prominence_threshold, cal_min_peak_height, min_intensity_threshold
