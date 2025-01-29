@@ -66,6 +66,14 @@ To output additional extraction table on a targeted list of m/z values from targ
 
 This is useful to add QC check during data processing, e.g. the target_mzs.txt file can be spike-in controls.
 
+Alternatively, you can do:
+
+`asari qc_report --input mydir/projectx_dir/ --spikeins target_trios.csv`
+
+Or add this to the process command to generate the reports during processing:
+
+`--single_file_qc_reports true --spikeins target_trios.csv`
+
 To launch a dashboard in your web browser after the project is processed into directory process_result_dir:
 
 `asari viz --input process_result_dir`
@@ -129,7 +137,6 @@ Dashboard
 After data are processed, users can use `asari viz --input process_result_dir` to launch a dashboard to inspect data, where 'process_result_dir' refers to the result folder. The dashboard uses these files under the result folder: 'project.json', 'export/cmap.pickle', 'export/epd.pickle' and 'export/full_Feature_table.tsv'. Thus, one can move around the folder, but modification of these files is not a good idea. Please note that pickle files are for internal use, and one should not trust pickle files from other people.
  
 ![viz_screen_shot](docs/source/_static/viz_screen_shot20220518.png)
-
 
 Parameters
 ==========

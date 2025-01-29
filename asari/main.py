@@ -3,6 +3,7 @@ import multiprocessing as mp
 import os
 import yaml
 import time
+import sys
 
 from asari import __version__
 from .workflow import (get_mz_list, process_project, process_xics, read_project_dir, create_export_folders)
@@ -67,7 +68,6 @@ def qc_report(parameters, args):
     create_export_folders(parameters)
     jobs = [(f, os.path.join(parameters['qaqc_reports_outdir'], os.path.basename(f).replace(".mzML", "_report.html")), parameters['spikeins']) for f in list_input_files]
     bulk_process(generate_qc_report, jobs)
-
 
 def update_peak_detection_params(parameters, args):
     if parameters['autoheight']:
@@ -276,14 +276,14 @@ def main(parameters=PARAMETERS):
         convert(parameters, args)
     elif args.run == 'convert':
         convert(parameters, args)
-        exit()
+        sys.exit()
 
     if args.single_file_qc_reports:
         qc_report(parameters, args)
     elif args.run == "qc_report":
         qc_report(parameters, args)
-        exit()
-    
+        sys.exit()
+
     if args.run == 'process':
         process(parameters, args)
     elif args.run == 'analyze':

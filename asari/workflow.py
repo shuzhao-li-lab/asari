@@ -138,6 +138,10 @@ def create_export_folders(parameters, time_stamp=None):
     time_stamp: str
         a time_stamp string to prevent overwriting existing projects
     '''
+    if parameters['project_name'] in parameters['outdir']:
+        print("Export folders already exist, will not overwrite.")
+        return None
+
     if time_stamp is None:
         parameters['outdir'] = '_'.join([parameters['outdir'], parameters['project_name'], parameters['time_stamp_for_dir']])
     else:

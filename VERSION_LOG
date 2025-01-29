@@ -14,6 +14,7 @@ v1.13.2 -> v1.14.0
         restart option allows reuse of extracted pickles (experimental, not fully tested)
         added command to list possible workflows and clarified that mzML files must be centroided (thanks NchuYj)
         added helper function in utils for investigating peak_area and feature intensity patterns (thanks YuanyeChi)
+        single file qaqc reporting either inline using --single_file_qc_reports or qc_report command
 
     misc. code improvements
         added unit and integration testing for the LC-workflow
