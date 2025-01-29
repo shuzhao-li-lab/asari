@@ -65,10 +65,8 @@ def viz(parameters, args):
 def qc_report(parameters, args):
     list_input_files = read_project_dir(args.input)
     create_export_folders(parameters)
-    jobs = [(f, os.path.join(parameters['qaqc_reports_outdir'], os.path.basename(f).replace(".mzML", "_report.html")), None) for f in list_input_files]
-    for job in jobs:
-        print(job)
-        generate_qc_report(job)
+    jobs = [(f, os.path.join(parameters['qaqc_reports_outdir'], os.path.basename(f).replace(".mzML", "_report.html")), parameters['spikeins']) for f in list_input_files]
+    bulk_process(generate_qc_report, jobs)
 
 
 def update_peak_detection_params(parameters, args):
@@ -191,10 +189,10 @@ def main(parameters=PARAMETERS):
             help='Import pickle files for faster processing')
     parser.add_argument('--storage_format', default='pickle',
             help='Storage format for intermediate files, pickle or json')
-    parser.add_argument('--qaqc_report', default=False,
+    parser.add_argument('--single_file_qc_reports', default=False,
             help='Generate a QC report for mzML files during processing')
     parser.add_argument('--spikeins', default=None,
-            help='Spike-in standards for QC report - NOT IMPLEMENTED')
+            help='Spike-in standards for QC report - JSON formatted list of lists (name, mz, rt - not checked currently)')
     parser.add_argument('--convert_raw', default=False,
             help='Convert found .raw files to mzML format before processing')
 
@@ -259,7 +257,8 @@ def main(parameters=PARAMETERS):
         parameters['reuse_intermediates'] = args.reuse_intermediates
         parameters['keep_intermediates'] = True
         parameters['database_mode'] = 'ondisk'
-
+    if args.spikeins:
+        parameters['spikeins'] = args.spikeins
     if args.num_lowess_iterations:
         parameters['num_lowess_iterations'] = args.num_lowess_iterations
 
@@ -277,6 +276,12 @@ def main(parameters=PARAMETERS):
         convert(parameters, args)
     elif args.run == 'convert':
         convert(parameters, args)
+        exit()
+
+    if args.single_file_qc_reports:
+        qc_report(parameters, args)
+    elif args.run == "qc_report":
+        qc_report(parameters, args)
         exit()
     
     if args.run == 'process':

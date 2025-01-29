@@ -9,7 +9,7 @@ from collections import defaultdict
 import seaborn as sns
 import plotly.graph_objs as go
 import os
-
+import json
 
 def asari_qc_plot(data, 
                 outfile="qc_plot.pdf",
@@ -50,7 +50,9 @@ def asari_qc_plot(data,
 
 def generate_qc_report(job):
     mzml_file, output_file, spikeins = job
+
     if spikeins is None:
+        print(f"Using default spike-ins for {mzml_file}")
         spikeins = [
             ('13C6-D-glucos', 187.0908, 0),
             ('trimethyl-13C3-caffeine', 198.0977, 0),
@@ -59,6 +61,11 @@ def generate_qc_report(job):
             ('15N2-uracil', 115.0286, 0),
             ('15N-L-tyrosine', 183.0782, 0),
         ]
+    elif spikeins.endswith("json"):
+        with open(spikeins) as f:
+            spikeins = json.load(f)
+    else:
+        raise Exception("Spike-ins must be a list of tuples or a JSON file.")
 
     """
     Generates a QC report for an mzML file and saves it as an HTML file in the same location.

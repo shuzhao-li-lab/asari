@@ -166,8 +166,6 @@ def create_export_folders(parameters, time_stamp=None):
             os.mkdir(parameters['tmp_pickle_dir'])
         except FileExistsError:
             print("Warning, pickle directory exists, this is normal in some circumstances")
-            pass
-
 
 
 def remove_intermediate_pickles(parameters):
@@ -179,6 +177,7 @@ def remove_intermediate_pickles(parameters):
     paramaters: dict
         passed from main.py to get tmp_pickle_dir
     '''
+    assert parameters['reuse_intermediates'] is None, "Cannot remove intermediates when reuse_intermediates is set."
     print("Removing temporary pickle files...")
     for f in os.listdir(parameters['tmp_pickle_dir']):
         os.remove( os.path.join(parameters['tmp_pickle_dir'], f) )
