@@ -8,7 +8,6 @@ Annotation is facilitated by jms-metabolite-services, mass2chem.
 '''
 import time
 import os
-import pymzml
 import pickle
 import json_tricks as json
 
@@ -20,7 +19,6 @@ from .utils import bulk_process
 
 
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
-from scipy import sparse
 import zipfile
 
 
@@ -128,7 +126,7 @@ def register_samples(list_input_files):
     return {ii : {'sample_id': ii, 'input_file': file} for ii, file in enumerate(list_input_files)}
 
 
-def create_export_folders(parameters, time_stamp):
+def create_export_folders(parameters, time_stamp=None):
     '''
     Creates local directory for storing temporary files and output result.
     A time stamp is added to directory name to avoid overwriting existing projects.
@@ -140,16 +138,35 @@ def create_export_folders(parameters, time_stamp):
     time_stamp: str
         a time_stamp string to prevent overwriting existing projects
     '''
-    parameters['outdir'] = '_'.join([parameters['outdir'], parameters['project_name'], time_stamp]) 
+    if time_stamp is None:
+        parameters['outdir'] = '_'.join([parameters['outdir'], parameters['project_name'], parameters['time_stamp_for_dir']])
+    else:
+        parameters['outdir'] = '_'.join([parameters['outdir'], parameters['project_name'], time_stamp])
+
     os.mkdir(parameters['outdir'])
-    os.mkdir(os.path.join(parameters['outdir'], 'export'))
+    try:
+        os.mkdir(os.path.join(parameters['outdir'], 'export'))
+    except FileExistsError:
+        print("Warning, export directory exists, this is normal in some circumstances")
+        
+    parameters['export_outdir'] = os.path.join(parameters['outdir'], 'export')
+    try:
+        os.mkdir(os.path.join(parameters['outdir'], 'qaqc_reports'))
+    except FileExistsError:
+        print("Warning, qaqc_reports directory exists, this is normal in some circumstances")
+        
+    parameters['qaqc_reports_outdir'] = os.path.join(parameters['outdir'], 'qaqc_reports')
 
     if parameters['reuse_intermediates']:
         parameters['tmp_pickle_dir'] = os.path.abspath(parameters['reuse_intermediates'])
         assert os.path.exists(os.path.abspath(parameters['reuse_intermediates'])), "The reuse_intermediates directory does not exist."
     else:
         parameters['tmp_pickle_dir'] = os.path.join(parameters['outdir'], 'pickle')
-        os.mkdir(parameters['tmp_pickle_dir'])
+        try:
+            os.mkdir(parameters['tmp_pickle_dir'])
+        except FileExistsError:
+            print("Warning, pickle directory exists, this is normal in some circumstances")
+            pass
 
 
 

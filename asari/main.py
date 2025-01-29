@@ -2,20 +2,30 @@ import argparse
 import multiprocessing as mp
 import os
 import yaml
+import time
 
 from asari import __version__
-from .workflow import (get_mz_list, process_project, process_xics, read_project_dir)
+from .workflow import (get_mz_list, process_project, process_xics, read_project_dir, create_export_folders)
 from .default_parameters import PARAMETERS
 from .dashboard import read_project, dashboard
 from .analyze import estimate_min_peak_height, analyze_single_sample
 from .annotate_user_table import annotate_user_featuretable
-from .utils import build_boolean_dict
+from .utils import build_boolean_dict, bulk_process
+from .qc import generate_qc_report
 
 booleandict = build_boolean_dict()
 
 PARAMETERS['asari_version'] = __version__
 
 def __run_process__(parameters, args):
+    # main process function
+    list_input_files = read_project_dir(args.input)
+    if not list_input_files:
+        print("No valid mzML files are found in the input directory :(")
+    else:
+        process_project(list_input_files, parameters)
+
+def convert(parameters, args):
     needs_conversion = []
     for x in os.listdir(args.input):
         if x.endswith('.raw'):
@@ -25,13 +35,6 @@ def __run_process__(parameters, args):
         converter = mzMLconverter()
         converter.bulk_convert(needs_conversion)
 
-    # main process function
-    list_input_files = read_project_dir(args.input)
-    if not list_input_files:
-        print("No valid mzML files are found in the input directory :(")
-    else:
-        process_project(list_input_files, parameters)
-        
 def process(parameters, args):
     __run_process__(parameters, args)
 
@@ -58,6 +61,15 @@ def viz(parameters, args):
     datadir = args.input
     project_desc, cmap, epd, Ftable = read_project(datadir)
     dashboard(project_desc, cmap, epd, Ftable)
+
+def qc_report(parameters, args):
+    list_input_files = read_project_dir(args.input)
+    create_export_folders(parameters)
+    jobs = [(f, os.path.join(parameters['qaqc_reports_outdir'], os.path.basename(f).replace(".mzML", "_report.html")), None) for f in list_input_files]
+    for job in jobs:
+        print(job)
+        generate_qc_report(job)
+
 
 def update_peak_detection_params(parameters, args):
     if parameters['autoheight']:
@@ -179,6 +191,12 @@ def main(parameters=PARAMETERS):
             help='Import pickle files for faster processing')
     parser.add_argument('--storage_format', default='pickle',
             help='Storage format for intermediate files, pickle or json')
+    parser.add_argument('--qaqc_report', default=False,
+            help='Generate a QC report for mzML files during processing')
+    parser.add_argument('--spikeins', default=None,
+            help='Spike-in standards for QC report - NOT IMPLEMENTED')
+    parser.add_argument('--convert_raw', default=False,
+            help='Convert found .raw files to mzML format before processing')
 
     try:
         args = parser.parse_args()
@@ -248,6 +266,18 @@ def main(parameters=PARAMETERS):
     # update peak detection parameters by autoheight then CLI args
     # min_peak_height, min_prominence_threshold, cal_min_peak_height, min_intensity_threshold
     parameters = update_peak_detection_params(parameters, args)
+
+
+    # set timestamp here so it can be used in multiple places
+    time_stamp = [str(x) for x in time.localtime()[1:6]]
+    parameters['time_stamp_for_dir'] = ''.join(time_stamp)
+    parameters['time_stamp'] = ':'.join(time_stamp)
+
+    if args.convert_raw:
+        convert(parameters, args)
+    elif args.run == 'convert':
+        convert(parameters, args)
+        exit()
     
     if args.run == 'process':
         process(parameters, args)
@@ -266,6 +296,8 @@ def main(parameters=PARAMETERS):
     elif args.run == 'join':
         # input a list of directories, each a result of asari process
         join(parameters, args)
+    elif args.run == 'qc_report':
+        qc_report(parameters, args)
     elif args.run == 'viz':
         # launch data dashboard
         viz(parameters, args)
