@@ -202,6 +202,8 @@ def main(parameters=PARAMETERS):
             help='Convert found .raw files to mzML format before processing')
     parser.add_argument('--table_for_viz', default='preferred',
             help='Table to use for visualization, preferred or full')
+    parser.add_argument('--vizualization_max_samples', default=20,
+            help='Maximum number of samples to display in visualization')
 
     try:
         args = parser.parse_args()
@@ -319,6 +321,7 @@ def main(parameters=PARAMETERS):
         print("Available Worfklows:")
         print("\t1. LC - default option")
         print("\t2. GC, pass `--workflow GC` to enable")
+        print("\t3. Lipidomics LC, pass `--workflow Lipidomics` NOT IMPLEMENTED")
     else:
         print("Expecting one of the subcommands: analyze, process, xic, annotate, join, viz, list_workflows.")
 #
