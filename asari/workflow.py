@@ -319,8 +319,7 @@ def single_sample_EICs_(job):
     '''
     
     sample_id, infile, ion_mode, database_mode, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, outfile, compress, parameters = job
-    database_mode = 'ondisk'
-    if True:
+    try:
         if parameters['reuse_intermediates']:
             for file in os.listdir(parameters['reuse_intermediates']):
                 if os.path.basename(file).split(".")[0] == os.path.basename(outfile).split(".")[0]:
@@ -429,9 +428,9 @@ def single_sample_EICs_(job):
                                 anchor_mz_pairs,  
                                 new, 
                                 compress)}
-    #except Exception as e:
-    #    print("Failed to extract: %s." %os.path.basename(infile))
-    #    return {sample_id: ('failed', 'failed', None, None, None, None, None, None, None, None, compress)}
+    except Exception as e:
+        print("Failed to extract: %s." %os.path.basename(infile))
+        return {sample_id: ('failed', 'failed', None, None, None, None, None, None, None, None, compress)}
 
 
 
