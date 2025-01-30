@@ -279,6 +279,8 @@ def get_summary_panel(project_desc, peakDict, epdDict, Ftable, cmap):
 def dashboard(project_desc, cmap, epd, Ftable, sample_limit=20):
     '''
     Panel based Dashboard.
+
+    Sample Limit is not used yet, but future versions will make the dashboard more dynamic.
     '''
     print("//*Asari dashboard*//   Press Control-C to exit.")
     peakDict, epdDict = epd_convert(epd)

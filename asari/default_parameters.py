@@ -45,8 +45,6 @@ PARAMETERS = {
     'dynamic_range': 1000,              # maximal intensity of a peak over the minimal intensity of a peak
     'num_files_to_check': None,           # number of files to check for autoheight estimation, if None, all files are checked
 
-
-
     # retention time alignment
     'reference': None,
     'rt_align_method': 'lowess',        # 'lowess', 'tolerance', or to implement           

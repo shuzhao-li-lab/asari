@@ -62,9 +62,9 @@ def viz(parameters, args):
     datadir = args.input
     project_desc, cmap, epd, Ftable, Ptable = read_project(datadir)
     if args.table_for_viz == 'full':
-        dashboard(project_desc, cmap, epd, Ftable)
+        dashboard(project_desc, cmap, epd, Ftable, sample_limit=parameters['visualization_max_samples'])
     elif args.table_for_viz == 'preferred':
-        dashboard(project_desc, cmap, epd, Ptable)
+        dashboard(project_desc, cmap, epd, Ptable, sample_limit=parameters['visualization_max_samples'])
     else:
         raise ValueError("Table for visualization must be either 'preferred' or 'full'.")
 
@@ -150,7 +150,7 @@ def main(parameters=PARAMETERS):
             help='one of the subcommands: analyze, process, xic, extract, annotate, join, viz')
     parser.add_argument('-m', '--mode', default='pos', 
             help='mode of ionization, pos or neg')
-    parser.add_argument('--ppm', default=5, type=int, 
+    parser.add_argument('--ppm', type=int, 
             help='mass precision in ppm (part per million), same as mz_tolerance_ppm')
     parser.add_argument('-i', '--input', 
             help='input directory of mzML files to process, or a single file to analyze')
@@ -160,7 +160,7 @@ def main(parameters=PARAMETERS):
             help='project name')
     parser.add_argument('-p', '--parameters', 
             help='Custom paramter file in YAML. Use parameters.yaml as template.')
-    parser.add_argument('-c', '--multicores', type=int, default=0, 
+    parser.add_argument('-c', '--multicores', type=int, 
             help='nunmber of CPU cores intented to use')
     parser.add_argument('-f', '--reference', 
             help='designated reference file for alignments')
@@ -168,11 +168,11 @@ def main(parameters=PARAMETERS):
             help='file of m/z list for targeted extraction')
     parser.add_argument('--database_mode', default='auto',
             help='determines how intermediates are stored, can be "ondisk" or "memory"')
-    parser.add_argument('--wlen', default=25, type=int,
+    parser.add_argument('--wlen', type=int,
             help='determines the number of rt points used when calculating peak prominence')
     parser.add_argument('--max_retention_shift', default=None,
             help='alignment is attempted only using peak pairs differing by this value in seconds or fewer')
-    parser.add_argument('--num_lowess_iterations', type=int, default=3,
+    parser.add_argument('--num_lowess_iterations', type=int,
             help='number of lowess iterations attempted during alignment')
     parser.add_argument('--autoheight', default=False,
             help='automatic determining min peak height')
@@ -208,8 +208,10 @@ def main(parameters=PARAMETERS):
             help='Convert found .raw files to mzML format before processing')
     parser.add_argument('--table_for_viz', default='preferred',
             help='Table to use for visualization, preferred or full')
-    parser.add_argument('--vizualization_max_samples', default=20,
+    parser.add_argument('--visualization_max_samples', type=int,
             help='Maximum number of samples to display in visualization')
+    parser.add_argument('--project_sample_number_small', type=int,
+            help='Number of samples dictates workflow, default 10')
 
     try:
         args = parser.parse_args()
@@ -278,6 +280,10 @@ def main(parameters=PARAMETERS):
         parameters['num_lowess_iterations'] = args.num_lowess_iterations
     if args.table_for_viz:
         parameters['table_for_viz'] = args.table_for_viz
+    if args.project_sample_number_small >= 0:
+        parameters['project_sample_number_small'] = int(args.project_sample_number_small)
+    if args.visualization_max_samples:
+        parameters['visualization_max_samples'] = args.visualization_max_samples
 
     # update peak detection parameters by autoheight then CLI args
     # min_peak_height, min_prominence_threshold, cal_min_peak_height, min_intensity_threshold

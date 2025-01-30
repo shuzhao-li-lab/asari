@@ -379,8 +379,10 @@ class CompositeMap:
         print("Constructing MassGrid, ...")
         MG = MassGrid( self, self.experiment )
         if self._number_of_samples_ <= self.experiment.parameters['project_sample_number_small']:
+            print("Building Grid Sample Wise...")
             MG.build_grid_sample_wise()
         else:
+            print("Building Grid by Centroiding...")
             MG.build_grid_by_centroiding()
            
         self.MassGrid = MG.MassGrid
