@@ -87,6 +87,9 @@ def update_peak_detection_params(parameters, args):
             parameters['min_peak_height'] = float(args.min_peak_height)
         except:
             print("Problems with specified min_height. Back to default min_peak_height.")
+    else:
+        parameters['min_prominence_threshold'] = int(0.33 * parameters['min_peak_height'])
+
 
     parameters['min_prominence_threshold'] = int( 0.33 * parameters['min_peak_height'] )
     parameters['cal_min_peak_height'] = 10 * parameters['min_peak_height']
