@@ -72,7 +72,7 @@ def qc_report(parameters, args):
     list_input_files = read_project_dir(args.input)
     create_export_folders(parameters)
     jobs = [(f, os.path.join(parameters['qaqc_reports_outdir'], os.path.basename(f).replace(".mzML", "_report.html")), parameters['spikeins']) for f in list_input_files]
-    bulk_process(generate_qc_report, jobs)
+    bulk_process(generate_qc_report, jobs, dask_ip=parameters['dask_ip'])
 
 def update_peak_detection_params(parameters, args):
     if parameters['autoheight']:
@@ -150,7 +150,7 @@ def main(parameters=PARAMETERS):
             help='one of the subcommands: analyze, process, xic, extract, annotate, join, viz')
     parser.add_argument('-m', '--mode', default='pos', 
             help='mode of ionization, pos or neg')
-    parser.add_argument('--ppm', type=int, 
+    parser.add_argument('--ppm', default=5, type=int, 
             help='mass precision in ppm (part per million), same as mz_tolerance_ppm')
     parser.add_argument('-i', '--input', 
             help='input directory of mzML files to process, or a single file to analyze')
@@ -212,6 +212,8 @@ def main(parameters=PARAMETERS):
             help='Maximum number of samples to display in visualization')
     parser.add_argument('--project_sample_number_small', type=int,
             help='Number of samples dictates workflow, default 10')
+    parser.add_argument('--dask_ip', default=None,
+            help='Dask scheduler IP address for distributed processing'),
 
     try:
         args = parser.parse_args()
@@ -239,7 +241,7 @@ def main(parameters=PARAMETERS):
         parameters['mode'] = args.mode
     if args.ppm:
         parameters['mz_tolerance_ppm'] = args.ppm
-    if args.multicores >= 0:
+    if args.multicores or args.multicores == 0:
         if args.multicores == 0:
             print("Using all available cores.")
             parameters['multicores'] = mp.cpu_count()
@@ -280,10 +282,14 @@ def main(parameters=PARAMETERS):
         parameters['num_lowess_iterations'] = args.num_lowess_iterations
     if args.table_for_viz:
         parameters['table_for_viz'] = args.table_for_viz
-    if args.project_sample_number_small >= 0:
+    if args.project_sample_number_small and args.project_sample_number_small >= 0:
         parameters['project_sample_number_small'] = int(args.project_sample_number_small)
     if args.visualization_max_samples:
         parameters['visualization_max_samples'] = args.visualization_max_samples
+    if args.dask_ip:
+        parameters['dask_ip'] = args.dask_ip
+    else:
+        parameters['dask_ip'] = None
 
     # update peak detection parameters by autoheight then CLI args
     # min_peak_height, min_prominence_threshold, cal_min_peak_height, min_intensity_threshold

@@ -262,7 +262,8 @@ def batch_EIC_from_samples_(sample_registry, parameters):
     '''
     shared_dict = {}
     iters = make_iter_parameters(sample_registry, parameters)
-    for result in bulk_process(single_sample_EICs_, iters, dask_ip=False):
+    for result in bulk_process(single_sample_EICs_, iters, dask_ip=parameters['dask_ip'], job_multiplier=4):
+        # oversubscribe for dask
         shared_dict.update(result)
     return shared_dict
 

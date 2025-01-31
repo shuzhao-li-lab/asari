@@ -39,7 +39,7 @@ def batch_deep_detect_elution_peaks(list_mass_tracks, number_of_scans, parameter
     stats_detect_elution_peaks
     '''
     iters = iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters)
-    results = bulk_process(stats_detect_elution_peaks, iters, dask_ip=False)
+    results = bulk_process(stats_detect_elution_peaks, iters, dask_ip=parameters['dask_ip'])
     return [item for sublist in results for item in sublist]
 
 

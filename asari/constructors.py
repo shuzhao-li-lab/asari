@@ -15,6 +15,8 @@ from .mass_functions import (flatten_tuplelist, landmark_guided_mapping, calcula
 from .chromatograms import (nn_cluster_by_mz_seeds,rt_lowess_calibration_debug, rt_lowess_calibration, remap_intensity_track)
 from .peaks import (quick_detect_unique_elution_peak, batch_deep_detect_elution_peaks, get_gaussian_peakarea_on_intensity_list)
 from .samples import SimpleSample
+from .utils import bulk_process
+
 
 class MassGrid:
     '''
@@ -443,11 +445,12 @@ class CompositeMap:
             batches[-1].append(SM)
         assert batches[-1], "Empty batch"
 
-
-    
-        from .utils import bulk_process
         for batch in batches:
-            list_of_list_mass_tracks = bulk_process(SimpleSample.get_mass_tracks_for_sample, batch)
+            if self.experiment.parameters['database_mode'] == "memory":
+                # this is a bug - to fix
+                list_of_list_mass_tracks = bulk_process(SimpleSample.get_mass_tracks_for_sample, batch, dask_ip=False)
+            else:
+                list_of_list_mass_tracks = bulk_process(SimpleSample.get_mass_tracks_for_sample, batch, dask_ip=True)
             for (SM, list_mass_tracks) in zip(batch, list_of_list_mass_tracks):
                 print("   ", SM.name)
                 if SM.is_reference:

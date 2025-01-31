@@ -2,6 +2,7 @@ v1.13.2 -> v1.14.0
     bug fixes:
         fixed issue with hard code mz ppm in add_sample (thanks yufongpeng)
         fix bug in number of lowess iterations being different if ran from the CLI than module.
+        fix bug in min_prominence threshold
     
     new features:
         added compression support
@@ -15,6 +16,8 @@ v1.13.2 -> v1.14.0
         added command to list possible workflows and clarified that mzML files must be centroided (thanks NchuYj)
         added helper function in utils for investigating peak_area and feature intensity patterns (thanks YuanyeChi)
         single file qaqc reporting either inline using --single_file_qc_reports or qc_report command
+        can now modify project size via the CLI using --project_sample_number_small, determines workflow
+        
 
     misc. code improvements
         added unit and integration testing for the LC-workflow

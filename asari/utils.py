@@ -123,15 +123,14 @@ def get_ionization_mode_mzml(mzml_file, limit=50):
                 break
     return list(ion_modes)[0]
 
-def bulk_process(command, arguments, dask_ip=False, jobs_per_worker=False, job_multiplier=1):
+def bulk_process(command, arguments, dask_ip=None, jobs_per_worker=False, job_multiplier=1):
     if arguments:
-        if dask_ip and False:
-            print("HERE")
+        if dask_ip:
             try:
                 from dask.distributed import Client, as_completed, progress
             except:
                 raise ImportError("Dask must be installed to use dask_ip=True")
-            client = Client("tcp://192.168.1.127:8786")
+            client = Client(f"tcp://{dask_ip}:8786")
             #client.scatter(arguments)
             #client.scatter(command)
             results = []
@@ -175,7 +174,7 @@ def bulk_process(command, arguments, dask_ip=False, jobs_per_worker=False, job_m
                 progress(futures)
                 
                 # Gather results once all tasks have completed
-                return client.gather(futures)
+                return [x for x in client.gather(futures)]
         else:
             if jobs_per_worker and jobs_per_worker != 'auto':
                 with mp.Pool(jobs_per_worker) as client:
