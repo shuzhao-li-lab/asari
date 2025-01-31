@@ -221,9 +221,9 @@ Python itself is used on Windows, Mac and Linux. Users may encouter problems rel
 
 Starting in V1.14, the framework exists to parallelize asari across multiple systems in a distributed manner via Dask.  Asari is largely I/O bound even on single machines, so architecture of the cluster is key to performance. Consider using a fast interconnect such as >10Gbe ethernet or infiniband. All nodes must mount an NFS share for storing experiment data (like local Asari but the target is a network share). Consider using an NVMe based array with ZFS for this purpose to enable real performance gains from the distributed version.
 
-To enable, run as module and pass `dask_ip=<DASK_SCHEDULER>:<PORT>` in the experiment parameters. 
+To enable, run as module and pass `dask_ip=<DASK_SCHEDULER>` in the parameters, port 8786 is assumed. 
 
-Note, you probably DO NOT NEED THIS for your experimental data, this is for processing repository scale data. As of V1.14, support is experimental, use at your own risk.
+Note, you probably DO NOT NEED THIS for your experimental data, this is for processing repository scale data. As of V1.14, support is experimental, use at your own risk. To enable dask, find the corresponding field in utils.py and enable it, then reinstall from source.
 
 **Anaconda and conda, virtual environments**
 

@@ -1,3 +1,11 @@
+v1.14.0 -> v1.14.1
+    bug fixes:
+        fixed issues with CLI parsing
+        added support for dask from CLI, requires modifying a flag in utils and reinstall from source
+
+    next version:
+        use this for basic GC version.
+
 v1.13.2 -> v1.14.0
     bug fixes:
         fixed issue with hard code mz ppm in add_sample (thanks yufongpeng)
