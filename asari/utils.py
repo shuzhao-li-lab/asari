@@ -124,6 +124,7 @@ def get_ionization_mode_mzml(mzml_file, limit=50):
     return list(ion_modes)[0]
 
 def bulk_process(command, arguments, dask_ip=None, jobs_per_worker=False, job_multiplier=1):
+    DASK_ENABLE = False # to turn on Dask, set to True and install manually. EXPERIMENTAL!!!
     if arguments:
         if dask_ip:
             try:
