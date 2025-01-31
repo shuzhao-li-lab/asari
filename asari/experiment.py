@@ -116,7 +116,7 @@ class ext_Experiment:
         else:
             return None
 
-    def process_all(self):
+    def process_all_LC(self):
         '''
         This is the default asari workflow.
         
