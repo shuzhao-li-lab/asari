@@ -6,7 +6,13 @@ import time
 import sys
 
 from asari import __version__
-from .workflow import (get_mz_list, process_project, process_xics, read_project_dir, create_export_folders)
+from .workflow import (get_mz_list, 
+                       process_project, 
+                       process_xics, 
+                       read_project_dir,
+                       read_project_file, 
+                       create_export_folders,
+                       )
 from .default_parameters import PARAMETERS
 from .dashboard import read_project, dashboard
 from .analyze import estimate_min_peak_height, analyze_single_sample
@@ -20,10 +26,15 @@ PARAMETERS['asari_version'] = __version__
 
 def __run_process__(parameters, args):
     # main process function
-    list_input_files = read_project_dir(args.input)
-    if not list_input_files:
-        print("No valid mzML files are found in the input directory :(")
-    else:
+    if os.path.isdir(args.input):
+        list_input_files = read_project_dir(args.input)
+        if not list_input_files:
+            print("No valid mzML files are found in the input directory :(")
+    elif os.path.isfile(args.input):
+        list_input_files = read_project_file(args.input)
+        if not list_input_files:
+            print("No valid mzML files were found in the file list :(")
+    if list_input_files:
         process_project(list_input_files, parameters)
 
 def convert(parameters, args):
@@ -214,6 +225,10 @@ def main(parameters=PARAMETERS):
             help='Number of samples dictates workflow, default 10')
     parser.add_argument('--dask_ip', default=None,
             help='Dask scheduler IP address for distributed processing'),
+    parser.add_argument('-w', '--workflow', default='LC', 
+            help='workflow to use, LC or GC')
+    parser.add_argument('--retention_index_standards', default=None,
+            help='Use retention index landmarks for alignment')
 
     try:
         args = parser.parse_args()
@@ -237,59 +252,91 @@ def main(parameters=PARAMETERS):
     parameters['drop_unaligned_samples'] = booleandict[args.drop_unaligned_samples]
     parameters['autoheight'] = booleandict[args.autoheight]
     
+    #
+    # arg parsing
+    #
+
     if args.mode:
         parameters['mode'] = args.mode
+
     if args.ppm:
         parameters['mz_tolerance_ppm'] = args.ppm
+
+    if args.workflow:
+        assert args.workflow in ['LC', 'GC', 'Lipidomics'], "Workflow must be either LC, GC, or Lipidomics."
+        parameters['workflow'] = args.workflow
+        if args.workflow == 'GC':
+            assert args.retention_index_standards, "Retention index standards must be provided for GC workflow."
+            parameters['retention_index_standards'] = args.retention_index_standards
+
     if args.multicores or args.multicores == 0:
         if args.multicores == 0:
             print("Using all available cores.")
             parameters['multicores'] = mp.cpu_count()
         else:
             parameters['multicores'] = min(mp.cpu_count(), args.multicores)
+
     if args.project:
         parameters['project_name'] = args.project
+
     if args.output:
         parameters['outdir'] = os.path.abspath(args.output)
+
     if args.peak_area:
         parameters['peak_area'] = args.peak_area
+
     if args.keep_intermediates:
         parameters['keep_intermediates'] = booleandict[args.keep_intermediates]
         parameters['database_mode'] = 'ondisk'
+
     if args.anno:
         parameters['anno'] = booleandict[args.anno]
+
     if args.reference:
         parameters['reference'] = args.reference
+
     if args.database_mode:
         assert args.database_mode in ['auto', 'ondisk', 'memory'], "Database mode must be either auto, ondisk, or memory."
         parameters['database_mode'] = args.database_mode
+
     if args.wlen:
         parameters['wlen'] = args.wlen
+
     if args.compress:
         assert args.compress in ['True', 'False'], "Compress must be either True or False."
         parameters['compress'] = booleandict[args.compress]
         parameters['database_mode'] = 'ondisk'
+
     if args.storage_format:
         assert args.storage_format in ['pickle', 'json'], "Storage format must be either pickle or json."
         parameters['storage_format'] = args.storage_format
+
     if args.reuse_intermediates:
         parameters['reuse_intermediates'] = args.reuse_intermediates
         parameters['keep_intermediates'] = True
         parameters['database_mode'] = 'ondisk'
+
     if args.spikeins:
         parameters['spikeins'] = args.spikeins
+
     if args.num_lowess_iterations:
         parameters['num_lowess_iterations'] = args.num_lowess_iterations
+
     if args.table_for_viz:
         parameters['table_for_viz'] = args.table_for_viz
+
     if args.project_sample_number_small and args.project_sample_number_small >= 0:
         parameters['project_sample_number_small'] = int(args.project_sample_number_small)
+
     if args.visualization_max_samples:
         parameters['visualization_max_samples'] = args.visualization_max_samples
+    
     if args.dask_ip:
         parameters['dask_ip'] = args.dask_ip
     else:
         parameters['dask_ip'] = None
+
+
 
     # update peak detection parameters by autoheight then CLI args
     # min_peak_height, min_prominence_threshold, cal_min_peak_height, min_intensity_threshold
@@ -336,7 +383,7 @@ def main(parameters=PARAMETERS):
         # launch data dashboard
         viz(parameters, args)
     elif args.run == 'list_workflows':
-        print("Available Worfklows:")
+        print("Available Worfklows:\t All options require centroided mzML or Thermo .raw inputs.")
         print("\t1. LC - default option")
         print("\t2. GC, pass `--workflow GC` to enable")
         print("\t3. Lipidomics LC, pass `--workflow Lipidomics` NOT IMPLEMENTED")
@@ -346,4 +393,5 @@ def main(parameters=PARAMETERS):
 # -----------------------------------------------------------------------------
 #
 if __name__ == '__main__':
+    mp.freeze_support() # needed for windows
     main(PARAMETERS)

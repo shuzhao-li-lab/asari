@@ -25,6 +25,38 @@ import zipfile
 # -----------------------------------------------------------------------------
 # main workflow for `process`
 # -----------------------------------------------------------------------------
+
+def workflow_setup(list_input_files, parameters):
+    '''
+    This defines the main work flow in processing a list of LC-MS files,
+    '''
+    sample_registry = register_samples(list_input_files)
+    if parameters['database_mode'] == 'auto':
+        if len(list_input_files) <= parameters['project_sample_number_small']:
+            parameters['database_mode'] = 'memory'
+        else:
+            parameters['database_mode'] = 'ondisk'
+    time_stamp = [str(x) for x in time.localtime()[1:6]]
+    parameters['time_stamp'] = ':'.join(time_stamp)
+    create_export_folders(parameters, ''.join(time_stamp))
+    shared_dict = batch_EIC_from_samples_(sample_registry, parameters)
+    if shared_dict:
+        for sid, sam in sample_registry.items():
+            sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'], sam['max_scan_number'], sam['list_scan_numbers'], sam['list_retention_time'], sam['track_mzs'], sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'], sam['sample_data'], sam['sparsified'] = shared_dict[sid]
+            sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
+        
+        EE = ext_Experiment(sample_registry, parameters)
+        #EE.process_all()
+        #EE.export_all(anno=parameters["anno"])
+    else:
+        raise Exception("No data was processed, check the input files.")
+    EE = ext_Experiment(sample_registry, parameters)
+    return EE
+
+def workflow_cleanup(EE, list_input_files, parameters):
+    if not parameters['keep_intermediates'] and parameters['database_mode'] != 'memory':
+        remove_intermediate_pickles(parameters)
+
 def process_project(list_input_files, parameters):
     '''
     This defines the main work flow in processing a list of LC-MS files, 
@@ -60,35 +92,23 @@ def process_project(list_input_files, parameters):
 
     The pickle folder is removed after the processing by default.
     '''
-    sample_registry = register_samples(list_input_files)
-    if parameters['database_mode'] == 'auto':
-        if len(list_input_files) <= parameters['project_sample_number_small']:
-            parameters['database_mode'] = 'memory'
-        else:
-            parameters['database_mode'] = 'ondisk'        # yet to implement mongo etc
+    EE = workflow_setup(list_input_files, parameters)
+    workflows = {
+        "GC": process_GC_project,
+        "LC": process_LC_project
+    }
+    workflows[parameters['workflow']](EE, list_input_files, parameters)
+    workflow_cleanup(EE, list_input_files, parameters)
 
-    # time_stamp is `month daay hour minute second``
-    time_stamp = [str(x) for x in time.localtime()[1:6]]
-    parameters['time_stamp'] = ':'.join(time_stamp)
-    time_stamp = ''.join(time_stamp)
-    # if parameters['database_mode'] == 'ondisk':
-    create_export_folders(parameters, time_stamp)
-        
-    # samples are processed to mass tracks (EICs) here
-    shared_dict = batch_EIC_from_samples_(sample_registry, parameters)
-    if shared_dict:
-        for sid, sam in sample_registry.items():
-            sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'], sam['max_scan_number'], sam['list_scan_numbers'], sam['list_retention_time'], sam['track_mzs'], sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'], sam['sample_data'], sam['sparsified'] = shared_dict[sid]
-            sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
-        
-        EE = ext_Experiment(sample_registry, parameters)
-        EE.process_all()
-        EE.export_all(anno=parameters["anno"])
-    else:
-        raise Exception("No data was processed, check the input files.")
+def process_GC_project(EE, list_input_files, parameters):
+    print("Processing Project using GC Workflow")
+    EE.process_all_GC()
+    EE.export_all(anno=False)
 
-    if not parameters['keep_intermediates'] and parameters['database_mode'] != 'memory':
-        remove_intermediate_pickles(parameters)
+def process_LC_project(EE, list_input_files, parameters):
+    print("Processing Project using LC Workflow")
+    EE.process_all_LC()
+    EE.export_all(anno=True)
 
 def read_project_dir(directory, file_pattern='.mzML'):
     '''
@@ -109,6 +129,30 @@ def read_project_dir(directory, file_pattern='.mzML'):
     '''
     print("Working on ~~ %s ~~ \n\n" %directory)
     return [os.path.join(directory, f) for f in os.listdir(directory) if file_pattern in f]
+
+def read_project_file(project_file, file_pattern='.mzML'):
+    '''
+    This reads centroided LC-MS files from a file list.
+    Returns a list of files that match file_pattern.
+
+    This is useful for running Asari across filesystems, 
+    or when another tool needs to request Asari processing but 
+    we need to read the files in place.
+
+    Parameters
+    ----------
+    directory: str
+        path to a directory containing mzML files
+    file_pattern: str, optional, default: '.mzML'
+        files with this substring will be ingested
+
+    Return
+    ------
+    list of paths to files containing the file_pattern
+
+    '''
+    print("Working on ~~ %s ~~ \n\n" %project_file)
+    return [os.path.abspath(l.strip()) for l in open(project_file).readlines() if file_pattern in l]
 
 def register_samples(list_input_files):
     '''
@@ -262,7 +306,7 @@ def batch_EIC_from_samples_(sample_registry, parameters):
     '''
     shared_dict = {}
     iters = make_iter_parameters(sample_registry, parameters)
-    for result in bulk_process(single_sample_EICs_, iters, dask_ip=parameters['dask_ip'], job_multiplier=4):
+    for result in bulk_process(single_sample_EICs_, iters, dask_ip=parameters['dask_ip']):
         # oversubscribe for dask
         shared_dict.update(result)
     return shared_dict

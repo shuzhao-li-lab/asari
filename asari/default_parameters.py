@@ -39,6 +39,11 @@ PARAMETERS = {
     'gaussian_shape': 0.5,              # min cutoff of goodness of fitting to Gauss model
     'peak_area': 'sum',                 # `sum` for simple sum, `auc` for area under the curve, `gauss` for gaussian
 
+    # experimental design related parameters
+    'sample_metadata': None,            # path to sample metadata file, can be used in future to guide alignment and annotation
+    'workflow': 'LC',                   # 'LC', 'GC' ... to implement more
+    'retention_index_standards': None,  # path to retention index standards, needed for 'GC' workflow
+
     # autoheight parameters
     'min_min_peak_height': 1,           # in autoheight mode, this sets a lower bound on the minimum peak height it can return
                                         #    notice, that this value is 1 by default, which means that the minimum peak height is not limited by default
