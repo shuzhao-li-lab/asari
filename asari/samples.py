@@ -40,6 +40,7 @@ class SimpleSample:
         self.mode = mode
         self.database_mode = database_mode 
         self.is_reference = is_reference 
+        self.__registry = registry
 
         self.input_file = registry['input_file']
         self.name = registry['name']
@@ -67,7 +68,11 @@ class SimpleSample:
         
         # placeholder
         self.mz_calibration_function = None
-                                   
+
+    @property
+    def list_scan_numbers(self):
+        return self.__registry['list_scan_numbers']
+
 
     @staticmethod
     def get_mass_tracks_for_sample(sample):

@@ -9,6 +9,7 @@ Low selectivity regions will be still inspected to determine the true number of 
 from operator import itemgetter
 import numpy as np
 import pymzml
+import datetime
 
 from scipy import interpolate
 from scipy.ndimage import uniform_filter1d
@@ -56,6 +57,10 @@ def extract_massTracks_(infile,
     ms2_spectra = []
     ii = 0
     ms_expt = exp = pymzml.run.Reader(infile)
+    try:
+        timestamp = int(datetime.datetime.strptime(exp.info['start_time'], "%Y-%m-%dT%H:%M:%SZ").timestamp())
+    except:
+        timestamp = None
     for spec in ms_expt:
         if spec.ms_level == 1:                         # MS Level 1 only
             rt_times.append(spec.scan_time_in_minutes()*60)
@@ -99,7 +104,8 @@ def extract_massTracks_(infile,
         'rt_numbers': rt_numbers,
         'rt_times': rt_times,
         'tracks': updated_tracks,
-        'ms2_spectra': ms2_spectra
+        'ms2_spectra': ms2_spectra,
+        'acquisition_time': timestamp
     }
 
 

@@ -42,7 +42,7 @@ def workflow_setup(list_input_files, parameters):
     shared_dict = batch_EIC_from_samples_(sample_registry, parameters)
     if shared_dict:
         for sid, sam in sample_registry.items():
-            sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'], sam['max_scan_number'], sam['list_scan_numbers'], sam['list_retention_time'], sam['track_mzs'], sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'], sam['sample_data'], sam['sparsified'] = shared_dict[sid]
+            sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'], sam['max_scan_number'], sam['list_scan_numbers'], sam['list_retention_time'], sam['track_mzs'], sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'], sam['sample_data'], sam['sparsified'], sam['acquisition_time'] = shared_dict[sid]
             sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
         
         EE = ext_Experiment(sample_registry, parameters)
@@ -380,6 +380,7 @@ def single_sample_EICs_(job):
                                         new['track_mzs'],
                                         new['number_anchor_mz_pairs'], 
                                         new['anchor_mz_pairs'],  
+                                        new['acquisition_time'],
                                         {}, 
                                         zipfile.is_zipfile(file))} 
                 
@@ -392,6 +393,7 @@ def single_sample_EICs_(job):
                     min_timepoints=min_timepoints, 
                     min_peak_height=min_peak_height)
         new['max_scan_number'] = max(xdict['rt_numbers'])
+        new['acquisition_time'] = xdict['acquisition_time']
         # already in asc ending order of m/z from extract_massTracks_, get_thousandth_regions
         
         for ii, track in enumerate(xdict['tracks']):
@@ -456,7 +458,8 @@ def single_sample_EICs_(job):
                                 xdict['rt_times'],
                                 track_mzs,
                                 new['number_anchor_mz_pairs'], 
-                                anchor_mz_pairs,  
+                                anchor_mz_pairs,
+                                new['acquisition_time'], 
                                 {}, 
                                 compress)} 
             
@@ -471,7 +474,7 @@ def single_sample_EICs_(job):
                                 track_mzs,
                                 new['number_anchor_mz_pairs'], 
                                 anchor_mz_pairs,  
-                                new, 
+                                new['acquisition_time'], 
                                 compress)}
     except Exception as e:
         print("Failed to extract: %s." %os.path.basename(infile))

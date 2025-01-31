@@ -2,6 +2,14 @@ import os
 import sys
 import json
 import pickle
+import functools
+import pandas as pd
+from scipy import interpolate
+from .chromatograms import __hacked_lowess__
+from scipy.ndimage import uniform_filter1d
+from statsmodels.nonparametric.smoothers_lowess import lowess
+import tqdm
+
 
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
@@ -12,6 +20,7 @@ from .default_parameters import adduct_search_patterns, \
 from .mass_functions import all_mass_paired_mapping
 from .constructors import CompositeMap
 from .json_encoder import NpEncoder
+from .samples import SimpleSample
 
 try:
     import importlib.resources as pkg_resources
@@ -100,6 +109,33 @@ class ext_Experiment:
         '''
         return [k for k,v in self.sample_registry.items() if v['status:eic'] == 'passed']
 
+    def determine_acquisition_order(self):
+        sample_order_by_timestamp = [(k, v['acquisition_time']) for k,v in self.sample_registry.items()]
+        try:
+            # fix this better in future
+            return sorted(sample_order_by_timestamp, key=lambda x: x[1])
+        except:
+            return sorted(sample_order_by_timestamp, key=lambda x: x[0])
+    
+    def associate_stds_samples(self, sample_run_order):
+        association = {}
+        current_non_RI_samples = []
+        last_reference = None
+        for sample_id, runtime in sample_run_order:
+            sample_name = self.sample_registry[sample_id]['name']
+            RI_list = pd.read_csv(self.parameters['retention_index_standards'])
+            if sample_name in RI_list.columns:
+                last_reference = sample_id
+                for non_RI_sample in current_non_RI_samples:
+                    association[non_RI_sample] = sample_id
+                current_non_RI_samples = []
+            else:
+                current_non_RI_samples.append(sample_id)
+        for non_RI_sample in current_non_RI_samples:
+            association[non_RI_sample] = last_reference
+        return association
+    
+
     def get_max_scan_number(self, sample_registry):
         '''
         Return max scan number among samples, or None if no valid sample.
@@ -139,6 +175,67 @@ class ext_Experiment:
             self.CMAP.mock_rentention_alignment()
         self.CMAP.build_composite_tracks()
         self.CMAP.global_peak_detection()
+
+    def populate_RI_lookup(self, sample_map):
+        RI_maps = {}
+        RI_models = {}
+        reverse_RI_models = {}
+        RI_list = pd.read_csv(self.parameters['retention_index_standards'])
+        for reference_id in tqdm.tqdm(list(dict.fromkeys(list(sample_map.values())))):
+            print(reference_id)
+            RI_maps[reference_id] = {}
+            reference_instance = SimpleSample(self.sample_registry[reference_id], experiment=self)
+            prev_index, next_index = None, None
+            prev_rt, next_rt = None, None
+            RTs, indexes, scan_nos = [], [], []
+            for rt, scan_no in zip(reference_instance.list_retention_time, reference_instance.list_scan_numbers):
+                RTs.append(rt)
+                scan_nos.append(scan_no)
+                print(rt, scan_no)
+                for index, index_rt in zip(RI_list['Index'], RI_list[reference_instance.name]):
+                    index, index_rt = int(index), float(index_rt)
+                    print("\t", index, index_rt)
+                    if rt > index_rt:
+                        prev_index, prev_rt = index, index_rt
+                    elif rt <= index_rt:
+                        _, next_rt = index, index_rt
+                        break
+                if next_rt is None:
+                    next_rt = max(reference_instance.list_retention_time) * 1.1
+                    _ = max(RI_list['Index']) + 1
+                RI_value = 100 * (prev_index + ((rt - prev_rt)/(next_rt - rt)))
+                indexes.append(RI_value)
+                RI_maps[reference_id][rt] = RI_value
+            model = lowess(indexes, RTs)
+            model2 = lowess(indexes, scan_nos)
+            newx, newy = list(zip(*model))
+            interf = interpolate.interp1d(newx, newy, fill_value="extrapolate", bounds_error=False)
+            RI_models[reference_id] = interf
+            newx, newy = list(zip(*model2))
+            reverse_RI_models[reference_id] = interpolate.interp1d(newy, newx, fill_value="extrapolate", bounds_error=False)
+            
+        self.RI_models = RI_models
+        self.reverse_RI_models = reverse_RI_models
+
+
+    def convert_to_RI(self, sample_map):
+        if not self.RI_map:
+            self.populate_RI_lookup(sample_map)
+        for k, v in sample_map.items():
+            sam = self.sample_registry[k]
+            sam['list_retention_index'] = self.RI_models[v](sam['list_retention_time'])
+
+    def process_all_GC(self):
+        self.CMAP = CompositeMap(self)
+        sample_run_order = self.determine_acquisition_order()
+        mapping = self.associate_stds_samples(sample_run_order)
+        self.mapping = mapping
+        self.populate_RI_lookup(mapping)
+        #self.convert_to_RI(mapping)
+        self.CMAP.construct_mass_grid()
+        self.CMAP.build_composite_tracks_GC()
+        self.CMAP.global_peak_detection()
+
 
     def export_all(self, anno=True):
         '''
