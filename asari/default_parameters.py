@@ -63,15 +63,14 @@ PARAMETERS = {
     'max_retention_shift': None,        # landmark peak pairs with a scan number delta greater than this are not used for RT calibration
     'num_lowess_iterations': 3,         # number of lowess iterations to perform for RT calibration, higher values take longer but less sensitive to outliers
     'project_sample_number_small': 10,  # Number of samples dictates workflow, default 10
-    
 
     # for annotation
-    'anno': True,                      # to annotate features
+    'anno': True,                       # to annotate features
     'check_isotope_ratio': False,
-
+    'GC_Database': "MoNA_GCMS",         # path to GC database, 
 
     #computational improvements
-    'compress': False,                 # if True, compress intermediate files ondisk
+    'compress': False,                  # if True, compress intermediate files ondisk
     'storage_format': 'pickle',         # 'pickle' or 'json', json is safer but bigger
 
     # default output names

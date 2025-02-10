@@ -16,7 +16,7 @@ from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 from .default_parameters import adduct_search_patterns, \
     adduct_search_patterns_neg, isotope_search_patterns, extended_adducts, \
     readme_doc_str
-
+from .gc_annotation import EI_MS_Library
 from .mass_functions import all_mass_paired_mapping
 from .constructors import CompositeMap
 from .json_encoder import NpEncoder
@@ -217,7 +217,6 @@ class ext_Experiment:
         self.RI_models = RI_models
         self.reverse_RI_models = reverse_RI_models
 
-
     def convert_to_RI(self, sample_map):
         if not self.RI_map:
             self.populate_RI_lookup(sample_map)
@@ -235,9 +234,9 @@ class ext_Experiment:
         self.CMAP.construct_mass_grid()
         self.CMAP.build_composite_tracks_GC()
         self.CMAP.global_peak_detection()
+        self.annotate_GC()
 
-
-    def export_all(self, anno=True):
+    def export_all(self, anno=True, mode="LC"):
         '''
         Export all files.
         Annotation of features to empirical compounds is done here.
@@ -248,17 +247,31 @@ class ext_Experiment:
             if true, generate annotation files, export CMAP pickle and do QC plot;
             else skip annotating.
         '''
-        self.CMAP.MassGrid.to_csv(
-            os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
-        if anno:
-            for peak in self.CMAP.FeatureList:
-                peak['id'] = str(peak['id_number'])
-            self.export_CMAP_pickle()
-            self.annotate()
-            self.generate_qc_plot_pdf()
-        self.export_feature_tables()
-        self.export_log()
-        self.export_readme()
+        if self.parameters['workflow'] == "LC":
+            self.CMAP.MassGrid.to_csv(
+                os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
+            if anno:
+                for peak in self.CMAP.FeatureList:
+                    peak['id'] = str(peak['id_number'])
+                self.export_CMAP_pickle()
+                self.annotate()
+                self.generate_qc_plot_pdf()
+            self.export_feature_tables()
+            self.export_log()
+            self.export_readme()
+        elif self.parameters['workflow'] == "GC":
+            self.export_feature_tables()
+            self.CMAP.MassGrid.to_csv(
+                os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
+            self.annotate_GC()
+            self.export_log()
+            self.export_readme()
+
+    def annotate_GC(self):
+        pref_ft = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
+        full_ft = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
+        EI_MS_Library.annotate_gc_feature_table_with_library(pref_ft, self.parameters['GC_Database'])
+        EI_MS_Library.annotate_gc_feature_table_with_library(full_ft, self.parameters['GC_Database'])
 
     def annotate(self):
         '''

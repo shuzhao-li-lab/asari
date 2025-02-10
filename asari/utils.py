@@ -13,6 +13,40 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import requests
+import zipfile
+from io import BytesIO
+from importlib import resources as pkg_resources
+
+def download_and_unzip_to_pkg_resources(url, package, subdir="data"):
+    """Downloads a ZIP archive from a URL and extracts it into a package's resource directory."""
+    print("HERE")
+    # Get the package directory
+    package_dir = os.path.dirname(pkg_resources.files(package))
+    
+    # Target extraction directory within the package
+    extract_to = os.path.join(package_dir, subdir)
+    os.makedirs(extract_to, exist_ok=True)  # Ensure the directory exists
+
+    # Download the ZIP file
+    response = requests.get(url, stream=True)
+    response.raise_for_status()
+
+    # Extract the ZIP archive to the target directory
+    with zipfile.ZipFile(BytesIO(response.content)) as zip_ref:
+        zip_ref.extractall(extract_to)
+
+    print(f"Extracted to: {extract_to}")
+
+def download_and_unzip(url, extract_to):
+    """Downloads a ZIP archive from a URL and extracts it to the specified directory."""
+    response = requests.get(url, stream=True)
+    response.raise_for_status()  # Raise an error for bad responses
+
+    with zipfile.ZipFile(BytesIO(response.content)) as zip_ref:
+        zip_ref.extractall(extract_to)
+
+    print(f"Extracted to: {extract_to}")
 
 def plot_correlations(feature_table_path):
     ft = pd.read_csv(feature_table_path, sep='\t')
