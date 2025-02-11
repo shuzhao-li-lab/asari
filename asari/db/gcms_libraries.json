@@ -4,7 +4,7 @@
         "Version": "0.0.1"
     },
     "EI_MS": {
-        "GCMS_ID_NIST20": {
+        "disabled__GCMS_ID_NIST20": {
             "Name": "GCMS ID Predicted NIST 20",
             "Description": "GCMS ID Predicted NIST 20",
             "URL": "https://gcms-id.ca/NIST20.zip",
@@ -14,7 +14,7 @@
             "Parser": "GCMS_ID",
             "Required Citations": "Wakoli J, Anjum A, Sajed T, Wang F, Oler E, Gautam V, Wishart D. GCMS-ID: A Webserver for Identifying Compounds from Exposomics or Metabolomics Gas Chromatography Mass Spectrometry Experiments."
         },
-        "GCMS_ID_HMDB": {
+        "disabled__GCMS_ID_HMDB": {
             "Name": "GCMS ID Predicted HMDB",
             "Description": "GCMS ID Predicted HMDB",
             "URL": "https://gcms-id.ca/HMDB.zip",
@@ -30,7 +30,7 @@
             "URL": "https://mona.fiehnlab.ucdavis.edu/rest/downloads/retrieve/a09f9652-c7bc-48b2-9dd9-0dc4343bb360",
             "Compression": "zip",
             "Extension": ".msp",
-            "Parser": "matchms ",
+            "Parser": "matchms",
             "License": "",
             "Required Ciations": "",
             "OnDiskName": "MoNA-export-GC-MS_Spectra.msp"

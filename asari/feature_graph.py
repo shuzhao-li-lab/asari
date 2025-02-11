@@ -6,13 +6,11 @@ import pandas as pd
 from matchms import Spectrum
 from matchms.filtering import default_filters, normalize_intensities
 
-
-
 class FeatureGraph():
     def __init__(self, ft_path, graph=None):
         if ft_path:
             self.ft_path = ft_path
-            self.df = pd.read_csv(self.ft_path, sep='\t')[:500]
+            self.df = pd.read_csv(self.ft_path, sep='\t')
             self.graph = None
         if graph:
             self.graph = graph
@@ -121,4 +119,4 @@ class FeatureGraph():
                         df_dict[feature]["annotations"].append(annotation)
                         
         self.df = pd.DataFrame([d for n, d in df_dict.items()])
-        self.df.to_csv(self.ft_path.replace(".tsv", "_annotated.tsv"), sep='\t', index=False)
+        self.df.to_csv(self.ft_path.replace(".tsv", "_annotated_gc_beta.tsv"), sep='\t', index=False)

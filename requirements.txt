@@ -14,3 +14,4 @@ seaborn
 matplotlib
 tqdm
 json_tricks
+plotly

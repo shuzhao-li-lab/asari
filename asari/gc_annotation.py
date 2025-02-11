@@ -26,7 +26,7 @@ class EI_MS_Library():
         self.library = None
         self.load_library()
         
-    def load_library(self, limit=1000):
+    def load_library(self, limit=None):
         extension = self.library_meta['Extension'][1:] if self.library_meta['Extension'][0] == "." else self.library_meta['Extension']
         if self.library_meta.get("Parser", "").lower() == "matchms" and hasattr(matchms.importing, f"load_from_{extension}"):
             self.loader = getattr(matchms.importing, f"load_from_{extension}")
@@ -93,7 +93,7 @@ class EI_MS_Library():
     @cache 
     @staticmethod
     def load_library_manifest():
-        return json.load(open("/Users/mitchjo/Asari_02_07_2025/asari/asari/db/gcms_libraries.json"))
+        return json.load(open(os.path.join(pkg_resources.files('asari'), 'db', 'gcms_libraries.json')))
     
     def annotate_gc_feature_table(self, feature_table_path, drt=0.5, min_peaks=3, min_shared_peaks=1, min_score_threshold=0.7):
         
@@ -104,7 +104,6 @@ class EI_MS_Library():
         print(f"Total Cluster Spectra: {len(extracted_spectra)}")
         print(f"Total Library Spectra: {len(self.library)}")
         print(f"Total Comparisons: {total}, this may take some time...")
-
         matches = []
         with mp.Pool(mp.cpu_count()) as pool:
             scores = pool.imap(wrapped_cosine, product(extracted_spectra, self.library))

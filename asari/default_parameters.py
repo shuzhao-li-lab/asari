@@ -10,6 +10,8 @@
 # but they should be given via commandline arguments.
 # 
 
+from importlib import resources as pkg_resources
+
 PARAMETERS = {
     'project_name': 'asari_project',
     'outdir': 'output',
@@ -19,7 +21,11 @@ PARAMETERS = {
                                         # 'ondisk', 'memory' (run in memory, only small studies), 
                                         # 'mongo' (MongoDB, requiring installation of DB server, to implement)
     'multicores': 4,                    # number of cores allowed in parallel processing
-
+    'target': None,                     # target mz values for extraction     
+    'single_file_qc_reports': False,    # if True, generate QC reports for each file, needs spikeins provided or defaults are used.
+    'spikeins': None,
+    'convert_raw': False,               # if True, convert raw files to mzML, requires mono installed
+    'dask_ip': None,                    # IP address for dask distributed computing, to implement
     # mass parameters
     'mode': 'pos',                      # ionization mode
     'mass_range': (50, 2000),
@@ -68,7 +74,7 @@ PARAMETERS = {
     'anno': True,                       # to annotate features
     'check_isotope_ratio': False,
     'GC_Database': "MoNA_GCMS",         # path to GC database, 
-
+    'GC_Database_Manifest': None,       # 'memory' or 'ondisk' to implement
     #computational improvements
     'compress': False,                  # if True, compress intermediate files ondisk
     'storage_format': 'pickle',         # 'pickle' or 'json', json is safer but bigger
@@ -78,7 +84,13 @@ PARAMETERS = {
     'mass_grid_mapping': "_mass_grid_mapping.csv",
     'annotation_filename': "Annotation_table.tsv",
     'json_empricalCompounds': "_empCpd_json.json",
+
+    # dashboard parameters
+    'table_for_viz': 'preferred',
+    'vizualization_max_samples': 20,
     }
+
+
     
 
 #

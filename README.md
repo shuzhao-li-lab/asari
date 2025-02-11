@@ -3,7 +3,7 @@ Asari
 [![Documentation Status](https://readthedocs.org/projects/asari/badge/?version=latest)](https://asari.readthedocs.io/en/latest/?badge=latest)
 [![DOI](https://img.shields.io/badge/DOI-doi.org%2F10.1038%2Fs41467--023--39889--1-blue)](https://doi.org/10.1038/s41467-023-39889-1)
 
-Trackable and scalable Python program for high-resolution LC-MS metabolomics data preprocessing ([Li et al. Nature Communications 14.1 (2023): 4113](https://www.nature.com/articles/s41467-023-39889-1)):
+Trackable and scalable Python program for high-resolution LC ([Li et al. Nature Communications 14.1 (2023): 4113](https://www.nature.com/articles/s41467-023-39889-1)) and GC (publication to come) metabolomics datasets:
 
 - Taking advantage of high mass resolution to prioritize mass separation and alignment
 - Peak detection on a composite map instead of repeated on individual samples
@@ -25,16 +25,19 @@ Install
 
 - Requires Python 3.8+. Installation time ~ 5 seconds if common libraries already exist.
 
+- Python>=3.12 is currently incompatible with GC workflow because of limitations with installing numba and matchms in Python3.13. 
+
 - One can use the web version (https://asari.app) without local installation.
 
 Input
 =====
-Input data are centroid mzML files from LC-MS metabolomics. 
-We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
+Input data are centroid mzML files from LC or GC metabolomics. 
+
+We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. You can also perform conversion, if your input files are Thermo raw files either by using the `convert` command or by passing `--convert_raw True` with the `process` command.  
+
 Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats and .mzXML files.
 
-MS/MS spectra are ignored by asari. 
-Our pipeline (https://pypi.org/project/pcpfm/) has annotation steps to use MS/MS data.
+MS/MS spectra are ignored by asari, but are exported in ____ format if discovered during processing for users and other tools. Our pipeline (https://pypi.org/project/pcpfm/) has annotation steps to use MS/MS data.
 
 Use 
 ===
@@ -140,7 +143,8 @@ After data are processed, users can use `asari viz --input process_result_dir` t
 
 Parameters
 ==========
-Only one parameter in asari requires real attention, i.e., m/z precision is set at 5 ppm by default. 
+
+For the LC workflows, only one parameter in asari requires real attention, i.e., m/z precision is set at 5 ppm by default. 
 Most modern instruments are fine with 5 ppm, but one may want to change if needed.
 
 Default ionization mode is `pos`. Change to `neg` if needed, by specifying `--mode neg` in command line.
@@ -149,7 +153,10 @@ Users can supply a custom parameter file `xyz.yaml`, via `--parameters xyz.yaml`
 A template YAML file can be found at `test/parameters.yaml`.
 
 When the above methods overlap, command line arguments take priority.
-That is, commandline overwrites `xyz.yaml`, which overwrites default asari parameters in `defaul_parameters.py`. 
+That is, commandline overwrites `xyz.yaml`, which overwrites default asari parameters in `default_parameters.py`. 
+
+The GC workflow requires, in addition to passing `--workflow GC` to the process command, also an appropirately formatted `--retention_index_standards`
+file which is in .csv. Examples are provided in the db folder. You can also specify which database to use by passing `--GC_Database <path_to_msp>` or `--GC_Databse <database_name>` where `<database_name>` is one of the supported libraries in `/db/gcms_libraries.json`. By default, MoNA GC-MS is used. 
 
 Algorithms
 ==========
@@ -270,7 +277,6 @@ The mass tracks are scaffolds to assemble data. Very close m/z values may not be
 As discussed in the manuscript, ppm is not perfect in modeling mass resolution and is not constant for all m/z ranges. It is a practical tool we currently work with. If two compounds are not resolved by LC and their m/z values are 4 ppm apart, asari processing by 5 ppm will treat them as one feature. If the mass resolution is justified, one can run asari using, for instance, 3 ppm. The default workflow in asari does not fine-tune the m/z values, because the split m/z peaks from centroiding are difficult to distinguish from real m/z peaks. We leave the fine-tuning to annotation or targeted extraction workflow.
 
 We thank reviewer #1 for valuable discussions on this topic.
-
 
 Asari suite and Related projects
 ================================

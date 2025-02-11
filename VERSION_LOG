@@ -1,17 +1,16 @@
-v1.14.0 -> v1.14.1
-    bug fixes:
-        fixed issues with CLI parsing
-        added support for dask from CLI, requires modifying a flag in utils and reinstall from source
-
-    next version:
-        use this for basic GC version.
-
 v1.13.2 -> v1.14.0
     bug fixes:
         fixed issue with hard code mz ppm in add_sample (thanks yufongpeng)
         fix bug in number of lowess iterations being different if ran from the CLI than module.
         fix bug in min_prominence threshold
+        fixed issues with CLI parsing
+        added support for dask from CLI
     
+    major new features:
+        GC Support! enable by passing --workflow GC, please see documentation
+        Automatic downloading of GC databases, currently only supports MoNA GCMS. 
+        API and CLI equivalency and additional API functionality.
+
     new features:
         added compression support
         JSON alternative to pickle, compression compatible. 
@@ -25,7 +24,6 @@ v1.13.2 -> v1.14.0
         added helper function in utils for investigating peak_area and feature intensity patterns (thanks YuanyeChi)
         single file qaqc reporting either inline using --single_file_qc_reports or qc_report command
         can now modify project size via the CLI using --project_sample_number_small, determines workflow
-        
 
     misc. code improvements
         added unit and integration testing for the LC-workflow
@@ -38,9 +36,3 @@ v1.13.2 -> v1.14.0
         use np.argmin in clustering for better performance O(N log N) -> O(N) (thanks Shuzhao-Li)
         additional computational improvements for mz clustering (vectorization)
         vectorize gap detection (will need to migrate this change to Asari-X too)
-
-    next version:
-        next version is planned to be v1.14.1 for any hotfixes for v1.14.0
-        GC-support for v2.0
-        join command for v2.0
-        more advanced alignment soon.

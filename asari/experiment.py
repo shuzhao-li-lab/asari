@@ -135,7 +135,6 @@ class ext_Experiment:
             association[non_RI_sample] = last_reference
         return association
     
-
     def get_max_scan_number(self, sample_registry):
         '''
         Return max scan number among samples, or None if no valid sample.
@@ -234,7 +233,6 @@ class ext_Experiment:
         self.CMAP.construct_mass_grid()
         self.CMAP.build_composite_tracks_GC()
         self.CMAP.global_peak_detection()
-        self.annotate_GC()
 
     def export_all(self, anno=True, mode="LC"):
         '''
@@ -262,8 +260,9 @@ class ext_Experiment:
         elif self.parameters['workflow'] == "GC":
             self.export_feature_tables()
             self.CMAP.MassGrid.to_csv(
-                os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
-            self.annotate_GC()
+                os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']))
+            if self.parameters['anno']:
+                self.annotate_GC()
             self.export_log()
             self.export_readme()
 
@@ -623,10 +622,10 @@ class ext_Experiment:
         print("\nFiltered Feature table (%d x %d) was written to %s.\n" %(
                                 filtered_FeatureTable.shape[0], number_of_samples, outfile))
         
-        if self.parameters['anno']:
+        # todo - this should be made more robust in the future
+        if self.parameters['anno'] and self.parameters['workflow'] != "GC":
             # in self.selected_unique_features: (empCpd id, neutral_formula, ion_relation)
-            sel = [ii for ii in filtered_FeatureTable.index if filtered_FeatureTable['id_number'][ii] in
-                                        self.selected_unique_features.keys()]
+            sel = [ii for ii in filtered_FeatureTable.index if filtered_FeatureTable['id_number'][ii] in self.selected_unique_features.keys()]
             unique_compound_table = filtered_FeatureTable.loc[sel, :]
             unique_compound_table.insert(3, "empCpd", [self.selected_unique_features[ii][0] for ii in unique_compound_table['id_number']])
             unique_compound_table.insert(4, "neutral_formula", [self.selected_unique_features[ii][1] for ii in unique_compound_table['id_number']])
