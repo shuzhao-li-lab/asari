@@ -222,7 +222,7 @@ Platforms, Anaconda and Docker
 ==============================
 **Desktop vs Cloud**
 
-Python itself is used on Windows, Mac and Linux. Users may encouter problems related to Python not to asari, in which cases your best option is to find your local IT friend. We are a small team of scientists. There is no plan to build a desktop graphic application, but we do a lot of cloud computing. If you don't like command lines (many people don't), please feel free to try out the web server (https://asari.app). The free server has a quota. Please contact us if you find yourself in need of substantial cloud resources.
+Python itself is used on Windows, Mac and Linux. Users may encouter problems related to Python not to asari, in which cases your best option is to find your local IT friend. We are a small team of scientists. There is no plan to build a complete desktop graphic application, but we do a lot of cloud computing and a basic GUI is provided in the tools directory. If you don't like command lines (many people don't), please feel free to try out the web server (https://asari.app). The free server has a quota. Please contact us if you find yourself in need of substantial cloud resources.
 
 **Dask Clusters**
 
