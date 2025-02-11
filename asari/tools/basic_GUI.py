@@ -12,8 +12,8 @@ def select_directory(params):
     root = tk.Tk()
     root.withdraw()  # Hide the main window
     directory = filedialog.askdirectory(title="Select a Directory")
-    root.destroy()
     params['input'] = directory
+    root.destroy()
     return params
 
 class TextRedirector:
@@ -53,7 +53,7 @@ def show_disclaimer():
         disclaimer.destroy()
     disclaimer = tk.Tk()
     disclaimer.title("Disclaimer")
-    tk.Label(disclaimer, text="Please read and accept the disclaimer before proceeding:\n\n Asari GUI is Experimental, use at your own risk", wraplength=400, justify="left").pack(padx=20, pady=20)
+    tk.Label(disclaimer, text="Please read and accept the disclaimer before proceeding:\n\n Asari GUI is Experimental", wraplength=400, justify="left").pack(padx=20, pady=20)
     tk.Button(disclaimer, text="I Accept", command=on_accept).pack(pady=10)
     disclaimer.mainloop()
     return accepted[0]

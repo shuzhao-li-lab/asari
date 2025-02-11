@@ -57,10 +57,10 @@ def read_project(datadir, load_sample_limit=20):
                                 sep='\t', index_col=0, header=0 )
         
     if 'number_of_samples' in project_desc and project_desc['number_of_samples'] > load_sample_limit:
-        Ptable = pd.read_csv( os.path.join(datadir, 'prefererred_Feature_table.tsv'), 
+        Ptable = pd.read_csv( os.path.join(datadir, 'preferred_Feature_table.tsv'), 
                                 sep='\t', index_col=0, header=0, usecols=range(10 + load_sample_limit) )
     else:
-        Ptable = pd.read_csv( os.path.join(datadir, 'prefererred_Feature_table.tsv'), 
+        Ptable = pd.read_csv( os.path.join(datadir, 'preferred_Feature_table.tsv'), 
                                 sep='\t', index_col=0, header=0 )
 
     return project_desc, cmap, epd, Ftable, Ptable
@@ -225,6 +225,13 @@ def get_summary_panel(project_desc, peakDict, epdDict, Ftable, cmap):
     description = pn.pane.HTML(html)
     height = 330
     width = 1000
+
+    #metadata = []
+    #for key, value in project_desc.items():
+    #    metadata.append({"Parameter": key, "Value": value})
+    #project_metadata = pd.DataFrame(metadata)
+    #metadata_table = project_metadata.hvplot.table(columns=['Parameter', 'Value'], width=width, height=height).opts(toolbar=None)
+
     num_bins = int(np.sqrt(Ftable.shape[0]))
     # Feature m/z distribution histogram
     mz_distribution = Ftable['mz'].hvplot.hist(bins=num_bins, tools=[], 
@@ -260,6 +267,7 @@ def get_summary_panel(project_desc, peakDict, epdDict, Ftable, cmap):
     
 
     feature_distribution = pn.Tabs(
+        #("Project Metadata", metadata_table),
         ("Feature m/z distribution histogram", pn.Column(mz_distribution)),
         ("Feature distribution by RT scatterplot", pn.Column(rt_distribution)),
         ("Signal to noise ratio", pn.Column(SNR)),
@@ -438,6 +446,14 @@ def dashboard(project_desc, cmap, epd, Ftable, sample_limit=20):
     Feel free to contribute, use GitHub Issues to report bugs and request features.</p>
     ''')
 
+    project_params = pd.DataFrame([{"Parameter": k, "Value": v} for k, v in project_desc.items()], index=None)
+    project_params = pn.Column(
+        "## Project Parameters",
+        pn.pane.DataFrame(project_params),
+        height=300,  # Set a fixed height
+        styles={'overflow-y': 'auto'}  # Enable vertical scrolling
+    )
+
     template = pn.template.FastListTemplate(
         site = "Asari Dashboard", 
         title = project_desc["project_name"],
@@ -446,6 +462,8 @@ def dashboard(project_desc, cmap, epd, Ftable, sample_limit=20):
                 feature_browser,
                 mz_browser,
                 disclaimer,
+                frag_browser,
+                project_params,
                 ], 
         )
 

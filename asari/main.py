@@ -53,7 +53,7 @@ def extract(parameters, args):
     mzlist = get_mz_list(args.target)
     print("Retrieved %d target mz values from %s.\n" %(len(mzlist), args.target))
     parameters['target'] = mzlist
-    __run_process__(parameters, args)
+    process(parameters)
 
 def annotate(parameters, args):
     annotate_user_featuretable(args.input, parameters=parameters, rtime_tolerance=2)
@@ -69,7 +69,8 @@ def viz(parameters, args):
     elif args.table_for_viz == 'preferred':
         dashboard(project_desc, cmap, epd, Ptable)
     else:
-        raise ValueError("Table for visualization must be either 'preferred' or 'full'.")
+        print(f"Table for viz not recognized! Using Full table.")
+        dashboard(project_desc, cmap, epd, Ftable)
 
 def qc_report(parameters, args):
     list_input_files = read_project_dir(args.input)
@@ -176,10 +177,10 @@ def update_params_from_CLI(parameters, args, debug_print=True):
     
     # set the output directory
     if args.output:
-        parameters['outdir'] = os.path.abspath(args.output)
+        parameters['outdir'] = os.path.abspath(args.output) + "/"
         debug_print(to_print=f"Setting outdir to {parameters['outdir']}")
     else:
-        parameters['outdir'] = os.path.abspath(os.path.join(".", parameters["outdir"]))
+        parameters['outdir'] = os.path.abspath(os.path.join(".", parameters["outdir"])) + "/"
         debug_print(to_print=f"Using default outdir: {parameters['outdir']}")
 
     # set the project name
@@ -441,7 +442,7 @@ def build_parser():
     parser.add_argument('-v', '--version', action='version', version=__version__, 
             help='print version and exit')
     parser.add_argument('run', metavar='subcommand', type=str,
-            help='one of the subcommands: analyze, process, xic, extract, annotate, join, viz')
+            help="one of the subcommands: " + ", ".join(SUBCOMMANDS))
     parser.add_argument('-m', '--mode', type=str,
             help='mode of ionization, pos or neg')
     parser.add_argument('--ppm', type=int, 
@@ -610,9 +611,4 @@ def main():
 # -----------------------------------------------------------------------------
 #
 if __name__ == '__main__':
-    import importlib.resources as pkg_resources
-    x = pkg_resources.path("asari", "GC_Database_Manifest.json")
-    print(x)
-    exit()
-
     main()
