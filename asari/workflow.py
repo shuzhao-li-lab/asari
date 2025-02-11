@@ -11,7 +11,6 @@ import os
 import pickle
 import json_tricks as json
 
-
 from .experiment import ext_Experiment
 from .chromatograms import extract_massTracks_ 
 from .peaks import audit_mass_track
@@ -42,12 +41,10 @@ def workflow_setup(list_input_files, parameters):
     shared_dict = batch_EIC_from_samples_(sample_registry, parameters)
     if shared_dict:
         for sid, sam in sample_registry.items():
+            # todo - this is a bit of a mess, should be a simpler return or something?
             sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'], sam['max_scan_number'], sam['list_scan_numbers'], sam['list_retention_time'], sam['track_mzs'], sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'], sam['sample_data'], sam['sparsified'], sam['acquisition_time'] = shared_dict[sid]
             sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
-        
         EE = ext_Experiment(sample_registry, parameters)
-        #EE.process_all()
-        #EE.export_all(anno=parameters["anno"])
     else:
         raise Exception("No data was processed, check the input files.")
     EE = ext_Experiment(sample_registry, parameters)
@@ -103,12 +100,12 @@ def process_project(list_input_files, parameters):
 def process_GC_project(EE, list_input_files, parameters):
     print("Processing Project using GC Workflow")
     EE.process_all_GC()
-    EE.export_all(anno=False)
+    EE.export_all(anno=parameters['anno'], mode='GC')
 
 def process_LC_project(EE, list_input_files, parameters):
     print("Processing Project using LC Workflow")
     EE.process_all_LC()
-    EE.export_all(anno=True)
+    EE.export_all(anno=parameters['anno'], mode='LC')
 
 def read_project_dir(directory, file_pattern='.mzML'):
     '''
@@ -479,8 +476,6 @@ def single_sample_EICs_(job):
     except Exception as e:
         print("Failed to extract: %s." %os.path.basename(infile))
         return {sample_id: ('failed', 'failed', None, None, None, None, None, None, None, None, compress)}
-
-
 
 # -----------------------------------------------------------------------------
 # main workflow for `xic`

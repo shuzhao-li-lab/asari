@@ -19,16 +19,11 @@ from .analyze import estimate_min_peak_height, analyze_single_sample
 from .annotate_user_table import annotate_user_featuretable
 from .utils import build_boolean_dict, bulk_process
 from .qc import generate_qc_report
+from .gc_annotation import EI_MS_Library
 
 booleandict = build_boolean_dict()
+SUBCOMMANDS = ["analyze", "process", "xic", "extract", "annotate", "join", "viz", "list_workflows"]
 
-def __run_process__(parameters, args):
-    # main process function
-    list_input_files = read_project_dir(args.input)
-    if not list_input_files:
-        print("No valid mzML files are found in the input directory :(")
-    else:
-        process_project(list_input_files, parameters)
 
 def convert(parameters, args):
     needs_conversion = []
@@ -40,8 +35,12 @@ def convert(parameters, args):
         converter = mzMLconverter()
         converter.bulk_convert(needs_conversion)
 
-def process(parameters, args):
-    __run_process__(parameters, args)
+def process(parameters):
+    list_input_files = read_project_dir(parameters['input'])
+    if not list_input_files:
+        print("No valid mzML files are found in the input directory :(")
+    else:
+        process_project(list_input_files, parameters)
 
 def analyze(parameters, args):
     analyze_single_sample(args.input, parameters=parameters)
@@ -78,7 +77,7 @@ def qc_report(parameters, args):
     jobs = [(f, os.path.join(parameters['qaqc_reports_outdir'], os.path.basename(f).replace(".mzML", "_report.html")), parameters['spikeins']) for f in list_input_files]
     bulk_process(generate_qc_report, jobs)
 
-def update_peak_detection_params(parameters, args):
+def update_peak_detection_params(parameters, args=None):
     if parameters['autoheight']:
         try:
             parameters['min_peak_height'] = estimate_min_peak_height(read_project_dir(args.input), parameters)
@@ -162,7 +161,7 @@ def update_params_from_CLI(parameters, args, debug_print=True):
         parameters['ppm'] = args.ppm
         debug_print(to_print=f"Setting ppm to {parameters['ppm']}")
     else:
-        debug_print(to_print=f"Using default ppm {parameters['ppm']}")
+        debug_print(to_print=f"Using default ppm {parameters['mz_tolerance_ppm']}")
 
     # set the input directory
     if args.input:
@@ -180,6 +179,7 @@ def update_params_from_CLI(parameters, args, debug_print=True):
         parameters['outdir'] = os.path.abspath(args.output)
         debug_print(to_print=f"Setting outdir to {parameters['outdir']}")
     else:
+        parameters['outdir'] = os.path.abspath(os.path.join(".", parameters["outdir"]))
         debug_print(to_print=f"Using default outdir: {parameters['outdir']}")
 
     # set the project name
@@ -269,7 +269,7 @@ def update_params_from_CLI(parameters, args, debug_print=True):
         assert parameters['min_prominence_threshold'] > 0, "Min prominence threshold must be greater than 0."
         debug_print(to_print=f"Setting min_prominence_threshold to {parameters['min_prominence_threshold']}")
     else:
-        debug_print(to_print=f"Using default min_prominence_threshold: {parameters['min_prominence_threshold']}")
+        debug_print(to_print=f"Using default min_prominence_threshold of .33 * min_peak_height")
 
     # set cal min peak height
     if args.cal_min_peak_height:
@@ -391,6 +391,35 @@ def update_params_from_CLI(parameters, args, debug_print=True):
     else:
         debug_print(to_print=f"Using default vizualization_max_samples: {parameters['vizualization_max_samples']}")
 
+    if args.workflow:
+        parameters['workflow'] = args.workflow
+        assert parameters['workflow'] in {'LC', 'GC', 'Lipidomics'}, "Workflow must be either LC, GC, or Lipidomics."
+        debug_print(to_print=f"Setting workflow to {parameters['workflow']}")
+    else:
+        debug_print(to_print=f"Using default workflow: {parameters['workflow']}")
+
+    # set retention index standards
+    if args.retention_index_standards:
+        assert os.path.isfile(args.retention_index_standards), "Retention index standards must be a valid file."
+        parameters['retention_index_standards'] = args.retention_index_standards
+        debug_print(to_print=f"Setting retention_index_standards to {parameters['retention_index_standards']}")
+    else:
+        debug_print(to_print=f"Using default retention_index_standards: {parameters['retention_index_standards']}")
+
+    if args.GC_Database_Manifest:
+        parameters['GC_Database_Manifest'] = args.GC_Database_Manifest
+        debug_print(to_print=f"Setting GC_Database_Manifest to {parameters['GC_Database_Manifest']}")
+    else:
+        parameters['GC_Database_Manifest'] = None
+        debug_print(to_print=f"Using default GC_Database_Manifest.")
+
+    if args.GC_Database:
+        parameters['GC_Database'] = args.GC_Database
+        EI_MS_Library.load_library_manifest()
+        debug_print(to_print=f"Setting GC_Database to {parameters['GC_Database']}")
+    else:
+        debug_print(to_print=f"Using default GC_Database: {parameters['GC_Database']}")
+
 def initialize_parameters(parameters, args):
     parameters['asari_version'] = __version__
     parameters['timestamp'] = time.strftime("%Y%m%d-%H%M%S")
@@ -469,6 +498,14 @@ def build_parser():
             help='Table to use for visualization, preferred or full')
     parser.add_argument('--vizualization_max_samples', type=int,
             help='Maximum number of samples to display in visualization')
+    parser.add_argument('--workflow', type=str,
+            help='Workflow to use, LC by default')
+    parser.add_argument('--retention_index_standards', type=str,
+            help='Path to retention index standards, needed for GC workflow')
+    parser.add_argument('--GC_Database', type=str, 
+            help='Path to GC database, or GCMS database name for retrieval')
+    parser.add_argument('--GC_Database_Manifest', type=str,
+            help='Path to GC database manifest file')
     try:
         args = parser.parse_args()
     except:
@@ -476,13 +513,18 @@ def build_parser():
         raise SystemExit
     return args
 
-def run_asari(parameters, args):
+def run_asari(parameters, args=None):
+    if parameters['run_gui'] == 'process':
+        process(parameters)
+        exit()
+
     if args.run == 'process':
         # these can be done before processing
         if args.convert_raw:
             convert(parameters, args)
         if args.single_file_qc_reports:
             qc_report(parameters, args)
+        process(parameters)
     elif args.run == 'convert':
         convert(parameters, args)
     elif args.run == "qc_report":
@@ -538,6 +580,7 @@ def main():
     '''
 
     print("\n\n~~~~~~~ Hello from Asari (%s) ~~~~~~~~~\n" %__version__)
+
     # make a copy of the default parameters
     parameters = PARAMETERS
 
@@ -553,9 +596,16 @@ def main():
     # update peak detection parameters
     # min_peak_height, min_prominence_threshold, cal_min_peak_height, min_intensity_threshold
     update_peak_detection_params(parameters, args)
+    run_asari(parameters, args)
+
 
 #
 # -----------------------------------------------------------------------------
 #
 if __name__ == '__main__':
+    import importlib.resources as pkg_resources
+    x = pkg_resources.path("asari", "GC_Database_Manifest.json")
+    print(x)
+    exit()
+
     main()
