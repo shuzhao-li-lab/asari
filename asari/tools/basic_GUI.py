@@ -1,11 +1,7 @@
 import tkinter as tk
-from tkinter import messagebox, filedialog
-
-import tkinter as tk
-from tkinter import scrolledtext
+from tkinter import scrolledtext, messagebox, filedialog
 import threading
-from contextlib import redirect_stdout, redirect_stderr
-import time
+from contextlib import redirect_stdout
 
 def run_program(params):
     # Replace with your actual function call.
@@ -43,7 +39,7 @@ def start_program_gui(params):
     text_area = scrolledtext.ScrolledText(root, wrap=tk.WORD, height=20, width=80)
     text_area.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
-    continue_button = tk.Button(root, text="Continue", state=tk.DISABLED, command=root.destroy)
+    continue_button = tk.Button(root, text="Continue", state=tk.NORMAL, command=root.destroy)
     continue_button.pack(pady=10)
 
     threading.Thread(target=run_program_thread, args=(params, text_area, continue_button), daemon=True).start()
@@ -57,7 +53,7 @@ def show_disclaimer():
         disclaimer.destroy()
     disclaimer = tk.Tk()
     disclaimer.title("Disclaimer")
-    tk.Label(disclaimer, text="Please read and accept the disclaimer before proceeding:\n\n Asari GUI is Experimental", wraplength=400, justify="left").pack(padx=20, pady=20)
+    tk.Label(disclaimer, text="Please read and accept the disclaimer before proceeding:\n\n Asari GUI is Experimental, use at your own risk", wraplength=400, justify="left").pack(padx=20, pady=20)
     tk.Button(disclaimer, text="I Accept", command=on_accept).pack(pady=10)
     disclaimer.mainloop()
     return accepted[0]
@@ -90,7 +86,7 @@ def create_ui(data):
         root.destroy()
 
     root = tk.Tk()
-    root.title("Dictionary Editor")
+    root.title("Edit Parameters")
 
     canvas = tk.Canvas(root)
     vsb = tk.Scrollbar(root, orient="vertical", command=canvas.yview)

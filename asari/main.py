@@ -420,6 +420,12 @@ def update_params_from_CLI(parameters, args, debug_print=True):
     else:
         debug_print(to_print=f"Using default GC_Database: {parameters['GC_Database']}")
 
+    print(args.run)
+    if args.run:
+        parameters['run'] = args.run.rstrip()
+        debug_print(to_print=f"Setting run to {parameters['run']}")
+
+
 def initialize_parameters(parameters, args):
     parameters['asari_version'] = __version__
     parameters['timestamp'] = time.strftime("%Y%m%d-%H%M%S")
@@ -514,42 +520,43 @@ def build_parser():
     return args
 
 def run_asari(parameters, args=None):
-    if parameters['run_gui'] == 'process':
-        process(parameters)
-        exit()
+    if 'run_gui' in parameters:
+        if parameters['run_gui'] == 'process':
+            process(parameters)
+            exit()
 
-    if args.run == 'process':
+    if parameters['run'] == 'process':
         # these can be done before processing
         if args.convert_raw:
             convert(parameters, args)
         if args.single_file_qc_reports:
             qc_report(parameters, args)
         process(parameters)
-    elif args.run == 'convert':
+    elif parameters['run'] == 'convert':
         convert(parameters, args)
-    elif args.run == "qc_report":
+    elif parameters['run']== "qc_report":
         qc_report(parameters, args)
-    elif args.run == 'analyze':
+    elif parameters['run'] == 'analyze':
         # analyze a single sample file to get descriptions
         analyze(parameters, args)
-    elif args.run == 'xic':
+    elif parameters['run'] == 'xic':
         # Get XICs (mass tracks) from a folder of centroid mzML files.
         xic(parameters, args)
-    elif args.run == 'extract':
+    elif parameters['run'] == 'extract':
         # targeted extraction from a file designated by --target
         extract(parameters, args)
-    elif args.run == 'annotate':
+    elif parameters['run'] == 'annotate':
         # Annotate a user supplied feature table
         annotate(parameters, args)
-    elif args.run == 'join':
+    elif parameters['run'] == 'join':
         # input a list of directories, each a result of asari process
         join(parameters, args)
-    elif args.run == 'qc_report':
+    elif parameters['run'] == 'qc_report':
         qc_report(parameters, args)
-    elif args.run == 'viz':
+    elif parameters['run'] == 'viz':
         # launch data dashboard
         viz(parameters, args)
-    elif args.run == 'list_workflows':
+    elif parameters['run'] == 'list_workflows':
         print("Available Worfklows:")
         print("\t1. LC - default option")
         print("\t2. GC, pass `--workflow GC` to enable")

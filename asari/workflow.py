@@ -471,11 +471,24 @@ def single_sample_EICs_(job):
                                 track_mzs,
                                 new['number_anchor_mz_pairs'], 
                                 anchor_mz_pairs,  
-                                new['acquisition_time'], 
+                                new['acquisition_time'],
+                                new, 
                                 compress)}
     except Exception as e:
         print("Failed to extract: %s." %os.path.basename(infile))
-        return {sample_id: ('failed', 'failed', None, None, None, None, None, None, None, None, compress)}
+        return {sample_id: ('failed', # status:mzml_parsing
+                            'failed', # status:eic
+                            None, # outfile
+                            None, # max_scan_number
+                            None, # rt_numbers
+                            None, # rt_times
+                            None, # track_mzs
+                            None, # number_anchor_mz_pairs
+                            None, # anchor_mz_pairs
+                            None, # acquisition_time
+                            None, # sample_data
+                            compress # compress
+                            )}
 
 # -----------------------------------------------------------------------------
 # main workflow for `xic`

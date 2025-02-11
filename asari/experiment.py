@@ -92,7 +92,7 @@ class ext_Experiment:
                     return k
 
         elif self.sample_registry:
-            L = [(v['number_anchor_mz_pairs'], v['sample_id']) for v in self.sample_registry.values()]
+            L = [(v['number_anchor_mz_pairs'], v['sample_id']) for v in self.sample_registry.values() if v['number_anchor_mz_pairs'] is not None]
             L.sort(reverse=True)
             ref = self.sample_registry[L[0][1]]
             self.parameters['reference'] = ref['input_file']
