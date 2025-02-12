@@ -10,7 +10,7 @@ v1.13.2 -> v1.14.0
         GC Support! enable by passing --workflow GC, please see documentation
         Automatic downloading of GC databases, currently only supports MoNA GCMS. 
         API and CLI equivalency and additional API functionality.
-        Prototype of GUI, access it from tools subdir (EXPERIMENTAL). 
+        Prototype of GUI, access it using `asari_gui`
 
     new features:
         added compression support

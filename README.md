@@ -85,6 +85,23 @@ Alternative to a standalone command, to run as a module via Python interpreter, 
 
 `python3 -m asari.main process --mode pos --input mydir/projectx_dir`
 
+
+Graphical Interface
+===================
+
+The graphical interface is experimental and is not an active priority for development but is provided for convenience,
+feedback, and testing. 
+
+The GUI can be started after install by running:
+
+`asari_gui`
+
+In the terminal. Of course, that kind of defeats the point of the GUI; however, future versions will address this by providing
+desktop icons or instructions on how to create them. 
+
+GUI is only tested on MacOS but should work in Linux. Windows will require testing. 
+
+
 Workflow Selection - GC or LC
 =============================
 
