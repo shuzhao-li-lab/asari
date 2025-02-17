@@ -7,14 +7,14 @@ import json
 import matchms
 from matchms.similarity import CosineGreedy
 from matchms.filtering import default_filters, normalize_intensities
+
 import tqdm
 import importlib.resources as pkg_resources
-
 
 try:
     from .utils import download_and_unzip_to_pkg_resources
     from .feature_graph import FeatureGraph
-except:
+except ImportError:
     # for testing only, remove before release
     from utils import download_and_unzip_to_pkg_resources
     from feature_graph import FeatureGraph

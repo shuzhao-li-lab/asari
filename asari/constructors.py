@@ -2,14 +2,16 @@
 Classes of MassGrid and CompositeMap.
 '''
 
-import pandas as pd
-import numpy as np
 import os
 import csv
 
+
+import pandas as pd
+import numpy as np
 from scipy import interpolate
 from scipy.ndimage import maximum_filter1d
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
+
 
 from .mass_functions import (flatten_tuplelist, 
                             landmark_guided_mapping, 
@@ -22,7 +24,6 @@ from .chromatograms import (nn_cluster_by_mz_seeds,
 from .peaks import (quick_detect_unique_elution_peak, 
                     batch_deep_detect_elution_peaks, 
                     get_gaussian_peakarea_on_intensity_list)
-
 from .samples import SimpleSample
 from .utils import bulk_process
 
@@ -693,9 +694,8 @@ class CompositeMap:
             
         if not sample.is_rt_aligned:
                 sample.rt_cal_dict, sample.reverse_rt_cal_dict =  {}, {}
-                print("    ~warning~ Faluire in retention time alignment (%d); %s." 
+                print("    ~warning~ Failure in retention time alignment (%d); %s." 
                                             %( _NN, sample.name))
-                
 
     def set_RT_reference(self, cal_peak_intensity_threshold=100000):
         '''
