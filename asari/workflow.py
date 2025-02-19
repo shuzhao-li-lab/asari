@@ -92,7 +92,8 @@ def process_project(list_input_files, parameters):
     EE = workflow_setup(list_input_files, parameters)
     workflows = {
         "GC": process_GC_project,
-        "LC": process_LC_project
+        "LC": process_LC_project,
+        "LC_start": process_LC_project_start,
     }
     workflows[parameters['workflow']](EE, list_input_files, parameters)
     workflow_cleanup(EE, list_input_files, parameters)
@@ -106,6 +107,11 @@ def process_LC_project(EE, list_input_files, parameters):
     print("Processing Project using LC Workflow")
     EE.process_all_LC()
     EE.export_all(anno=parameters['anno'], mode='LC')
+
+def process_LC_project_start(EE, list_input_files, parameters):
+    print("Processing Project using LC Workflow")
+    EE.process_all_LC_start()
+    #EE.export_all(anno=parameters['anno'], mode='LC')
 
 def read_project_dir(directory, file_pattern='.mzML'):
     '''
@@ -188,7 +194,7 @@ def create_export_folders(parameters, time_stamp=None):
     else:
         parameters['outdir'] = '_'.join([parameters['outdir'], parameters['project_name'], time_stamp])
 
-    os.mkdir(parameters['outdir'])
+    os.makedirs(parameters['outdir'])
     try:
         os.mkdir(os.path.join(parameters['outdir'], 'export'))
     except FileExistsError:

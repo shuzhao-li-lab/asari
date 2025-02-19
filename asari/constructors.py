@@ -11,6 +11,7 @@ import numpy as np
 from scipy import interpolate
 from scipy.ndimage import maximum_filter1d
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
+from functools import cache
 
 
 from .mass_functions import (flatten_tuplelist, 
@@ -507,6 +508,137 @@ class CompositeMap:
     def build_composite_tracks_GC(self):
         self.perform_index_alignment()
 
+    def START(self):
+        # Spanning Tree Alignment of Retention Time (START)
+
+        # An alternative to traditional alignment based on a reference sample, 
+        # rather, each sample may have a chain of reference samples back to the 
+        # master reference sample. This requires more alignments per sample possibly,
+        # but allows similar samples to align to one another before attempting to align
+        # across sample types. For instance, each blank can align with other blanks, 
+        # and the blank most like a biological sample, will be used to align the blanks
+        # to study samples. 
+
+        # First we need to estimate the 'goodness' of each possible alignment. This needs 
+        # to be fast / simple enough to evaluate for all samples. Here we will use the number of 
+        # shared anchor peaks to start.
+        import seaborn as sns
+        import matplotlib.pyplot as plt
+        import networkx as nx
+        import numpy as np
+        CAL_MIN_PEAK_HEIGHT = self.experiment.parameters['cal_min_peak_height']
+        MIN_PEAK_NUM = self.experiment.parameters['peak_number_rt_calibration']
+        NUM_ITERATIONS = self.experiment.parameters['num_lowess_iterations']
+        MIN_C_SELECTIVITY = 0.99
+
+
+        mg = self.MassGrid.copy()
+        selectivities = calculate_selectivity(mg['mz'], self.experiment.parameters['mz_tolerance_ppm'])
+        mgd_inv = {i: x for i, x in enumerate(self.MassGrid.to_dict(orient='records'))}
+        mgd = {}
+        for index, mz_row in mgd_inv.items():
+            for k, v in mz_row.items():
+                if not pd.isna(v):
+                    mgd[(k, v)] = index
+
+
+        # find all candidate peaks for alignment
+        reference_peaks_per_sample = {}
+        for sample in self.experiment.all_samples:
+            reference_peaks_per_sample[sample.name] = []
+            mass_tracks = SimpleSample.get_mass_tracks_for_sample(sample)
+            for index, mass_track in enumerate(mass_tracks):
+                mapped_index = mgd.get((sample.name, index), None)
+                if mapped_index is not None:
+                    if selectivities[mapped_index] > MIN_C_SELECTIVITY:
+                        Upeak = quick_detect_unique_elution_peak(mass_track['intensity'], 
+                                    min_peak_height=CAL_MIN_PEAK_HEIGHT, 
+                                    min_fwhm=3, 
+                                    min_prominence_threshold_ratio=0.2)
+                        if Upeak:
+                            Upeak['mz'] = mass_track['mz']
+                            Upeak['index'] = mapped_index
+                            reference_peaks_per_sample[sample.name].append(Upeak)
+        # index_set generation
+                            
+
+
+        def __similarity(s1, s2):
+            # similarity must give back a metric, the larger the metric, the better the alignment
+            # similarity must be order invariant, i.e., F(s1, s2) = F(s2, s1)
+            # spanning tree wants costs not similarity, so -F(s1, s2) is the cost of 
+            # aligning s1, s2.
+
+            s1_indices = set([x['index'] for x in reference_peaks_per_sample[s1.name]])
+            s2_indices = set([x['index'] for x in reference_peaks_per_sample[s2.name]])
+            return len(s1_indices.intersection(s2_indices))/len(s1_indices.union(s2_indices))
+        
+        def __cost(s1, s2):
+            return 1-__similarity(s1, s2)
+        
+        def __pairwise_cost(samples):
+            # cost is the negative of similarity
+            return np.array([[__cost(s1, s2) for s2 in samples] for s1 in samples], dtype=np.float16)
+
+        def __pairwise_similarity(samples):
+            return np.array([[__similarity(s1, s2) for s2 in samples] for s1 in samples], dtype=np.float16)
+
+
+        def __distance_to_graph(dmatrix):
+            # convert to networkx graph
+            # use networkx to find the minimum spanning tree
+            # return graph
+            # note that __similarity is positive, but spanning
+            # tree assumes that the edge weights are cost.
+            return nx.from_numpy_array(dmatrix)
+
+        def __find_graph_root(dgraph):
+            # the root is the node that is the closest to all
+            # other nodes. It is the most central node. We can
+            # remove a "layer" of leaf nodes until we are left 
+            # with the root of the graph. 
+            pass
+
+        def __pairwise_traverse(distance_graph, root):
+            # from the root, find the path through samples 
+            # to all other samples. This is learning the alignment
+            # order.
+            # 
+            # paths = {
+            #     "node_1": [root, node1, node2 ...]
+            # }
+            # paths is sort of an adjacency list
+            pass
+            
+        def __align(s1, s2):
+            # walk each path, start with root as s1 and neighbors as
+            # various s2s. Then continue by letting those s2 be s1s, 
+            # and their neighbor nodes various s2s. 
+            #
+            # dictionary mapping scan nos in s1 to s2
+            pass
+
+
+        # With this similarity metric, build the similarity matrix between all samples.
+        # Note that similarity is simple the inverse of distance, so simply flip sign to get
+        # a distance matrix.
+
+        # build similarity matrix
+        # sample_similarity = np.zeros((len(self.experiment.all_samples), len(self.experiment.all_samples)), dtype=np.float64)
+
+        D = __pairwise_cost(self.experiment.all_samples)
+        sns.heatmap(D)
+        plt.show()
+        G = __distance_to_graph(D)
+        nx.draw(G, with_labels=True)
+        plt.show()
+        T = nx.minimum_spanning_tree(G)
+        nx.draw(T, with_labels=True)
+        plt.show()
+
+        
+        
+
     def build_composite_tracks(self):
         '''
         Perform RT calibration then make composite tracks.
@@ -718,8 +850,7 @@ class CompositeMap:
         But the redundant numbers should be handled by rt_lowess_calibration, in which .frac is
         more important for stability.
         '''
-        selectivities = calculate_selectivity( self.MassGrid['mz'][self._mz_landmarks_], 
-                                                self.experiment.parameters['mz_tolerance_ppm'])
+        selectivities = calculate_selectivity(self.MassGrid['mz'][self._mz_landmarks_], self.experiment.parameters['mz_tolerance_ppm'])
         good_reference_landmark_peaks = []
         ref_list_mass_tracks = self.reference_sample.list_mass_tracks
         for ii in range(len(self._mz_landmarks_)):

@@ -175,6 +175,31 @@ class ext_Experiment:
         self.CMAP.build_composite_tracks()
         self.CMAP.global_peak_detection()
 
+    def process_all_LC_start(self):
+        '''
+        This is the default asari workflow.
+        
+        1. Build MassGrid, using either pairwise (small study) or clustering method. 
+           Choose one reference from all samples for the largest number of landmark m/z tracks.
+        2. RT alignment via a LOWESS function, using selective landmark peaks.
+        3. Build composite elution profile (composite_mass_tracks),
+           by cumulative sum of mass tracks from all samples after RT correction.
+        4. Global peak detection is performed on each composite massTrack.
+        5. Mapping global peaks (i.e. features) back to all samples and extract sample specific peak areas.
+           This completes the FeatureTable.
+
+        Updates
+        -------
+        self.CMAP as instance of CompositeMap, and MassGrid, composite map and features within.
+        '''
+        self.CMAP = CompositeMap(self)
+        self.CMAP.construct_mass_grid()
+        self.CMAP.START()
+        #if not self.parameters['rt_align_on']:
+        #    self.CMAP.mock_rentention_alignment()
+        #self.CMAP.build_composite_tracks()
+        #self.CMAP.global_peak_detection()
+
     def populate_RI_lookup(self, sample_map):
         RI_maps = {}
         RI_models = {}

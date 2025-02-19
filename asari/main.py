@@ -29,7 +29,7 @@ def convert(parameters, args):
     needs_conversion = []
     for x in os.listdir(args.input):
         if x.endswith('.raw'):
-            needs_conversion.append(x)
+            needs_conversion.append(os.path.abspath(os.path.join(args.input, x)))
     if needs_conversion:
         from .mzml_converter import mzMLconverter
         converter = mzMLconverter()
@@ -177,10 +177,10 @@ def update_params_from_CLI(parameters, args, debug_print=True):
     
     # set the output directory
     if args.output:
-        parameters['outdir'] = os.path.abspath(args.output) + "/"
+        parameters['outdir'] = os.path.abspath(args.output)
         debug_print(to_print=f"Setting outdir to {parameters['outdir']}")
     else:
-        parameters['outdir'] = os.path.abspath(os.path.join(".", parameters["outdir"])) + "/"
+        parameters['outdir'] = os.path.abspath(os.path.join("./", parameters["outdir"]))
         debug_print(to_print=f"Using default outdir: {parameters['outdir']}")
 
     # set the project name

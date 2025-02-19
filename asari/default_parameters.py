@@ -68,7 +68,7 @@ PARAMETERS = {
                                         # Samples with fewer selected peaks are dropped out.
     'max_retention_shift': None,        # landmark peak pairs with a scan number delta greater than this are not used for RT calibration
     'num_lowess_iterations': 3,         # number of lowess iterations to perform for RT calibration, higher values take longer but less sensitive to outliers
-    'project_sample_number_small': 10,  # Number of samples dictates workflow, default 10
+    'project_sample_number_small': 0,  # Number of samples dictates workflow, default 10
 
     # for annotation
     'anno': True,                       # to annotate features

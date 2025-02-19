@@ -39,7 +39,7 @@ class mzMLconverter:
 
         engine = __determine_executable()
         if engine is not None:
-            command_template = engine + [converter_path, "-i", "INPUT", "-f", "2"]
+            command_template = engine + [converter_path, "-i", "INPUT", "-o", "OUTPUT", "-f", "2"]
         else:
             raise Exception("Could not determine the executable to run the converter")
         return command_template
@@ -87,6 +87,7 @@ class mzMLconverter:
     
     def bulk_convert(self, raw_files):
         conversion_commands = [" ".join([x.replace("INPUT", file) for x in self.command_template]) for file in raw_files]
+        conversion_commands = [x.replace("OUTPUT", os.path.dirname(file)) for (x, file) in zip(conversion_commands, raw_files)]
         results = bulk_process(os.system, conversion_commands, self.dask_ip)
         for (converted, to_convert) in zip(results, raw_files):
             if converted == 0:
