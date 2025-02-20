@@ -560,9 +560,14 @@ def remap_intensity_track(intensity_track, new, rt_cal_dict):
     -------
     Updated list of intensity, using coordinates in composite mass track.
     '''
-    new[ :intensity_track.shape[0]] = intensity_track.copy()
+    new[:intensity_track.shape[0]] = intensity_track.copy()
     for k,v in rt_cal_dict.items():
-        new[v] = intensity_track[k]
+        if isinstance(v, float):
+            v = int(round(v))
+        try:
+            new[v] = intensity_track[k]
+        except:
+            pass
     return new
 
 

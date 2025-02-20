@@ -16,4 +16,3 @@ tqdm
 json_tricks
 plotly
 matchms
-tkinter

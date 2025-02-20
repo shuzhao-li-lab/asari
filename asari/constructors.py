@@ -526,6 +526,7 @@ class CompositeMap:
         import matplotlib.pyplot as plt
         import networkx as nx
         import numpy as np
+        
         CAL_MIN_PEAK_HEIGHT = self.experiment.parameters['cal_min_peak_height']
         MIN_PEAK_NUM = self.experiment.parameters['peak_number_rt_calibration']
         NUM_ITERATIONS = self.experiment.parameters['num_lowess_iterations']
@@ -556,12 +557,9 @@ class CompositeMap:
                                     min_fwhm=3, 
                                     min_prominence_threshold_ratio=0.2)
                         if Upeak:
-                            Upeak['mz'] = mass_track['mz']
+                            Upeak['mz'] = round(mass_track['mz'], 3)
                             Upeak['index'] = mapped_index
-                            reference_peaks_per_sample[sample.name].append(Upeak)
-        # index_set generation
-                            
-
+                            reference_peaks_per_sample[sample.name].append(Upeak)                    
 
         def __similarity(s1, s2):
             # similarity must give back a metric, the larger the metric, the better the alignment
@@ -583,7 +581,6 @@ class CompositeMap:
         def __pairwise_similarity(samples):
             return np.array([[__similarity(s1, s2) for s2 in samples] for s1 in samples], dtype=np.float16)
 
-
         def __distance_to_graph(dmatrix):
             # convert to networkx graph
             # use networkx to find the minimum spanning tree
@@ -597,9 +594,13 @@ class CompositeMap:
             # other nodes. It is the most central node. We can
             # remove a "layer" of leaf nodes until we are left 
             # with the root of the graph. 
-            pass
+            root = nx.center(dgraph)[0]
+            a, b = __align_pair(self.experiment.all_samples[root], self.experiment.all_samples[root])
+            self.experiment.all_samples[root].rt_cal_dict = a
+            self.experiment.all_samples[root].reverse_rt_cal_dict = b
+            return nx.center(dgraph)[0]
 
-        def __pairwise_traverse(distance_graph, root):
+        def __pairwise_traverse(distance_graph, root, target):
             # from the root, find the path through samples 
             # to all other samples. This is learning the alignment
             # order.
@@ -608,16 +609,79 @@ class CompositeMap:
             #     "node_1": [root, node1, node2 ...]
             # }
             # paths is sort of an adjacency list
-            pass
-            
-        def __align(s1, s2):
+            for path in nx.shortest_simple_paths(distance_graph, source=root, target=target):
+                return path # its a spanning tree, there is only one path
+
+        def __align_pair(s1, s2):
+            print("Aligning: ", s1.name, s2.name)
+            print("Reference Peaks: ", len(reference_peaks_per_sample[s1.name]), len(reference_peaks_per_sample[s2.name]))
+            peaks_mzs_s1 = set([x['mz'] for x in reference_peaks_per_sample[s1.name]])
+            peaks_mzs_s2 = set([x['mz'] for x in reference_peaks_per_sample[s2.name]])
+            shared_peak_mzs = peaks_mzs_s1.intersection(peaks_mzs_s2)
+            print("Shared Peaks: ", len(shared_peak_mzs))
+            reference_pairs = {}
+            for peak in reference_peaks_per_sample[s1.name]:
+                if peak['mz'] in shared_peak_mzs:
+                    if peak['mz'] not in reference_pairs:
+                        reference_pairs[peak['mz']] = [None, None]
+                    reference_pairs[peak['mz']][0] = peak['apex']
+            for peak in reference_peaks_per_sample[s2.name]:
+                if peak['mz'] in shared_peak_mzs:
+                    reference_pairs[peak['mz']][1] = peak['apex']
+
+            X, Y = [], []
+            for mz, (apex1, apex2) in reference_pairs.items():
+                X.append(apex1)
+                Y.append(apex2)
+
+            from .chromatograms import clean_rt_calibration_points
+            reference_rt_numbers = s1.rt_numbers
+            sample_rt_numbers = s2.rt_numbers
+            reference_rt_bound = max(s1.rt_numbers)
+            sample_rt_bound = max(s2.rt_numbers)
+            rt_rightend_ = 1.1 * sample_rt_bound
+            xx, yy = [-0.1 * sample_rt_bound,]*3, [-0.1 * sample_rt_bound,]*3
+            rt_cal = clean_rt_calibration_points([(x[0], x[1]) for x in reference_pairs.values()])
+            xx += [L[0] for L in rt_cal] + [rt_rightend_]*3
+            yy += [L[1] for L in rt_cal] + [rt_rightend_]*3
+
+            from statsmodels.nonparametric.smoothers_lowess import lowess
+            lowess_predicted = __hacked_lowess__(yy, xx, frac=0.5, it=3, xvals=sample_rt_numbers)            
+            # scale frac parameter like a sigmoid of number of data points when len(rt_cal) is in (50,150).
+
+            interf = interpolate.interp1d(lowess_predicted, sample_rt_numbers, fill_value="extrapolate")
+            ref_interpolated = interf( reference_rt_numbers )
+            lowess_predicted = [ii for ii in lowess_predicted]
+
+            rt_cal_dict = dict([(x,y) for x,y in zip(sample_rt_numbers, lowess_predicted) if x!=y and 0<=y<=reference_rt_bound] )
+
+            ref_interpolated = [ii for ii in ref_interpolated]
+            reverse_rt_cal_dict = dict([(x,y) for x,y in zip(reference_rt_numbers, ref_interpolated) if x!=y and 0<=y<=sample_rt_bound])
+                
+            return rt_cal_dict, reverse_rt_cal_dict
+
+        alignment_cache = {}
+        def __align(path):
             # walk each path, start with root as s1 and neighbors as
             # various s2s. Then continue by letting those s2 be s1s, 
             # and their neighbor nodes various s2s. 
             #
             # dictionary mapping scan nos in s1 to s2
-            pass
-
+            calibrated_domain = self.experiment.all_samples[path[0]].rt_numbers
+            for i in range(len(path)-1):
+                s1 = self.experiment.all_samples[path[i]]
+                s2 = self.experiment.all_samples[path[i + 1]]
+                if (s1, s2) in alignment_cache:
+                    continue
+                else:
+                    alignment_cache[(s1, s2)] = __align_pair(s1, s2)
+                calibrated_domain = [alignment_cache[(s1, s2)][0].get(x, x) for x in calibrated_domain]
+            calibrated_domain = [int(round(x)) for x in calibrated_domain]
+            rt_cal_dict = dict(zip(self.experiment.all_samples[path[0]].rt_numbers, calibrated_domain))
+            reverse_rt_cal_dict = dict(zip(calibrated_domain, self.experiment.all_samples[path[0]].rt_numbers))
+            s2.rt_cal_dict = rt_cal_dict
+            s2.reverse_rt_cal_dict = reverse_rt_cal_dict
+            return rt_cal_dict, reverse_rt_cal_dict
 
         # With this similarity metric, build the similarity matrix between all samples.
         # Note that similarity is simple the inverse of distance, so simply flip sign to get
@@ -627,17 +691,36 @@ class CompositeMap:
         # sample_similarity = np.zeros((len(self.experiment.all_samples), len(self.experiment.all_samples)), dtype=np.float64)
 
         D = __pairwise_cost(self.experiment.all_samples)
-        sns.heatmap(D)
-        plt.show()
         G = __distance_to_graph(D)
-        nx.draw(G, with_labels=True)
-        plt.show()
         T = nx.minimum_spanning_tree(G)
-        nx.draw(T, with_labels=True)
-        plt.show()
+        root = __find_graph_root(T)
+        for node in G.nodes:
+            if node != root:
+                path = __pairwise_traverse(T, root, node)
+                __align(path)
 
+
+        mzDict = dict(self.MassGrid['mz'])
+        mzlist = list(self.MassGrid.index)                          # this gets indices as keys, per mass track
+        basetrack = np.zeros(self.rt_length, dtype=np.int64)        # self.rt_length defines max rt number
         
-        
+        _comp_dict = {}
+        for k in mzlist: 
+            _comp_dict[k] = basetrack.copy()
+
+        for SM in self.experiment.all_samples:
+            list_mass_tracks = SimpleSample.get_mass_tracks_for_sample(SM)
+            for k in mzlist:
+                ref_index = self.MassGrid[SM.name][k]
+                if not pd.isna(ref_index): # ref_index can be NA 
+                    _comp_dict[k] += remap_intensity_track( 
+                        list_mass_tracks[int(ref_index)]['intensity'],  
+                        basetrack.copy(), SM.rt_cal_dict 
+                        )
+        result = {}
+        for k,v in _comp_dict.items():
+            result[k] = { 'id_number': k, 'mz': mzDict[k], 'intensity': v }
+        self.composite_mass_tracks = result
 
     def build_composite_tracks(self):
         '''
@@ -934,6 +1017,10 @@ class CompositeMap:
         ------- 
         Integer of peak area value
         '''
+        if isinstance(left_base, float):
+            left_base = int(left_base)
+        if isinstance(right_base, float):
+            right_base = int(right_base)
         return track_intensity[left_base: right_base+1].sum()
     
     

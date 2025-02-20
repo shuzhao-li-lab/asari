@@ -1,9 +1,18 @@
-v1.14.0 -> v1.14.1
-    UNRELEASED
+v1.14.2 -> v1.14.3
+    major new features:
+        implementation of Spanning Tree Alignment of Retention Time (START)
 
     bug fixes:
-        absolute paths used for mzML conversion
+        use absolute paths for mzML conversion
+        remove tkinter requirement
+    
 
+v1.14.1 -> v1.14.2
+    merge into main, testing by Yuanye
+
+v1.14.0 -> v1.14.1
+    UNRELEASED
+    misc. dev version
 
 v1.13.2 -> v1.14.0
     bug fixes:

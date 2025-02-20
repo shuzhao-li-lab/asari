@@ -198,7 +198,7 @@ class ext_Experiment:
         #if not self.parameters['rt_align_on']:
         #    self.CMAP.mock_rentention_alignment()
         #self.CMAP.build_composite_tracks()
-        #self.CMAP.global_peak_detection()
+        self.CMAP.global_peak_detection()
 
     def populate_RI_lookup(self, sample_map):
         RI_maps = {}
