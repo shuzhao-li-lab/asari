@@ -547,11 +547,9 @@ def gap_divide_mz_cluster(bin_data_tuples, mz_tolerance):
     Two lists after dividing bin_data_tuples by the largest gap.
     '''
     def __divide_by_largest_gap__(L):
-        if len(L) < 2:
-            return L, []
-        gaps = np.diff([x[0] for x in L])
-        largest = np.argmax(gaps)
-        return L[:largest + 1], L[largest + 1:]
+        gaps = [L[ii][0]-L[ii-1][0] for ii in range(1, len(L))]
+        largest = np.argmax(gaps) + 1
+        return L[:largest], L[largest:]
     return __divide_by_largest_gap__(bin_data_tuples)
 
 
@@ -630,12 +628,14 @@ def nn_cluster_by_mz_seeds(bin_data_tuples, mz_tolerance, presorted=True):
     mz_seeds = identify_mass_peaks(bin_data_tuples, mz_tolerance, presorted)
     if mz_seeds:
         _NN = len(mz_seeds)
-        clusters = [[] for _ in range(_NN)]
-        mz_seeds_array = np.array(mz_seeds)
+        # clusters = [[]] * _NN # see problem in Note
+        clusters = []
+        for x in mz_seeds:
+            clusters.append([])
+        # assign cluster number by nearest distance to a seed
         for x in bin_data_tuples:
-            deltas = np.abs(mz_seeds_array - x[0])
-            min_index = np.argmin(deltas)
-            clusters[min_index].append(x)
+            deltas = sorted([(abs(x[0] - mz_seeds[ii]), ii) for ii in range(_NN)])
+            clusters[deltas[0][1]].append(x)
     else:
         clusters = [C for C in gap_divide_mz_cluster(bin_data_tuples, mz_tolerance)]
 
