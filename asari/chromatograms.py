@@ -8,6 +8,8 @@ Low selectivity regions will be still inspected to determine the true number of 
 '''
 from operator import itemgetter
 import numpy as np
+import pymzml
+import datetime
 
 from scipy import interpolate
 from scipy.ndimage import uniform_filter1d
@@ -24,9 +26,9 @@ INTENSITY_DATA_TYPE = np.int64
 # mass Tracks
 # -----------------------------------------------------------------------------
 
-def extract_massTracks_(ms_expt, 
+def extract_massTracks_(infile, 
                         mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, 
-                        min_peak_height=1000, intensity_multiplier=1):
+                        min_peak_height=1000):
     '''
     Extract mass tracks from an object of parsed LC-MS data file.
     A mass track is an EIC for full RT range, without separating the mass traces of same m/z. 
@@ -52,19 +54,22 @@ def extract_massTracks_(ms_expt,
     '''
     alldata = []
     rt_times = []           # in seconds
+    ms2_spectra = []
     ii = 0
+    ms_expt = exp = pymzml.run.Reader(infile)
+    try:
+        timestamp = int(datetime.datetime.strptime(exp.info['start_time'], "%Y-%m-%dT%H:%M:%SZ").timestamp())
+    except:
+        timestamp = None
     for spec in ms_expt:
         if spec.ms_level == 1:                         # MS Level 1 only
             rt_times.append(spec.scan_time_in_minutes()*60)
-            if intensity_multiplier != 1:
-                intensities = spec.i.astype(int) * intensity_multiplier
-            else:
-                intensities = spec.i.astype(int)
+            intensities = spec.i.astype(int)
             good_positions = intensities > min_intensity
-            intensities = intensities[good_positions]
-            mzs = spec.mz[good_positions]
-            alldata += [(mz, ii, inten) for mz, inten in zip(mzs, intensities)]
+            alldata += [(mz, ii, inten) for mz, inten in zip(spec.mz[good_positions], intensities[good_positions])]
             ii += 1
+        elif spec.ms_level == 2:
+            ms2_spectra.append(spec)
 
     #print("extracted %d valide data points." %len(alldata))
     mzTree = {}
@@ -99,6 +104,8 @@ def extract_massTracks_(ms_expt,
         'rt_numbers': rt_numbers,
         'rt_times': rt_times,
         'tracks': updated_tracks,
+        'ms2_spectra': ms2_spectra,
+        'acquisition_time': timestamp
     }
 
 

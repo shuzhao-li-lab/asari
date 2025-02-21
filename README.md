@@ -3,7 +3,7 @@ Asari
 [![Documentation Status](https://readthedocs.org/projects/asari/badge/?version=latest)](https://asari.readthedocs.io/en/latest/?badge=latest)
 [![DOI](https://img.shields.io/badge/DOI-doi.org%2F10.1038%2Fs41467--023--39889--1-blue)](https://doi.org/10.1038/s41467-023-39889-1)
 
-Trackable and scalable Python program for high-resolution LC-MS metabolomics data preprocessing ([Li et al. Nature Communications 14.1 (2023): 4113](https://www.nature.com/articles/s41467-023-39889-1)):
+Trackable and scalable Python program for high-resolution LC ([Li et al. Nature Communications 14.1 (2023): 4113](https://www.nature.com/articles/s41467-023-39889-1)) and GC (publication to come) metabolomics datasets:
 
 - Taking advantage of high mass resolution to prioritize mass separation and alignment
 - Peak detection on a composite map instead of repeated on individual samples
@@ -25,16 +25,19 @@ Install
 
 - Requires Python 3.8+. Installation time ~ 5 seconds if common libraries already exist.
 
+- Python>=3.12 is currently incompatible with GC workflow because of limitations with installing numba and matchms in Python3.13. 
+
 - One can use the web version (https://asari.app) without local installation.
 
 Input
 =====
-Input data are centroid mzML files from LC-MS metabolomics. 
-We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. 
+Input data are centroid mzML files from LC or GC metabolomics. 
+
+We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. You can also perform conversion, if your input files are Thermo raw files either by using the `convert` command or by passing `--convert_raw True` with the `process` command.  
+
 Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats and .mzXML files.
 
-MS/MS spectra are ignored by asari. 
-Our pipeline (https://pypi.org/project/pcpfm/) has annotation steps to use MS/MS data.
+MS/MS spectra are ignored by asari, but are exported in ____ format if discovered during processing for users and other tools. Our pipeline (https://pypi.org/project/pcpfm/) has annotation steps to use MS/MS data.
 
 Use 
 ===
@@ -66,6 +69,14 @@ To output additional extraction table on a targeted list of m/z values from targ
 
 This is useful to add QC check during data processing, e.g. the target_mzs.txt file can be spike-in controls.
 
+Alternatively, you can do:
+
+`asari qc_report --input mydir/projectx_dir/ --spikeins target_trios.csv`
+
+Or add this to the process command to generate the reports during processing:
+
+`--single_file_qc_reports true --spikeins target_trios.csv`
+
 To launch a dashboard in your web browser after the project is processed into directory process_result_dir:
 
 `asari viz --input process_result_dir`
@@ -73,6 +84,37 @@ To launch a dashboard in your web browser after the project is processed into di
 Alternative to a standalone command, to run as a module via Python interpreter, one needs to point to module location, e.g.:
 
 `python3 -m asari.main process --mode pos --input mydir/projectx_dir`
+
+
+Graphical Interface
+===================
+
+The graphical interface is experimental and is not an active priority for development but is provided for convenience,
+feedback, and testing. 
+
+The GUI can be started after install by running:
+
+`asari_gui`
+
+In the terminal. Of course, that kind of defeats the point of the GUI; however, future versions will address this by providing
+desktop icons or instructions on how to create them. 
+
+GUI is only tested on MacOS but should work in Linux. Windows will require testing. 
+
+
+Workflow Selection - GC or LC
+=============================
+
+Asari was developed initially for LC data only. V1.14 is the last version of asari to be LC-Only. As of >V1.14, asari can be
+ran in GC mode by passing `--workflow GC` at runtime or the corresponding parameter when using it as a module in your own scripts. 
+
+This will require other parameters in the future. 
+
+To see the list of possible workflows:
+
+`asari list_workflows`
+
+By default, Asari runs the LC workflow. 
 
 Output
 ======
@@ -102,8 +144,13 @@ The filtering decisions are left to end users.
 
 The `pickle` folder keeps intermediate files during processing.
 They are removed after the processing by default, to save disk space.
-Users can choose to keep them by specifying `--pickle True`.
 
+Users can choose to keep them by specifying `--keep_intermediates True`.
+
+Optionally, users may chose to save intermediates as json files using `--storage_format json`
+which may be safer than using pickle at the expense of additional disk space. `--compress true`
+will store the files in individual zip files saving disk space. Enabling compression can be 
+intensive on the CPU/memory subsystem of your machine, use with care. 
 
 Dashboard
 =========
@@ -111,10 +158,10 @@ After data are processed, users can use `asari viz --input process_result_dir` t
  
 ![viz_screen_shot](docs/source/_static/viz_screen_shot20220518.png)
 
-
 Parameters
 ==========
-Only one parameter in asari requires real attention, i.e., m/z precision is set at 5 ppm by default. 
+
+For the LC workflows, only one parameter in asari requires real attention, i.e., m/z precision is set at 5 ppm by default. 
 Most modern instruments are fine with 5 ppm, but one may want to change if needed.
 
 Default ionization mode is `pos`. Change to `neg` if needed, by specifying `--mode neg` in command line.
@@ -123,7 +170,10 @@ Users can supply a custom parameter file `xyz.yaml`, via `--parameters xyz.yaml`
 A template YAML file can be found at `test/parameters.yaml`.
 
 When the above methods overlap, command line arguments take priority.
-That is, commandline overwrites `xyz.yaml`, which overwrites default asari parameters in `defaul_parameters.py`. 
+That is, commandline overwrites `xyz.yaml`, which overwrites default asari parameters in `default_parameters.py`. 
+
+The GC workflow requires, in addition to passing `--workflow GC` to the process command, also an appropirately formatted `--retention_index_standards`
+file which is in .csv. Examples are provided in the db folder. You can also specify which database to use by passing `--GC_Database <path_to_msp>` or `--GC_Databse <database_name>` where `<database_name>` is one of the supported libraries in `/db/gcms_libraries.json`. By default, MoNA GC-MS is used. 
 
 Algorithms
 ==========
@@ -178,11 +228,26 @@ When a study has N (default 10) or fewer samples, the MassGrid assembly uses a s
 
 Future improvement can be made by implementing some functions, e.g. chromatogram building, in C.
 
+Mass Track extraction is one of the most costly steps, if you wish to reanalyze data with a new version of asari, previous
+analyses can be re-ran using the `--reuse_intermediates=<asari_intermediates_directory>`. Currently the ppm tolerance and parameters
+need to be the same for the extraction and this is not enforced. Use at your own risk. This can also be used to kickstart an
+analysis. If you have 4 batches of samples, and are presented with a 5th, the intermediates of the previous runs can be used. 
+This is storage intensive, however, with compression enabled, it is tractable. Remember, disk space is relatively cheap compared
+to your time. Future improvement will implement a more reusable format without the same parameter assumption. 
+
 Platforms, Anaconda and Docker
 ==============================
 **Desktop vs Cloud**
 
-Python itself is used on Windows, Mac and Linux. Users may encouter problems related to Python not to asari, in which cases your best option is to find your local IT friend. We are a small team of scientists. There is no plan to build a desktop graphic application, but we do a lot of cloud computing. If you don't like command lines (many people don't), please feel free to try out the web server (https://asari.app). The free server has a quota. Please contact us if you find yourself in need of substantial cloud resources.
+Python itself is used on Windows, Mac and Linux. Users may encouter problems related to Python not to asari, in which cases your best option is to find your local IT friend. We are a small team of scientists. There is no plan to build a complete desktop graphic application, but we do a lot of cloud computing and a basic GUI is provided in the tools directory. If you don't like command lines (many people don't), please feel free to try out the web server (https://asari.app). The free server has a quota. Please contact us if you find yourself in need of substantial cloud resources.
+
+**Dask Clusters**
+
+Starting in V1.14, the framework exists to parallelize asari across multiple systems in a distributed manner via Dask.  Asari is largely I/O bound even on single machines, so architecture of the cluster is key to performance. Consider using a fast interconnect such as >10Gbe ethernet or infiniband. All nodes must mount an NFS share for storing experiment data (like local Asari but the target is a network share). Consider using an NVMe based array with ZFS for this purpose to enable real performance gains from the distributed version.
+
+To enable, run as module and pass `dask_ip=<DASK_SCHEDULER>` in the parameters, port 8786 is assumed. 
+
+Note, you probably DO NOT NEED THIS for your experimental data, this is for processing repository scale data. As of V1.14, support is experimental, use at your own risk. To enable dask, find the corresponding field in utils.py and enable it, then reinstall from source.
 
 **Anaconda and conda, virtual environments**
 
@@ -229,7 +294,6 @@ The mass tracks are scaffolds to assemble data. Very close m/z values may not be
 As discussed in the manuscript, ppm is not perfect in modeling mass resolution and is not constant for all m/z ranges. It is a practical tool we currently work with. If two compounds are not resolved by LC and their m/z values are 4 ppm apart, asari processing by 5 ppm will treat them as one feature. If the mass resolution is justified, one can run asari using, for instance, 3 ppm. The default workflow in asari does not fine-tune the m/z values, because the split m/z peaks from centroiding are difficult to distinguish from real m/z peaks. We leave the fine-tuning to annotation or targeted extraction workflow.
 
 We thank reviewer #1 for valuable discussions on this topic.
-
 
 Asari suite and Related projects
 ================================

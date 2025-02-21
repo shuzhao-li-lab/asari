@@ -37,11 +37,14 @@ setup(
   packages=find_packages(
     include=['*', '']
   ),
-  data_files=[ ('asari/db', ['asari/db/mass_indexed_compounds.pickle', 'asari/db/emp_cpds_trees.pickle']) ],
+  data_files=[ ('asari/db', ['asari/db/mass_indexed_compounds.pickle', 
+                             'asari/db/emp_cpds_trees.pickle', 
+                             'asari/db/gcms_libraries.json']) ],
   include_package_data=True,
   zip_safe=True,
   entry_points = {
-        'console_scripts': ['asari=asari.command_line:main'],
+        'console_scripts': ['asari=asari.command_line:main', 
+                            'asari_gui=asari.gui:main_gui'],
     },
 
   python_requires='>=3.7',

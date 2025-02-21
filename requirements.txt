@@ -12,3 +12,8 @@ holoviews
 hvplot
 seaborn
 matplotlib
+tqdm
+json_tricks
+plotly
+matchms
+tkinter
