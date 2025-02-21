@@ -48,22 +48,15 @@ def read_project(datadir, load_sample_limit=20):
     cmap = pickle.load( open(os.path.join(datadir, 'export', 'cmap.pickle'), 'rb') )
     # xics, mz_dict, massgrid = reformat_cmap()
 
-    epd = pickle.load(open(os.path.join(datadir, 'export', 'epd.pickle'), 'rb') )
+    epd = pickle.load( open(os.path.join(datadir, 'export', 'epd.pickle'), 'rb') )
     if 'number_of_samples' in project_desc and project_desc['number_of_samples'] > load_sample_limit:
         Ftable = pd.read_csv( os.path.join(datadir, 'export', 'full_Feature_table.tsv'), 
                                 sep='\t', index_col=0, header=0, usecols=range(10 + load_sample_limit) )
     else:
         Ftable = pd.read_csv( os.path.join(datadir, 'export', 'full_Feature_table.tsv'), 
-                                sep='\t', index_col=0, header=0 )
-        
-    if 'number_of_samples' in project_desc and project_desc['number_of_samples'] > load_sample_limit:
-        Ptable = pd.read_csv( os.path.join(datadir, 'preferred_Feature_table.tsv'), 
-                                sep='\t', index_col=0, header=0, usecols=range(10 + load_sample_limit) )
-    else:
-        Ptable = pd.read_csv( os.path.join(datadir, 'preferred_Feature_table.tsv'), 
                                 sep='\t', index_col=0, header=0 )
 
-    return project_desc, cmap, epd, Ftable, Ptable
+    return project_desc, cmap, epd, Ftable
 
 def plot_xic(xics, mz_dict, track_id):
     '''
@@ -225,13 +218,6 @@ def get_summary_panel(project_desc, peakDict, epdDict, Ftable, cmap):
     description = pn.pane.HTML(html)
     height = 330
     width = 1000
-
-    #metadata = []
-    #for key, value in project_desc.items():
-    #    metadata.append({"Parameter": key, "Value": value})
-    #project_metadata = pd.DataFrame(metadata)
-    #metadata_table = project_metadata.hvplot.table(columns=['Parameter', 'Value'], width=width, height=height).opts(toolbar=None)
-
     num_bins = int(np.sqrt(Ftable.shape[0]))
     # Feature m/z distribution histogram
     mz_distribution = Ftable['mz'].hvplot.hist(bins=num_bins, tools=[], 
@@ -267,7 +253,6 @@ def get_summary_panel(project_desc, peakDict, epdDict, Ftable, cmap):
     
 
     feature_distribution = pn.Tabs(
-        #("Project Metadata", metadata_table),
         ("Feature m/z distribution histogram", pn.Column(mz_distribution)),
         ("Feature distribution by RT scatterplot", pn.Column(rt_distribution)),
         ("Signal to noise ratio", pn.Column(SNR)),
@@ -284,11 +269,9 @@ def get_summary_panel(project_desc, peakDict, epdDict, Ftable, cmap):
 #
 # Dashboard
 #
-def dashboard(project_desc, cmap, epd, Ftable, sample_limit=20):
+def dashboard(project_desc, cmap, epd, Ftable):
     '''
     Panel based Dashboard.
-
-    Sample Limit is not used yet, but future versions will make the dashboard more dynamic.
     '''
     print("//*Asari dashboard*//   Press Control-C to exit.")
     peakDict, epdDict = epd_convert(epd)
@@ -397,62 +380,10 @@ def dashboard(project_desc, cmap, epd, Ftable, sample_limit=20):
         plot_masstracks_mz,
         )
 
-    #
-    # frag spectrum browser
-    #
-
-    min_rt, max_rt = Ftable['rtime'].min(), Ftable['rtime'].max()
-    min_mz, max_mz = Ftable['mz'].min(), Ftable['mz'].max()
-    rt_range_slider = pn.widgets.FloatSlider(name='coelute_tol', value=1, step=0.05, start=0, end=10)
-    rt_slider = pn.widgets.FloatSlider(name='rtime', value=min_rt * 1.05, step=0.01, start=min_rt, end=max_rt)
-
-    def features_by_rt_with_lines(rtime, rtime_tol):
-        # Filter features based on retention time
-        Fsub = Ftable[Ftable['rtime'].between(rtime - rtime_tol, rtime + rtime_tol)]
-        try:
-            # Prepare the data for horizontal lines
-            segments_data = pd.DataFrame({
-                'x': Fsub['mz'],
-                'y0': 0,                # Start Y position is always 0
-                'y1': Fsub['peak_area'], # End Y position is the peak area
-            })
-
-            # Create a horizontal line plot using hv.Segments
-            return hv.Segments(segments_data, kdims=['x', 'y0', 'x', 'y1']).opts(
-                xlabel="m/z",
-                ylabel="Peak Area",
-                title=f"Features near RT: {rtime} ± {rtime_tol}",
-                color="blue",
-                line_width=2,
-                active_tools=['box_zoom'],
-                xlim=(min_mz * .95, max_mz * 1.05)
-            )
-        except:
-            return hv.Overlay([]).opts(title="No features found in this range.")
-
-    display_frag = pn.bind(features_by_rt_with_lines, rtime=rt_slider, rtime_tol=rt_range_slider)    # Create the RT browser interface
-    frag_browser = pn.Column(
-        "## Fragment Spectrum Browser",
-        pn.pane.HTML('''<p> Interpretation of fragmentation spectra depends on experimental conditions </p>
-                    <p> For soft ionization (e.g., ESI), these spectra represent adducts, in-source fragments, and isotopologues </p>
-                    <p> For hard ionization (e.g., EI/MALDI), these spectra also include fragmentation products
-                    '''),
-        pn.Row(rt_slider, rt_range_slider),
-        display_frag,
-    )
-
     disclaimer = pn.pane.HTML('''<p>Dangerous data. Use at your own risk.</p>
     <p>Asari source code is hosted at <a href="https://github.com/shuzhao-li/asari" target="_blank">https://github.com/shuzhao-li/asari</a>.
     Feel free to contribute, use GitHub Issues to report bugs and request features.</p>
     ''')
-
-    project_params = pd.DataFrame([{"Parameter": k, "Value": v} for k, v in project_desc.items()], index=None)
-    project_params = pn.Column(
-        "## Project Parameters",
-        pn.pane.DataFrame(project_params),
-        height=300,  # Set a fixed height
-        styles={'overflow-y': 'auto'}  # Enable vertical scrolling
-    )
 
     template = pn.template.FastListTemplate(
         site = "Asari Dashboard", 
@@ -462,8 +393,6 @@ def dashboard(project_desc, cmap, epd, Ftable, sample_limit=20):
                 feature_browser,
                 mz_browser,
                 disclaimer,
-                frag_browser,
-                project_params,
                 ], 
         )
 

@@ -1,13 +1,14 @@
 '''
 Functions for elution peak detection and evaluation.
 '''
-import numpy as np
 
+import multiprocessing as mp
+import numpy as np
 from scipy.signal import detrend, find_peaks 
 from scipy.optimize import curve_fit 
 
-from .chromatograms import (smooth_moving_average, smooth_lowess)
-from .utils import bulk_process
+from .chromatograms import (smooth_moving_average, 
+                            smooth_lowess)
 
 # -----------------------------------------------------------------------------
 # multicore processing for peak detection
@@ -38,12 +39,17 @@ def batch_deep_detect_elution_peaks(list_mass_tracks, number_of_scans, parameter
     --------
     stats_detect_elution_peaks
     '''
-    iters = iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters)
-    results = bulk_process(stats_detect_elution_peaks, iters, dask_ip=parameters['dask_ip'])
-    return [item for sublist in results for item in sublist]
+    with mp.Manager() as manager:
+        shared_list = manager.list()
+        iters = iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters, shared_list)
+        with mp.Pool( parameters['multicores'] ) as pool:
+            # call peak detection function here
+            pool.starmap( stats_detect_elution_peaks, iters )
 
+        FeatureList = list(shared_list)
+    return FeatureList
 
-def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters):
+def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters, shared_list):
     '''
     Generate iterables for multiprocess.starmap for running elution peak detection.
 
@@ -85,7 +91,7 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
                 (mass_track, number_of_scans, min_peak_height, min_peak_ratio, 
                 min_fwhm, min_prominence_threshold, wlen, 
                 snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold, 
-                )
+                shared_list)
             )
     return iters
 
@@ -94,10 +100,10 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
 # Statistics guided peak detection
 # -----------------------------------------------------------------------------
 
-
-def stats_detect_elution_peaks(job):
-    
-    
+def stats_detect_elution_peaks(mass_track, number_of_scans, 
+                min_peak_height, min_peak_ratio, min_fwhm, min_prominence_threshold,
+                wlen, snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold,
+                shared_list):
     '''
     Statistics guided peak detection. 
     This is the main method in asari for detecting elution peaks on a mass track.
@@ -152,13 +158,6 @@ def stats_detect_elution_peaks(job):
     The peakshape is calculated on cleaned mass track.
     SNR is computed on local noise (average of up to 100 nonpeak data points on each side of a peak).
     '''
-
-    mass_track, number_of_scans, min_peak_height, \
-        min_peak_ratio, min_fwhm, min_prominence_threshold, \
-        wlen, snr, peakshape, min_prominence_ratio, \
-        iteration, min_intensity_threshold = job
-
-
     list_json_peaks, list_peaks = [], []
     list_scans = np.arange(number_of_scans)
     _baseline_, noise_level, scaling_factor, min_peak_height, list_intensity = audit_mass_track(
@@ -209,7 +208,9 @@ def stats_detect_elution_peaks(job):
                 if peak['snr'] >= snr:
                     peak['height'] = int(peak['height'])
                     list_peaks.append(peak)
-    return list_peaks
+
+    shared_list += list_peaks
+
 
 def compute_noise_by_flanks(peak, 
                             list_intensity, 
@@ -802,18 +803,11 @@ def cleanup_peak_cluster(cluster_peaks):
         return cluster_peaks
     elif len(cluster_peaks) == 2:
         [peak1, peak2] = cluster_peaks
-        bases = list([peak1['left_base'], peak1['right_base'], peak2['left_base'], peak2['right_base']])
+        bases = list(set([peak1['left_base'], peak1['right_base'], 
+                          peak2['left_base'], peak2['right_base']]))
         bases.sort()
-        peak1['left_base'], peak1['right_base'] = bases[0], bases[1]
-        peak2['left_base'], peak2['right_base'] = bases[2], bases[3]
-        if peak1['left_base'] < peak1['apex'] < peak1['right_base']:
-            pass
-        else:
-            peak1['apex'] = int(0.5 * (peak1['left_base'] + peak1['right_base']))
-        if peak2['left_base'] < peak2['apex'] < peak2['right_base']:
-            pass
-        else:
-            peak2['apex'] = int(0.5 * (peak2['left_base'] + peak2['right_base']))
+        peak1['left_base'], peak1['right_base'] = bases[:2]
+        peak2['left_base'], peak2['right_base'] = bases[-2:]
         return [peak1, peak2]
     else:
         return [_merge_peak_cluster(cluster_peaks)]
