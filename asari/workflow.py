@@ -9,17 +9,16 @@ Annotation is facilitated by jms-metabolite-services, mass2chem.
 import time
 import os
 import pickle
-import json_tricks as json
+import zipfile
+
+import json_tricks as json 
+from mass2chem.search import find_mzdiff_pairs_from_masstracks
 
 from .experiment import ext_Experiment
 from .chromatograms import extract_massTracks_ 
 from .peaks import audit_mass_track
 from .utils import bulk_process
-
-
-from mass2chem.search import find_mzdiff_pairs_from_masstracks
-import zipfile
-
+from .samples import SimpleSample
 
 # -----------------------------------------------------------------------------
 # main workflow for `process`
@@ -90,28 +89,15 @@ def process_project(list_input_files, parameters):
     The pickle folder is removed after the processing by default.
     '''
     EE = workflow_setup(list_input_files, parameters)
-    workflows = {
-        "GC": process_GC_project,
-        "LC": process_LC_project,
-        "LC_start": process_LC_project_start,
+    workflow_export_mode = {
+        'GC': (EE.process_all_GC, 'GC'),
+        'LC': (EE.process_all_LC, 'LC'),
+        'LC_start': (EE.process_all_LC_start, 'LC')
     }
-    workflows[parameters['workflow']](EE, list_input_files, parameters)
+    print(f'Processing Experiment Using {parameters["workflow"]} Workflow...')
+    workflow_export_mode[parameters['workflow']][0]()
+    EE.export_all(anno=parameters['anno'], mode=workflow_export_mode[parameters['workflow']][1])
     workflow_cleanup(EE, list_input_files, parameters)
-
-def process_GC_project(EE, list_input_files, parameters):
-    print("Processing Project using GC Workflow")
-    EE.process_all_GC()
-    EE.export_all(anno=parameters['anno'], mode='GC')
-
-def process_LC_project(EE, list_input_files, parameters):
-    print("Processing Project using LC Workflow")
-    EE.process_all_LC()
-    EE.export_all(anno=parameters['anno'], mode='LC')
-
-def process_LC_project_start(EE, list_input_files, parameters):
-    print("Processing Project using LC Workflow")
-    EE.process_all_LC_start()
-    #EE.export_all(anno=parameters['anno'], mode='LC')
 
 def read_project_dir(directory, file_pattern='.mzML'):
     '''
@@ -155,7 +141,8 @@ def read_project_file(project_file, file_pattern='.mzML'):
 
     '''
     print("Working on ~~ %s ~~ \n\n" %project_file)
-    return [os.path.abspath(l.strip()) for l in open(project_file).readlines() if file_pattern in l]
+    with open(project_file) as project_filehandle:
+        return [os.path.abspath(l.strip()) for l in project_filehandle.readlines() if file_pattern in l]
 
 def register_samples(list_input_files):
     '''
@@ -194,19 +181,16 @@ def create_export_folders(parameters, time_stamp=None):
     else:
         parameters['outdir'] = '_'.join([parameters['outdir'], parameters['project_name'], time_stamp])
 
+
     os.makedirs(parameters['outdir'])
-    try:
-        os.mkdir(os.path.join(parameters['outdir'], 'export'))
-    except FileExistsError:
-        print("Warning, export directory exists, this is normal in some circumstances")
-        
-    parameters['export_outdir'] = os.path.join(parameters['outdir'], 'export')
-    try:
-        os.mkdir(os.path.join(parameters['outdir'], 'qaqc_reports'))
-    except FileExistsError:
-        print("Warning, qaqc_reports directory exists, this is normal in some circumstances")
-        
-    parameters['qaqc_reports_outdir'] = os.path.join(parameters['outdir'], 'qaqc_reports')
+    # add additional subdirectories here.
+    for subdir in ['export', 'qaqc_reports', 'ms2_spectra']:
+        try:
+            os.mkdir(os.path.join(parameters['outdir'], subdir))
+        except FileExistsError:
+            print(f"Warning, {subdir} subdirectory already exists")
+        parameters[f'{subdir}_outdir'] = os.path.join(parameters['outdir'], subdir)
+
 
     if parameters['reuse_intermediates']:
         parameters['tmp_pickle_dir'] = os.path.abspath(parameters['reuse_intermediates'])
@@ -228,13 +212,13 @@ def remove_intermediate_pickles(parameters):
     paramaters: dict
         passed from main.py to get tmp_pickle_dir
     '''
-    assert parameters['reuse_intermediates'] is None, "Cannot remove intermediates when reuse_intermediates is set."
+    assert parameters['reuse_intermediates'] is None, "Cannot remove when reuse_intermediates is set."
     print("Removing temporary pickle files...")
     for f in os.listdir(parameters['tmp_pickle_dir']):
         os.remove( os.path.join(parameters['tmp_pickle_dir'], f) )
     try:
         os.rmdir(parameters['tmp_pickle_dir'])
-    except:
+    except Exception as _:
         print("Failed to remove directory %s." %parameters['tmp_pickle_dir'])
 
 
@@ -262,11 +246,9 @@ def make_iter_parameters(sample_registry, parameters):
     [('sample_id', input_file, mode, mz_tolerance_ppm, min_intensity, min_timepoints, 
     min_peak_height, output_file, shared_dict), ...]
     '''
+
+    # todo - this should just pass parameters maybe? 
     iters = []
-    mz_tolerance_ppm = parameters['mz_tolerance_ppm']
-    min_intensity = parameters['min_intensity_threshold']
-    min_timepoints = parameters['min_timepoints']
-    min_peak_height = parameters['min_peak_height']
     for sample in sample_registry.values():
         outfile = os.path.join(parameters['outdir'], 'pickle', os.path.basename(sample['input_file']).replace('.mzML', '')+'.pickle')
         iters.append((
@@ -274,10 +256,10 @@ def make_iter_parameters(sample_registry, parameters):
             sample['input_file'], 
             parameters['mode'], 
             parameters['database_mode'],
-            mz_tolerance_ppm, 
-            min_intensity, 
-            min_timepoints, 
-            min_peak_height, 
+            parameters['mz_tolerance_ppm'], 
+            parameters['min_intensity_threshold'], 
+            parameters['min_timepoints'], 
+            parameters['min_peak_height'], 
             outfile,
             parameters['compress'],
             parameters
@@ -307,12 +289,14 @@ def batch_EIC_from_samples_(sample_registry, parameters):
     --------
     single_sample_EICs_
     '''
-    shared_dict = {}
+    sample_data = {}
     iters = make_iter_parameters(sample_registry, parameters)
-    for result in bulk_process(single_sample_EICs_, iters, dask_ip=parameters['dask_ip']):
-        # oversubscribe for dask
-        shared_dict.update(result)
-    return shared_dict
+    for sample_datum in bulk_process(single_sample_EICs_, 
+                                     iters, 
+                                     dask_ip=parameters['dask_ip'], 
+                                     jobs_per_worker=parameters['multicores']):
+        sample_data.update(sample_datum)
+    return sample_data
 
 def single_sample_EICs_(job):
     '''
@@ -365,14 +349,12 @@ def single_sample_EICs_(job):
     --------
     batch_EIC_from_samples_, make_iter_parameters
     '''
-    
     sample_id, infile, ion_mode, database_mode, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, outfile, compress, parameters = job
     try:
         if parameters['reuse_intermediates']:
             for file in os.listdir(parameters['reuse_intermediates']):
                 if os.path.basename(file).split(".")[0] == os.path.basename(outfile).split(".")[0]:
                     print("Reusing Intermediate: %s." %file)
-                    from .samples import SimpleSample
                     new = SimpleSample.load_intermediate(os.path.join(parameters['reuse_intermediates'], file))
                     return {sample_id: ('passed', 
                                         'passed', 
@@ -387,7 +369,12 @@ def single_sample_EICs_(job):
                                         {}, 
                                         zipfile.is_zipfile(file))} 
                 
-        new = {'sample_id': sample_id, 'input_file': infile, 'ion_mode': ion_mode, 'list_mass_tracks': []}
+        new = {
+            'sample_id': sample_id, 
+            'input_file': infile, 
+            'ion_mode': ion_mode, 
+            'list_mass_tracks': []
+            }
         track_mzs = []
         
         xdict = extract_massTracks_(infile, 
@@ -395,43 +382,44 @@ def single_sample_EICs_(job):
                     min_intensity=min_intensity, 
                     min_timepoints=min_timepoints, 
                     min_peak_height=min_peak_height)
-        new['max_scan_number'] = max(xdict['rt_numbers'])
-        new['acquisition_time'] = xdict['acquisition_time']
-        # already in asc ending order of m/z from extract_massTracks_, get_thousandth_regions
-        
-        for ii, track in enumerate(xdict['tracks']):
-            audit_results = audit_mass_track(
-                track[1],
-                min_fwhm=round(0.5 * parameters['min_timepoints']),
-                min_intensity_threshold=parameters['min_intensity_threshold'],
-                min_peak_height=parameters['min_peak_height'],
-                min_peak_ratio=parameters['signal_noise_ratio']
-            )
-            _baseline_, noise_level, scaling_factor, min_peak_height, list_intensity = audit_results
-            new['list_mass_tracks'].append({
-                'id_number': ii, 
-                'mz': track[0],
-                # 'rt_scan_numbers': track[1],       # format changed after v1.5
-                'intensity': track[1], 
-                'audit_results': {
-                    "baseline": _baseline_,
-                    "noise_level": noise_level,
-                    "scaling_factor": scaling_factor,
-                    "min_peak_height": min_peak_height,
-                    "list_intensity": list_intensity
-                    }
-                })
-            track_mzs.append( (track[0], ii) )       # keep a reconrd in sample registry for fast MassGrid align
-        print("Extracted %s to %d mass tracks." %(os.path.basename(infile), ii))
+        if xdict['tracks']:
+            for ii, track in enumerate(xdict['tracks']):
+                audit_results = audit_mass_track(
+                    track[1],
+                    min_fwhm=round(0.5 * parameters['min_timepoints']),
+                    min_intensity_threshold=parameters['min_intensity_threshold'],
+                    min_peak_height=parameters['min_peak_height'],
+                    min_peak_ratio=parameters['signal_noise_ratio']
+                )
+                _baseline_, noise_level, scaling_factor, min_peak_height, list_intensity = audit_results
+                new['list_mass_tracks'].append({
+                    'id_number': ii, 
+                    'mz': track[0],
+                    'intensity': track[1], 
+                    'audit_results': {
+                        "baseline": _baseline_,
+                        "noise_level": noise_level,
+                        "scaling_factor": scaling_factor,
+                        "min_peak_height": min_peak_height,
+                        "list_intensity": list_intensity
+                        }
+                    })
+                track_mzs.append((track[0], ii))       # keep a reconrd in sample registry for fast MassGrid align
+            print("Extracted %s to %d mass tracks." %(os.path.basename(infile), len(xdict['tracks'])))
 
         anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(new['list_mass_tracks'], mz_tolerance_ppm=mz_tolerance_ppm)
         # find_mzdiff_pairs_from_masstracks is not too sensitive to massTrack format
-        new['anchor_mz_pairs'] = anchor_mz_pairs
-        new['number_anchor_mz_pairs'] = len(anchor_mz_pairs)
-        new['xdict'] = xdict
-        new['track_mzs'] = track_mzs
-        new['ms2_spectra'] = xdict['ms2_spectra']
+        new.update({
+            'anchor_mz_pairs': anchor_mz_pairs,
+            'number_anchor_mz_pairs': len(anchor_mz_pairs),
+            'xdict': xdict,
+            'track_mzs': track_mzs,
+            'ms2_spectra': xdict['ms2_spectra'],
+            'max_scan_number': max(xdict['rt_numbers']),
+            'acquisition_time': xdict['acquisition_time']
+        })
 
+        #todo - clean this up
         data_filepath = outfile
         if database_mode == 'ondisk':
             if not compress:
@@ -452,7 +440,7 @@ def single_sample_EICs_(job):
                     elif parameters['storage_format'] == 'json':
                         with zipf.open(os.path.basename(outfile).replace(".pickle", ".json"), 'w') as f:
                             f.write(json.dumps(new).encode('utf-8'))
-            print("\tExtracted to %s, %s MiB." % (data_filepath, round(os.path.getsize(data_filepath)/1024/1024, 2)))
+            print(f"\tExtracted to {data_filepath}, {round(os.path.getsize(data_filepath)/1024/1024, 2)} MiB.")
             return {sample_id: ('passed', 
                                 'passed', 
                                 data_filepath,
@@ -465,8 +453,6 @@ def single_sample_EICs_(job):
                                 new['acquisition_time'], 
                                 {}, 
                                 compress)} 
-            
-
         elif database_mode == 'memory':
             return {sample_id: ('passed', 
                                 'passed', 
@@ -480,7 +466,7 @@ def single_sample_EICs_(job):
                                 new['acquisition_time'],
                                 new, 
                                 compress)}
-    except Exception as e:
+    except Exception as _:
         print("Failed to extract: %s." %os.path.basename(infile))
         return {sample_id: ('failed', # status:mzml_parsing
                             'failed', # status:eic
@@ -519,12 +505,11 @@ def process_xics(list_input_files, parameters):
     A local folder with asari extracted XICs (aka EICs or mass tracks), 
     without full processing, in pickle files.
     '''
-    sample_registry = register_samples(list_input_files)
     parameters['database_mode'] = 'ondisk'
     time_stamp = ''.join([str(x) for x in time.localtime()[1:6]])
     create_export_folders(parameters, time_stamp)
     # samples are processed to mass tracks (EICs) here
-    shared_dict = batch_EIC_from_samples_(sample_registry, parameters)
+    _ = batch_EIC_from_samples_(register_samples(register_samples(list_input_files)), parameters)
     print("XICs were stored as pickle objects under %s" %os.path.join(parameters['outdir'], 'pickle'))
 
 # -----------------------------------------------------------------------------

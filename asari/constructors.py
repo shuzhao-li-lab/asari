@@ -4,21 +4,19 @@ Classes of MassGrid and CompositeMap.
 
 import os
 import csv
-
+from functools import lru_cache
 
 import pandas as pd
 import numpy as np
 from scipy import interpolate
 from scipy.ndimage import maximum_filter1d
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
-from functools import cache
-
 
 from .mass_functions import (flatten_tuplelist, 
                             landmark_guided_mapping, 
                             calculate_selectivity)
 from .chromatograms import (nn_cluster_by_mz_seeds,
-                            rt_lowess_calibration_debug, 
+                            rt_lowess_calibration_debug,
                             rt_lowess_calibration, 
                             remap_intensity_track,
                             __hacked_lowess__)
@@ -532,7 +530,6 @@ class CompositeMap:
         NUM_ITERATIONS = self.experiment.parameters['num_lowess_iterations']
         MIN_C_SELECTIVITY = 0.99
 
-
         mg = self.MassGrid.copy()
         selectivities = calculate_selectivity(mg['mz'], self.experiment.parameters['mz_tolerance_ppm'])
         mgd_inv = {i: x for i, x in enumerate(self.MassGrid.to_dict(orient='records'))}
@@ -601,24 +598,16 @@ class CompositeMap:
             return nx.center(dgraph)[0]
 
         def __pairwise_traverse(distance_graph, root, target):
-            # from the root, find the path through samples 
-            # to all other samples. This is learning the alignment
-            # order.
-            # 
-            # paths = {
-            #     "node_1": [root, node1, node2 ...]
-            # }
-            # paths is sort of an adjacency list
             for path in nx.shortest_simple_paths(distance_graph, source=root, target=target):
                 return path # its a spanning tree, there is only one path
 
+        @lru_cache(maxsize=128)
         def __align_pair(s1, s2):
-            print("Aligning: ", s1.name, s2.name)
-            print("Reference Peaks: ", len(reference_peaks_per_sample[s1.name]), len(reference_peaks_per_sample[s2.name]))
+            print("Aligning: ", s1.name, " to ", s2.name)
             peaks_mzs_s1 = set([x['mz'] for x in reference_peaks_per_sample[s1.name]])
             peaks_mzs_s2 = set([x['mz'] for x in reference_peaks_per_sample[s2.name]])
             shared_peak_mzs = peaks_mzs_s1.intersection(peaks_mzs_s2)
-            print("Shared Peaks: ", len(shared_peak_mzs))
+            print("\tPeaks - Shared / Sample 1 / Sample 2: ", len(shared_peak_mzs), " / ", len(peaks_mzs_s1), " / ", len(peaks_mzs_s2))
             reference_pairs = {}
             for peak in reference_peaks_per_sample[s1.name]:
                 if peak['mz'] in shared_peak_mzs:
@@ -669,18 +658,12 @@ class CompositeMap:
             # dictionary mapping scan nos in s1 to s2
             calibrated_domain = self.experiment.all_samples[path[0]].rt_numbers
             for i in range(len(path)-1):
-                s1 = self.experiment.all_samples[path[i]]
-                s2 = self.experiment.all_samples[path[i + 1]]
-                if (s1, s2) in alignment_cache:
-                    continue
-                else:
-                    alignment_cache[(s1, s2)] = __align_pair(s1, s2)
-                calibrated_domain = [alignment_cache[(s1, s2)][0].get(x, x) for x in calibrated_domain]
+                s1, s2 = self.experiment.all_samples[path[i]], self.experiment.all_samples[path[i+1]]
+                calibrated_domain = [__align_pair(s1, s2)[0].get(x, x) for x in calibrated_domain]
             calibrated_domain = [int(round(x)) for x in calibrated_domain]
             rt_cal_dict = dict(zip(self.experiment.all_samples[path[0]].rt_numbers, calibrated_domain))
             reverse_rt_cal_dict = dict(zip(calibrated_domain, self.experiment.all_samples[path[0]].rt_numbers))
-            s2.rt_cal_dict = rt_cal_dict
-            s2.reverse_rt_cal_dict = reverse_rt_cal_dict
+            s2.rt_cal_dict, s2.reverse_rt_cal_dict, s2.is_rt_aligned = rt_cal_dict, reverse_rt_cal_dict, True
             return rt_cal_dict, reverse_rt_cal_dict
 
         # With this similarity metric, build the similarity matrix between all samples.
@@ -709,6 +692,7 @@ class CompositeMap:
             _comp_dict[k] = basetrack.copy()
 
         for SM in self.experiment.all_samples:
+            SM.is_rt_aligned = True
             list_mass_tracks = SimpleSample.get_mass_tracks_for_sample(SM)
             for k in mzlist:
                 ref_index = self.MassGrid[SM.name][k]
@@ -719,7 +703,11 @@ class CompositeMap:
                         )
         result = {}
         for k,v in _comp_dict.items():
-            result[k] = { 'id_number': k, 'mz': mzDict[k], 'intensity': v }
+            result[k] = {
+                'id_number': k, 
+                'mz': mzDict[k], 
+                'intensity': v
+                }
         self.composite_mass_tracks = result
 
     def build_composite_tracks(self):
@@ -772,9 +760,15 @@ class CompositeMap:
         for batch in batches:
             if self.experiment.parameters['database_mode'] == "memory":
                 # this is a bug - to fix
-                list_of_list_mass_tracks = bulk_process(SimpleSample.get_mass_tracks_for_sample, batch, dask_ip=False)
+                list_of_list_mass_tracks = bulk_process(SimpleSample.get_mass_tracks_for_sample, 
+                                                        batch, 
+                                                        dask_ip=False,
+                                                        jobs_per_worker=self.experiment.paramters['multicores'])
             else:
-                list_of_list_mass_tracks = bulk_process(SimpleSample.get_mass_tracks_for_sample, batch, dask_ip=self.experiment.parameters['dask_ip'])
+                list_of_list_mass_tracks = bulk_process(SimpleSample.get_mass_tracks_for_sample, 
+                                                        batch, 
+                                                        dask_ip=self.experiment.parameters['dask_ip'],
+                                                        jobs_per_worker=self.experiment.parameters['multicores'])
             for (SM, list_mass_tracks) in zip(batch, list_of_list_mass_tracks):
                 print("   ", SM.name)
                 if SM.is_reference:
@@ -936,11 +930,12 @@ class CompositeMap:
         selectivities = calculate_selectivity(self.MassGrid['mz'][self._mz_landmarks_], self.experiment.parameters['mz_tolerance_ppm'])
         good_reference_landmark_peaks = []
         ref_list_mass_tracks = self.reference_sample.list_mass_tracks
-        for ii in range(len(self._mz_landmarks_)):
+
+        for ii, mz_landmark in enumerate(self._mz_landmarks_):
             if selectivities[ii] > 0.99:
-                ref_ii = self.MassGrid[self.reference_sample.name][self._mz_landmarks_[ii]]
+                ref_ii = self.MassGrid[self.reference_sample.name][mz_landmark]
                 if ref_ii and not pd.isna(ref_ii):
-                    this_mass_track = ref_list_mass_tracks[ int(ref_ii) ]
+                    this_mass_track = ref_list_mass_tracks[int(ref_ii)]
                     Upeak = quick_detect_unique_elution_peak(this_mass_track['intensity'], 
                                 min_peak_height=cal_peak_intensity_threshold, 
                                 min_fwhm=3, min_prominence_threshold_ratio=0.2)
@@ -977,11 +972,10 @@ class CompositeMap:
 
         self.FeatureList = batch_deep_detect_elution_peaks(
             self.composite_mass_tracks.values(), 
-            self.experiment.number_scans, self.experiment.parameters
+            self.experiment.number_scans, 
+            self.experiment.parameters
         )
-        ii = 0
-        for peak in self.FeatureList:
-            ii += 1
+        for ii, peak in enumerate(self.FeatureList):
             peak['id_number'] = 'F'+str(ii)
             # convert scan numbers to rtime
             try:
@@ -990,11 +984,9 @@ class CompositeMap:
                 peak['rtime'] = self.max_ref_rtime                # imputed value set at max rtime
                 print("Feature rtime out of bound - ", peak['id_number'], peak['apex'])
             try:
-                peak['rtime_left_base'], peak['rtime_right_base'] = self.dict_scan_rtime[
-                                peak['left_base']], self.dict_scan_rtime[peak['right_base']]
+                peak['rtime_left_base'], peak['rtime_right_base'] = self.dict_scan_rtime[peak['left_base']], self.dict_scan_rtime[peak['right_base']]
             except KeyError:
-                print("Feature rtime out of bound on", peak['id_number'], 
-                      (peak['apex'], peak['left_base'], peak['right_base']))
+                print("Feature rtime out of bound on", peak['id_number'], (peak['apex'], peak['left_base'], peak['right_base']))
 
         self.generate_feature_table()
 
@@ -1043,8 +1035,7 @@ class CompositeMap:
         Integer of peak area value
         
         '''
-        return int(maximum_filter1d(
-            track_intensity[left_base: right_base+1], size=2, mode='constant').sum())
+        return int(maximum_filter1d(track_intensity[left_base: right_base+1], size=2, mode='constant').sum())
 
 
     def get_peak_area_gaussian(self, track_intensity, left_base, right_base):
@@ -1065,25 +1056,25 @@ class CompositeMap:
         ------- 
         peak area, Integer value as gaussian integral.
         '''
-        return int(get_gaussian_peakarea_on_intensity_list(
-            track_intensity, left_base, right_base))
+        return int(get_gaussian_peakarea_on_intensity_list(track_intensity, left_base, right_base))
 
 
     def generate_feature_table(self):
         '''
         Initiate and populate self.FeatureTable, each sample per column in dataframe.
         '''
-        peak_area_function = self.get_peak_area_sum
-        if self.experiment.parameters['peak_area'] == 'auc':
-            peak_area_function = self.get_peak_area_auc
-        elif self.experiment.parameters['peak_area'] == 'gauss':
-            peak_area_function = self.get_peak_area_gaussian
+        peak_area_methods = {
+            'auc': self.get_peak_area_auc,
+            'sum': self.get_peak_area_sum,
+            'gauss': self.get_peak_area_gaussian,
+        }
+        peak_area_function = peak_area_methods[self.experiment.parameters['peak_area']]
 
         FeatureTable = pd.DataFrame(self.FeatureList)
         for SM in self.experiment.all_samples:
             if not self.experiment.parameters['drop_unaligned_samples'] or SM.is_rt_aligned:
                 FeatureTable[SM.name] = self.extract_features_per_sample(SM, peak_area_function)
-
+        print("\nFeature Table: ", FeatureTable.shape)
         self.FeatureTable = FeatureTable
 
 
@@ -1105,20 +1096,17 @@ class CompositeMap:
         A list of peak area values, for all features in a sample.
         '''
         fList = []
-        mass_track_map = self.MassGrid[sample.name]
         list_mass_tracks = sample.get_masstracks_and_anchors()
         for peak in self.FeatureList:
-            track_number = mass_track_map[peak['parent_masstrack_id']]
-            peak_area = 0
-            if not pd.isna(track_number):           # watch out dtypes
-                mass_track = list_mass_tracks[ int(track_number) ]
-                # watch for range due to calibration/conversion.
+            track_number = self.MassGrid[sample.name][peak['parent_masstrack_id']]
+            if not pd.isna(track_number):
+                mass_track = list_mass_tracks[int(track_number)]
                 left_base = sample.reverse_rt_cal_dict.get(peak['left_base'], peak['left_base'])
                 right_base = sample.reverse_rt_cal_dict.get(peak['right_base'], peak['right_base'])
                 peak_area = peak_area_function(mass_track['intensity'], left_base, right_base)
-
+            else:
+                peak_area = 0
             fList.append( peak_area )
-
         return fList
     
     def export_reference_sample(self):
@@ -1142,16 +1130,13 @@ class CompositeMap:
          
         """
         # extendable. could add height and other params
-        mz_landmarks = [self.MassGrid['mz'].values[
-                        p['ref_id_num']] for p in 
-                        self.good_reference_landmark_peaks] 
-        rtime_landmarks = [self.dict_scan_rtime[p['apex']] for p in 
-                        self.good_reference_landmark_peaks]
+        mz_landmarks = [self.MassGrid['mz'].values[p['ref_id_num']] for p in self.good_reference_landmark_peaks] 
+        rtime_landmarks = [self.dict_scan_rtime[p['apex']] for p in self.good_reference_landmark_peaks]
         reference_sample_name = self.reference_sample.name
 
         # example: batch14_MT_20210808_087_mz_rtime_landmarks.csv
-        referece_path = os.path.join(self.experiment.parameters['outdir'], 'export', reference_sample_name + '_mz_rtime_landmarks.csv')
-        with open(referece_path, 'w', newline='') as file:
+        reference_path = os.path.join(self.experiment.parameters['outdir'], 'export', reference_sample_name + '_mz_rtime_landmarks.csv')
+        with open(reference_path, 'w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(["mz", "rtime"])  #  headers
             writer.writerows(zip(mz_landmarks, rtime_landmarks)) 

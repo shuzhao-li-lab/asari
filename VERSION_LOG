@@ -1,10 +1,18 @@
 v1.14.2 -> v1.14.3
     major new features:
         implementation of Spanning Tree Alignment of Retention Time (START)
+        MS2 exporting in any matchms format
 
     bug fixes:
         use absolute paths for mzML conversion
         remove tkinter requirement
+        remove basic_GUI.py, deprecated with gui.py
+        limit properly enforced in gc_annotation
+        multicore limit properly enforced in all multiprocessing
+        re-enable dask scattering
+    
+    misc. code improvements
+        num_files_to_check can be float for percentage, none for all, or absolute number of samples.
     
 
 v1.14.1 -> v1.14.2
@@ -20,13 +28,13 @@ v1.13.2 -> v1.14.0
         fix bug in number of lowess iterations being different if ran from the CLI than module.
         fix bug in min_prominence threshold
         fixed issues with CLI parsing
-        added support for dask from CLI
     
     major new features:
         GC Support! enable by passing --workflow GC, please see documentation
         Automatic downloading of GC databases, currently only supports MoNA GCMS. 
         API and CLI equivalency and additional API functionality.
         Prototype of GUI, access it using `asari_gui`
+        added support for dask from CLI
 
     new features:
         added compression support

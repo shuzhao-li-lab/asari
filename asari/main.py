@@ -3,9 +3,9 @@ import multiprocessing as mp
 import os
 import json 
 import time
-import yaml
-
 from functools import partial
+
+import yaml
 
 from asari import __version__
 from .workflow import (get_mz_list, 
@@ -32,7 +32,7 @@ def convert(parameters, args):
             needs_conversion.append(os.path.abspath(os.path.join(args.input, x)))
     if needs_conversion:
         from .mzml_converter import mzMLconverter
-        converter = mzMLconverter()
+        converter = mzMLconverter(multicores=parameters['multicores'])
         converter.bulk_convert(needs_conversion)
 
 def process(parameters):
