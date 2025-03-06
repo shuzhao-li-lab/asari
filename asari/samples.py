@@ -1,4 +1,11 @@
 import pickle
+import zipfile
+import os 
+import json_tricks as json
+
+from matchms import Spectrum
+from matchms.exporting import save_spectra
+
 from .mass_functions import flatten_tuplelist
 
 class SimpleSample:
@@ -37,6 +44,7 @@ class SimpleSample:
         self.mode = mode
         self.database_mode = database_mode 
         self.is_reference = is_reference 
+        self.__registry = registry
 
         self.input_file = registry['input_file']
         self.name = registry['name']
@@ -47,6 +55,7 @@ class SimpleSample:
         self.anchor_mz_pairs = registry['anchor_mz_pairs']
         self.rt_numbers = registry['list_scan_numbers']
         self.list_retention_time = registry['list_retention_time']
+        self.compressed = self.experiment.parameters['compress']
 
         if self.database_mode == 'memory':
             self.list_mass_tracks = registry['sample_data']['list_mass_tracks']
@@ -63,7 +72,15 @@ class SimpleSample:
         
         # placeholder
         self.mz_calibration_function = None
-                                   
+
+    @property
+    def list_scan_numbers(self):
+        return self.__registry['list_scan_numbers']
+
+
+    @staticmethod
+    def get_mass_tracks_for_sample(sample):
+        return sample.get_masstracks_and_anchors()
 
     def get_masstracks_and_anchors(self):
         '''
@@ -101,6 +118,40 @@ class SimpleSample:
             'reverse_rt_cal_dict': self.reverse_rt_cal_dict,
         }
 
+    def extract_ms2(self, export_format="msp"):
+        '''
+        Extract MS2 data from sample data 
+        '''
+        try:
+            if self.database_mode == 'memory':
+                ms2_data = self.__registry['sample_data']['ms2_spectra']
+            else:
+                ms2_data = self._get_sample_data()['ms2_spectra']
+            spectra = []
+            for spec in ms2_data:
+                mzs = []
+                intensities = []    
+                rtime = spec.scan_time_in_minutes()*60
+                for mz, intensity in zip(spec.mz, spec.intensity):
+                    mzs.append(mz)
+                    intensities.append(intensity)
+                try:
+                    precursor_mz = spec.precursor_mz
+                except:
+                    precursor_mz = None
+                spectra.append(Spectrum(mz=mzs, 
+                                        intensities=intensities, 
+                                        metadata={'scan_time': rtime,
+                                                'origin': self.name,
+                                                'precursor_mz': precursor_mz,
+                                                }))
+            if export_format[0] == ".":
+                export_format = export_format[1:]
+            self.experiment.parameters['ms2_export_format'] = export_format
+            path = os.path.join(self.experiment.parameters['ms2_spectra_outdir'], "ms2_{}.{}".format(self.name, export_format))
+            save_spectra(spectra, path, export_style="matchms")
+        except Exception as _:
+            print(f"Error Extracting MS2 for: {self.name}")
 
     def _get_sample_data(self):
         '''
@@ -114,34 +165,34 @@ class SimpleSample:
             elif: self.database_mode == 'firebase': 
                 return self.retrieve_from_db()
         '''
-        return self._retrieve_from_disk()
-
+        return SimpleSample.load_intermediate(self.data_location)
+    
     def _retrieve_from_disk(self):
+        return SimpleSample.load_intermediate(self.data_location)
+
+    @staticmethod
+    def load_intermediate(data_location):
         '''
         Retrieve sample data from local pickle file.
         '''
-        with open(self.data_location, 'rb') as f:
-            sample_data = pickle.load(f)
+        print("Loading intermediate: ", data_location)
+        sample_data = None
+        if zipfile.is_zipfile(data_location):
+            with zipfile.ZipFile(data_location, 'r') as z:
+                with z.open(z.namelist()[0]) as f:
+                    if z.namelist()[0].endswith('.pickle'):
+                        sample_data = pickle.load(f)
+                    elif z.namelist()[0].endswith('.json'):
+                        sample_data = json.loads(f.read().decode('utf-8'))
+        else:
+            if data_location.endswith('.pickle'):
+                with open(data_location, 'rb') as f:
+                    sample_data = pickle.load(f)
+            elif data_location.endswith('.json'):
+                with open(data_location, 'r') as f:
+                    sample_data = json.load(f)
+            else:
+                raise ValueError("Unknown file format: ", data_location)
+        if sample_data is None:
+            raise ValueError("Failed to load sample data from: ", data_location)
         return sample_data
-
-    def push_to_db(self, cursor):
-        '''
-        Placeholder.
-
-        Parameters
-        ----------
-        cursor - database cursor instance
-            cursor to interact with database
-        '''
-        pass
-
-    def retrieve_from_db(self, cursor):
-        '''
-        Placeholder.
-
-        Parameters
-        ----------
-        cursor - database cursor instance
-            cursor to interact with database
-        '''
-        pass

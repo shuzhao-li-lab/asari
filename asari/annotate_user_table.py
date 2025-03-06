@@ -3,6 +3,8 @@ Functions for subcommand `annotate`
 '''
 import json
 
+from jms.io import read_table_to_peaks
+
 from .experiment import (ext_Experiment,
                          ExperimentalEcpdDatabase, 
                          adduct_search_patterns, 
@@ -11,9 +13,7 @@ from .experiment import (ext_Experiment,
 from .default_parameters import extended_adducts
 from .json_encoder import NpEncoder
 
-from jms.io import read_table_to_peaks
-
-
+# todo - does this still work? complaining about missing append_orphans
 def annotate_user_featuretable(infile, parameters, rtime_tolerance=2):
     '''
     Annotate a user supplied feature table. Used by asari subcommand `annotate`.
