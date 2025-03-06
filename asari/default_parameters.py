@@ -9,9 +9,6 @@
 # only ionization mode (default pos) and ppm of mz_tolerance (defulat 5) may need attention, 
 # but they should be given via commandline arguments.
 # 
-
-from importlib import resources as pkg_resources
-
 PARAMETERS = {
     'project_name': 'asari_project',
     'outdir': 'output',
@@ -19,7 +16,7 @@ PARAMETERS = {
     'reuse_intermediates': None,        # if provided as a path, reuse intermediates  with same basename as input mzML files to skip extraction.
     'database_mode': 'ondisk',          # `auto` determined on sample number 
                                         # 'ondisk', 'memory' (run in memory, only small studies), 
-                                        # 'mongo' (MongoDB, requiring installation of DB server, to implement)
+
     'multicores': 4,                    # number of cores allowed in parallel processing
     'target': None,                     # target mz values for extraction     
     'single_file_qc_reports': False,    # if True, generate QC reports for each file, needs spikeins provided or defaults are used.
@@ -68,7 +65,7 @@ PARAMETERS = {
                                         # Samples with fewer selected peaks are dropped out.
     'max_retention_shift': None,        # landmark peak pairs with a scan number delta greater than this are not used for RT calibration
     'num_lowess_iterations': 3,         # number of lowess iterations to perform for RT calibration, higher values take longer but less sensitive to outliers
-    'project_sample_number_small': 0,  # Number of samples dictates workflow, default 10
+    'project_sample_number_small': 10,  # Number of samples dictates workflow, default 10
 
     # for annotation
     'anno': True,                       # to annotate features

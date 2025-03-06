@@ -1,7 +1,7 @@
 v1.14.2 -> v1.14.3
     major new features:
         implementation of Spanning Tree Alignment of Retention Time (START)
-        MS2 exporting in any matchms format
+        MS2 exporting
 
     bug fixes:
         use absolute paths for mzML conversion

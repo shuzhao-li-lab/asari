@@ -89,32 +89,29 @@ Alternative to a standalone command, to run as a module via Python interpreter, 
 Graphical Interface
 ===================
 
-The graphical interface is experimental and is not an active priority for development but is provided for convenience,
-feedback, and testing. 
-
-The GUI can be started after install by running:
+A prototype graphic interface is provided on install. You can start the GUI by running in a terminal:
 
 `asari_gui`
 
-In the terminal. Of course, that kind of defeats the point of the GUI; however, future versions will address this by providing
-desktop icons or instructions on how to create them. 
-
-GUI is only tested on MacOS but should work in Linux. Windows will require testing. 
+Ask your IT support for creating a desktop icon if desired. 
 
 
-Workflow Selection - GC or LC
+Workflow Selection - GC / LC / Other
 =============================
 
-Asari was developed initially for LC data only. V1.14 is the last version of asari to be LC-Only. As of >V1.14, asari can be
-ran in GC mode by passing `--workflow GC` at runtime or the corresponding parameter when using it as a module in your own scripts. 
+Asari processes both GC and LC data via different workflows. 
 
-This will require other parameters in the future. 
+Worfkows can be provided by passing `--worfklow <workflow_name>` to asari. 
 
-To see the list of possible workflows:
+Some workflows require additional parameters. To list possible worfklows:
 
 `asari list_workflows`
 
-By default, Asari runs the LC workflow. 
+We have three workflows currently:
+
+LC - default workflow for Asari
+GC - GC worfklow for Asari, uses retention index for normalization.
+LC_START - alternative LC workflow with spanning tree alignment
 
 Output
 ======

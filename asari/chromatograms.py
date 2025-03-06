@@ -6,11 +6,12 @@ Use mz tol (default 5 pmm) in XIC construction.
 XICs without neighbors within x ppm are considered specific (i.e. high selectivity). 
 Low selectivity regions will be still inspected to determine the true number of XICs.
 '''
+
 from operator import itemgetter
-import numpy as np
-import pymzml
 import datetime
 
+import pymzml
+import numpy as np
 from scipy import interpolate
 from scipy.ndimage import uniform_filter1d
 from statsmodels.nonparametric.smoothers_lowess import lowess

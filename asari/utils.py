@@ -4,19 +4,20 @@
 # installed, you probalby have asari too. 
 
 import multiprocessing as mp
-import tqdm
 import os
 import time
 import hashlib
-import pymzml
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import requests
 import zipfile
 from io import BytesIO
 from importlib import resources as pkg_resources
+
+import requests
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+import pymzml
+import tqdm
 
 def download_and_unzip_to_pkg_resources(url, package, subdir="data"):
     """Downloads a ZIP archive from a URL and extracts it into a package's resource directory."""
@@ -158,7 +159,6 @@ def get_ionization_mode_mzml(mzml_file, limit=50):
     return list(ion_modes)[0]
 
 def bulk_process(command, arguments, dask_ip=None, jobs_per_worker=False, job_multiplier=1):
-    DASK_ENABLE = False # to turn on Dask, set to True and install manually. EXPERIMENTAL!!!
     if arguments:
         if dask_ip:
             try:
@@ -166,8 +166,8 @@ def bulk_process(command, arguments, dask_ip=None, jobs_per_worker=False, job_mu
             except:
                 raise ImportError("Dask must be installed to use dask_ip=True")
             client = Client(f"tcp://{dask_ip}:8786")
-            #client.scatter(arguments)
-            #client.scatter(command)
+            client.scatter(arguments)
+            client.scatter(command)
             results = []
             if jobs_per_worker == 'auto':
                 total_thread = sum(worker_info['nthreads'] for worker_info in client.scheduler_info()['workers'].values())
@@ -181,7 +181,7 @@ def bulk_process(command, arguments, dask_ip=None, jobs_per_worker=False, job_mu
                 remaining_args = arguments[len(futures):]
 
                 # Process jobs as they complete and submit new ones
-                for i in range(len(arguments)):
+                for _ in range(len(arguments)):
                     completed_future = as_completed(futures.values()).next()
                     completed_index = list(futures.keys())[list(futures.values()).index(completed_future)]
                     pbar.update(1)
@@ -220,3 +220,21 @@ def bulk_process(command, arguments, dask_ip=None, jobs_per_worker=False, job_mu
                 return [x for x in pbar]
     else:
         raise Exception("No Arguments Provided")
+    
+def pca_ftable(tsv_path):
+    import pandas as pd
+    from sklearn.decomposition import PCA
+    from sklearn.preprocessing import StandardScaler
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import numpy as np
+
+    # Load the feature table
+    ftable = pd.read_csv(tsv_path, sep='\t')
+    pca = PCA(n_components=2)
+    results = pca.fit_transform(StandardScaler().fit_transform(ftable.iloc[:, 11:].T))
+    for i, (x, y) in enumerate(results):
+        plt.scatter(x, y, label=ftable.columns[11:][i])
+    plt.xlabel("PC1")
+    plt.ylabel("PC2")
+    plt.legend()

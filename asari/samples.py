@@ -1,6 +1,10 @@
 import pickle
 import zipfile
+import os 
 import json_tricks as json
+
+from matchms import Spectrum
+from matchms.exporting import save_spectra
 
 from .mass_functions import flatten_tuplelist
 
@@ -114,6 +118,40 @@ class SimpleSample:
             'reverse_rt_cal_dict': self.reverse_rt_cal_dict,
         }
 
+    def extract_ms2(self, export_format="msp"):
+        '''
+        Extract MS2 data from sample data 
+        '''
+        try:
+            if self.database_mode == 'memory':
+                ms2_data = self.__registry['sample_data']['ms2_spectra']
+            else:
+                ms2_data = self._get_sample_data()['ms2_spectra']
+            spectra = []
+            for spec in ms2_data:
+                mzs = []
+                intensities = []    
+                rtime = spec.scan_time_in_minutes()*60
+                for mz, intensity in zip(spec.mz, spec.intensity):
+                    mzs.append(mz)
+                    intensities.append(intensity)
+                try:
+                    precursor_mz = spec.precursor_mz
+                except:
+                    precursor_mz = None
+                spectra.append(Spectrum(mz=mzs, 
+                                        intensities=intensities, 
+                                        metadata={'scan_time': rtime,
+                                                'origin': self.name,
+                                                'precursor_mz': precursor_mz,
+                                                }))
+            if export_format[0] == ".":
+                export_format = export_format[1:]
+            self.experiment.parameters['ms2_export_format'] = export_format
+            path = os.path.join(self.experiment.parameters['ms2_spectra_outdir'], "ms2_{}.{}".format(self.name, export_format))
+            save_spectra(spectra, path, export_style="matchms")
+        except Exception as _:
+            print(f"Error Extracting MS2 for: {self.name}")
 
     def _get_sample_data(self):
         '''
@@ -127,7 +165,7 @@ class SimpleSample:
             elif: self.database_mode == 'firebase': 
                 return self.retrieve_from_db()
         '''
-        return self._retrieve_from_disk()
+        return SimpleSample.load_intermediate(self.data_location)
     
     def _retrieve_from_disk(self):
         return SimpleSample.load_intermediate(self.data_location)
@@ -138,6 +176,7 @@ class SimpleSample:
         Retrieve sample data from local pickle file.
         '''
         print("Loading intermediate: ", data_location)
+        sample_data = None
         if zipfile.is_zipfile(data_location):
             with zipfile.ZipFile(data_location, 'r') as z:
                 with z.open(z.namelist()[0]) as f:
@@ -152,4 +191,8 @@ class SimpleSample:
             elif data_location.endswith('.json'):
                 with open(data_location, 'r') as f:
                     sample_data = json.load(f)
+            else:
+                raise ValueError("Unknown file format: ", data_location)
+        if sample_data is None:
+            raise ValueError("Failed to load sample data from: ", data_location)
         return sample_data

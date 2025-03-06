@@ -254,14 +254,7 @@ def make_iter_parameters(sample_registry, parameters):
         iters.append((
             sample['sample_id'], 
             sample['input_file'], 
-            parameters['mode'], 
-            parameters['database_mode'],
-            parameters['mz_tolerance_ppm'], 
-            parameters['min_intensity_threshold'], 
-            parameters['min_timepoints'], 
-            parameters['min_peak_height'], 
             outfile,
-            parameters['compress'],
             parameters
             )
         )
@@ -290,9 +283,8 @@ def batch_EIC_from_samples_(sample_registry, parameters):
     single_sample_EICs_
     '''
     sample_data = {}
-    iters = make_iter_parameters(sample_registry, parameters)
     for sample_datum in bulk_process(single_sample_EICs_, 
-                                     iters, 
+                                     make_iter_parameters(sample_registry, parameters), 
                                      dask_ip=parameters['dask_ip'], 
                                      jobs_per_worker=parameters['multicores']):
         sample_data.update(sample_datum)
@@ -349,7 +341,9 @@ def single_sample_EICs_(job):
     --------
     batch_EIC_from_samples_, make_iter_parameters
     '''
-    sample_id, infile, ion_mode, database_mode, mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height, outfile, compress, parameters = job
+    #todo, maybe job should be a dict or something, else, we can just pass the parameters right?
+
+    sample_id, infile, outfile, parameters = job
     try:
         if parameters['reuse_intermediates']:
             for file in os.listdir(parameters['reuse_intermediates']):
@@ -372,48 +366,31 @@ def single_sample_EICs_(job):
         new = {
             'sample_id': sample_id, 
             'input_file': infile, 
-            'ion_mode': ion_mode, 
+            'ion_mode': parameters['mode'], 
             'list_mass_tracks': []
-            }
-        track_mzs = []
-        
+            }        
         xdict = extract_massTracks_(infile, 
-                    mz_tolerance_ppm=mz_tolerance_ppm, 
-                    min_intensity=min_intensity, 
-                    min_timepoints=min_timepoints, 
-                    min_peak_height=min_peak_height)
+                    mz_tolerance_ppm=parameters['mz_tolerance_ppm'], 
+                    min_intensity=parameters['min_intensity_threshold'], 
+                    min_timepoints=parameters['min_timepoints'], 
+                    min_peak_height=parameters['min_peak_height'])
         if xdict['tracks']:
-            for ii, track in enumerate(xdict['tracks']):
-                audit_results = audit_mass_track(
-                    track[1],
-                    min_fwhm=round(0.5 * parameters['min_timepoints']),
-                    min_intensity_threshold=parameters['min_intensity_threshold'],
-                    min_peak_height=parameters['min_peak_height'],
-                    min_peak_ratio=parameters['signal_noise_ratio']
-                )
-                _baseline_, noise_level, scaling_factor, min_peak_height, list_intensity = audit_results
-                new['list_mass_tracks'].append({
-                    'id_number': ii, 
-                    'mz': track[0],
-                    'intensity': track[1], 
-                    'audit_results': {
-                        "baseline": _baseline_,
-                        "noise_level": noise_level,
-                        "scaling_factor": scaling_factor,
-                        "min_peak_height": min_peak_height,
-                        "list_intensity": list_intensity
-                        }
-                    })
-                track_mzs.append((track[0], ii))       # keep a reconrd in sample registry for fast MassGrid align
+            audit_fields = "baseline", "noise_level", "scaling_factor", "min_peak_height", "list_intensity"
+            audits = [dict(zip(audit_fields, audit_mass_track(t[1], 
+                                       round(0.5 * parameters['min_timepoints']), 
+                                       parameters['min_intensity_threshold'], 
+                                       parameters['min_peak_height'], 
+                                       parameters['signal_noise_ratio']))) for t in xdict['tracks']]
+            new['list_mass_tracks'] = [{'id_number': ii, 'mz': t[0], 'intensity': t[1], 'audit_results': audits[ii]} for ii, t in enumerate(xdict['tracks'])]
             print("Extracted %s to %d mass tracks." %(os.path.basename(infile), len(xdict['tracks'])))
 
-        anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(new['list_mass_tracks'], mz_tolerance_ppm=mz_tolerance_ppm)
+        anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(new['list_mass_tracks'], mz_tolerance_ppm=parameters['mz_tolerance_ppm'])
         # find_mzdiff_pairs_from_masstracks is not too sensitive to massTrack format
         new.update({
             'anchor_mz_pairs': anchor_mz_pairs,
             'number_anchor_mz_pairs': len(anchor_mz_pairs),
             'xdict': xdict,
-            'track_mzs': track_mzs,
+            'track_mzs': [(t[0], ii) for ii, t in enumerate(xdict['tracks'])],
             'ms2_spectra': xdict['ms2_spectra'],
             'max_scan_number': max(xdict['rt_numbers']),
             'acquisition_time': xdict['acquisition_time']
@@ -421,8 +398,8 @@ def single_sample_EICs_(job):
 
         #todo - clean this up
         data_filepath = outfile
-        if database_mode == 'ondisk':
-            if not compress:
+        if parameters['database_mode'] == 'ondisk':
+            if not parameters['compress']:
                 if parameters['storage_format'] == 'pickle':
                     data_filepath = outfile
                     with open(outfile, 'wb') as f:
@@ -441,31 +418,18 @@ def single_sample_EICs_(job):
                         with zipf.open(os.path.basename(outfile).replace(".pickle", ".json"), 'w') as f:
                             f.write(json.dumps(new).encode('utf-8'))
             print(f"\tExtracted to {data_filepath}, {round(os.path.getsize(data_filepath)/1024/1024, 2)} MiB.")
-            return {sample_id: ('passed', 
-                                'passed', 
-                                data_filepath,
-                                new['max_scan_number'], 
-                                xdict['rt_numbers'], 
-                                xdict['rt_times'],
-                                track_mzs,
-                                new['number_anchor_mz_pairs'], 
-                                anchor_mz_pairs,
-                                new['acquisition_time'], 
-                                {}, 
-                                compress)} 
-        elif database_mode == 'memory':
-            return {sample_id: ('passed', 
-                                'passed', 
-                                outfile,
-                                new['max_scan_number'], 
-                                xdict['rt_numbers'], 
-                                xdict['rt_times'],
-                                track_mzs,
-                                new['number_anchor_mz_pairs'], 
-                                anchor_mz_pairs,  
-                                new['acquisition_time'],
-                                new, 
-                                compress)}
+        return {sample_id: ('passed', 
+                            'passed', 
+                            data_filepath,
+                            new['max_scan_number'], 
+                            xdict['rt_numbers'], 
+                            xdict['rt_times'],
+                            new['track_mzs'],
+                            new['number_anchor_mz_pairs'], 
+                            anchor_mz_pairs,
+                            new['acquisition_time'], 
+                            new if parameters['database_mode'] == 'memory' else {}, 
+                            parameters['compress'])} 
     except Exception as _:
         print("Failed to extract: %s." %os.path.basename(infile))
         return {sample_id: ('failed', # status:mzml_parsing
@@ -479,7 +443,7 @@ def single_sample_EICs_(job):
                             None, # anchor_mz_pairs
                             None, # acquisition_time
                             None, # sample_data
-                            compress # compress
+                            parameters['compress'] # compress
                             )}
 
 # -----------------------------------------------------------------------------

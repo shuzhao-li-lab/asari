@@ -13,9 +13,6 @@ from .experiment import ext_Experiment
 from .mass_functions import flatten_tuplelist
 from .utils import bulk_process
 
-
-
-
 def analyze_single_sample(infile, 
             mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000,
             parameters={}):
@@ -39,15 +36,12 @@ def analyze_single_sample(infile,
         not used, just place holder to use ext_Experiment class.
     '''
     print("Analysis of %s\n" %infile)
-    mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(infile,
-                        mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
-
+    mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(infile,mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
     EE = ext_Experiment({}, parameters)
     EE.load_annotation_db()
     mass_accuracy_ratio = EE.KCD.evaluate_mass_accuracy_ratio(mz_landmarks, mode, mz_tolerance_ppm=10)
-    # print("  Mass accuracy is estimated as %2.1f ppm." %(mass_accuracy_ratio*1000000))
+    print("  Mass accuracy is estimated as %2.1f ppm." %(mass_accuracy_ratio*1000000))
     print("\n")
-
 
 def get_file_masstrack_stats(infile, parameters, return_sample=False):
                         #mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000,
@@ -228,30 +222,34 @@ def estimate_min_peak_height(list_input_files, parameters):
     -------
     int, an estimated parameter for min peak_height as half of the min verified landmark peaks.
     '''
-    min_intensity = parameters['min_intensity_threshold']
-    min_timepoints = parameters['min_timepoints']
+
     min_peak_height = parameters['min_peak_height']
     min_min_peak_height = parameters['min_min_peak_height']
-    mz_tolerance_ppm = parameters['mz_tolerance_ppm']
-    dynamic_range = parameters['dynamic_range']
     num_files_to_use = parameters['num_files_to_check']
 
-    min_peak_height = max(min_min_peak_height, min_peak_height/dynamic_range)
+    min_peak_height = max(min_min_peak_height, min_peak_height/parameters['dynamic_range'])
 
     estimated = []
     if num_files_to_use is None:
         selected = list_input_files
     elif len(list_input_files) <= num_files_to_use:
         selected = list_input_files
-    else:
+    elif isinstance(num_files_to_use, int):
         selected = random.sample(list_input_files, num_files_to_use)
+    elif isinstance(num_files_to_use, float) and 0 <= num_files_to_use <= 1:
+        to_select = max(int(num_files_to_use*len(list_input_files)), 10)
+        selected = random.sample(list_input_files, min(to_select, len(list_input_files)))
+    else:
+        raise ValueError("num_files_to_use should be int or float between 0 and 1 or None")
+    
     print("Estimating parameter for min peak_height based on ", selected)
 
-    results = bulk_process(__wrapped_get_file_masstrack_stats, list(zip(selected, [parameters]*len(selected))))
+    results = bulk_process(__wrapped_get_file_masstrack_stats, 
+                           list(zip(selected, [parameters]*len(selected))),
+                           jobs_per_worker=parameters['multicores'])
     for result, infile in zip(results, selected):
         if result is not None:
-            print(result)
-            mz_landmarks, mode, min_peak_height_ = result
+            _, _, min_peak_height_ = result
             estimated.append(min_peak_height_)
         else:
             print("Error in analyzing ", infile)

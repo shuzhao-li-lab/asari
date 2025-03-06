@@ -19,11 +19,14 @@ except ImportError:
     from utils import download_and_unzip_to_pkg_resources
     from feature_graph import FeatureGraph
 
-
 class EI_MS_Library():
-    def __init__(self, library_ID) -> None:
+    def __init__(self, library_ID, multicores=None) -> None:
         self.library_meta = self.retrieve_library_meta(library_ID)
         self.library = None
+        if multicores is None:
+            self.multicores = mp.cpu_count()
+        else:
+            self.multicores = min(multicores, mp.cpu_count())
         self.load_library()
         
     def load_library(self, limit=None):
@@ -38,13 +41,15 @@ class EI_MS_Library():
             library = []
             for x in self.loader(self.library_meta['LIB_PATH']):
                 library.append(x)
-                if len(library) > 1000:
+                if len(library) > limit:
                     break
         else:
             library = list(self.loader(self.library_meta['LIB_PATH']))
 
         processed_library = []
         for spectrum in library:
+            # todo - replace this with matchms pipeline
+            # todo - make the pipeline generic for all MS2 in asari ecosystem.
             spectrum = default_filters(spectrum)
             spectrum = normalize_intensities(spectrum)
             processed_library.append(spectrum)
@@ -72,6 +77,7 @@ class EI_MS_Library():
             on_disk_name = library_to_load['OnDiskName']
             on_disk_path = os.path.join(os.path.dirname(pkg_resources.files('asari')), 'db', on_disk_name)
             if not os.path.exists(on_disk_path):
+                print("Downloading Library...")
                 if library_to_load["URL"].endswith('zip'):
                     download_and_unzip_to_pkg_resources(library_to_load['URL'], 'asari', 'db')
                 elif library_to_load.get('Compression', None) == 'zip':
@@ -81,7 +87,6 @@ class EI_MS_Library():
                 library_to_load["LIB_PATH"] = on_disk_path
                 return library_to_load
             else:
-                print("Exists")
                 library_to_load["LIB_PATH"] = on_disk_path
                 return library_to_load
         else:
@@ -93,27 +98,26 @@ class EI_MS_Library():
     @cache 
     @staticmethod
     def load_library_manifest():
-        return json.load(open(os.path.join(pkg_resources.files('asari'), 'db', 'gcms_libraries.json')))
+        with open(os.path.join(pkg_resources.files('asari'), 'db', 'gcms_libraries.json')) as f:
+            return json.load(f)
     
     def annotate_gc_feature_table(self, feature_table_path, drt=0.5, min_peaks=3, min_shared_peaks=1, min_score_threshold=0.7):
-        
         raw_ftgraph = FeatureGraph.ftgraph_from_ft(feature_table_path)
         coelute_ftgraph = raw_ftgraph.filter_graph(drt=drt)
         extracted_spectra = coelute_ftgraph.extract_fragmentation_spectrum(MIN_PEAKS_EXTRACTION=min_peaks, find_clusters=True)
-        total = len(extracted_spectra) * len(self.library)
         print(f"Total Cluster Spectra: {len(extracted_spectra)}")
         print(f"Total Library Spectra: {len(self.library)}")
-        print(f"Total Comparisons: {total}, this may take some time...")
+        print(f"Total Comparisons: {len(extracted_spectra) * len(self.library)}, this may take some time...")
         matches = []
-        with mp.Pool(mp.cpu_count()) as pool:
+        with mp.Pool(self.multicores) as pool:
             scores = pool.imap(wrapped_cosine, product(extracted_spectra, self.library))
-            pbar = tqdm.tqdm(scores, desc=f"Comparing Spectra, matches found {len(matches)}", total=total)
+            pbar = tqdm.tqdm(scores, desc=f"Comparing Spectra, matches found {len(matches)}", total=len(extracted_spectra) * len(self.library))
             for (extract, library), score in pbar:
                 score = score.tolist()
                 if len(score) == 2:
                     similarity = score[0]
                     match_peaks = score[1]
-                    if similarity > min_score_threshold and match_peaks >= min_shared_peaks:
+                    if similarity >= min_score_threshold and match_peaks >= min_shared_peaks:
                         matches.append({
                             "extract": extract,
                             "library": library,
@@ -123,14 +127,10 @@ class EI_MS_Library():
                         pbar.set_description_str(f"Comparing Spectra, matches found {len(matches)}")
         coelute_ftgraph.map_annotations(matches)
 
-
     @staticmethod
-    def annotate_gc_feature_table_with_library(feature_table_path, library_ID):
-        library = EI_MS_Library(library_ID)
+    def annotate_gc_feature_table_with_library(feature_table_path, library_ID, multicores=None):
+        library = EI_MS_Library(library_ID, multicores=multicores)
         library.annotate_gc_feature_table(feature_table_path)
 
 def wrapped_cosine(job):
     return job, CosineGreedy().pair(job[0], job[1])
-
-if __name__ == '__main__':
-    EI_MS_Library.annotate_gc_feature_table_with_library('/Users/mitchjo/ATLAS/01172025_Oxygen_12C13C_isotope_labeling/Cellpellets/HILICneg/output_asari_project_12721586/preferred_Feature_table.tsv', "MoNA_GCMS")

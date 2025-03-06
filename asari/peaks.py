@@ -68,27 +68,7 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
         wlen, snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold, 
         shared_list), ...]
     '''
-    iters = []
-    min_peak_height = parameters['min_peak_height']
-    min_peak_ratio = parameters['min_peak_ratio']
-    min_prominence_threshold = parameters['min_prominence_threshold']
-    min_intensity_threshold = parameters['min_intensity_threshold']
-    min_fwhm = round( 0.5 * parameters['min_timepoints'] )
-    snr = parameters['signal_noise_ratio']
-    peakshape = parameters['gaussian_shape']
-    wlen = parameters['wlen']            # divided window to the left and to right
-    min_prominence_ratio = 0.02          # only used on very high peaks
-    iteration = False                    # a 2nd round of peak detection if enough remaining datapoints
-    for mass_track in list_mass_tracks:
-        if mass_track['intensity'].max() > min_peak_height:
-            iters.append(
-                (mass_track, number_of_scans, min_peak_height, min_peak_ratio, 
-                min_fwhm, min_prominence_threshold, wlen, 
-                snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold, 
-                )
-            )
-    return iters
-
+    return [(t, number_of_scans, parameters) for t in list_mass_tracks if np.any(t['intensity'] > parameters['min_intensity_threshold'])]
 
 # -----------------------------------------------------------------------------
 # Statistics guided peak detection
@@ -152,12 +132,17 @@ def stats_detect_elution_peaks(job):
     The peakshape is calculated on cleaned mass track.
     SNR is computed on local noise (average of up to 100 nonpeak data points on each side of a peak).
     '''
+    mass_track, number_of_scans, parameters = job
 
-    mass_track, number_of_scans, min_peak_height, \
-        min_peak_ratio, min_fwhm, min_prominence_threshold, \
-        wlen, snr, peakshape, min_prominence_ratio, \
-        iteration, min_intensity_threshold = job
-
+    min_peak_height = parameters['min_peak_height']
+    min_peak_ratio = parameters['min_peak_ratio']
+    min_fwhm = round( 0.5 * parameters['min_timepoints'] )
+    min_intensity_threshold = parameters['min_intensity_threshold']
+    wlen = parameters['wlen']
+    snr = parameters['signal_noise_ratio']
+    peakshape = parameters['gaussian_shape']
+    min_prominence_ratio = 0.02
+    min_prominence_threshold = parameters['min_prominence_threshold']
 
     list_json_peaks, list_peaks = [], []
     list_scans = np.arange(number_of_scans)

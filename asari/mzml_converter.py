@@ -1,5 +1,7 @@
 import os
 import subprocess
+import multiprocessing as mp
+
 from zipfile import ZipFile
 
 import requests
@@ -15,9 +17,10 @@ class mzMLconverter:
     installed = {
     }
 
-    def __init__(self, version="1.4.5", dask_ip=None):
+    def __init__(self, version="1.4.5", dask_ip=False, multicores=None):
         self.version = version
         self.dask_ip = dask_ip
+        self.multicores = multicores if multicores is not None else mp.cpu_count()
         self.install_converter(version)
         self.command_template = self.__conversion_command_template()
 
