@@ -255,10 +255,11 @@ Conda is excellent in handling virtual environments. Because we often use tools 
 
 **What happened to Docker?**
 
-My daily computer has an M2 chip, so that I haven't used Docker for a while. The use of virtual environments (see above) removes a lot of need of Docker.
+Two docker files are provided in the repository, a prod dockerfile and a dev dockerfile. The prod dockerfile is for production use and uses the published versions of Asari suite packages. The dev dockerfile is for development use and installs the main branch from github. This branch should be fully functional and often has new features not present in the release version; however, the dev version is for testing only. 
 
-There's a Dockerfile in GitHub repo and one can build an image from there. There's an older Docker image built on Intel chip at https://hub.docker.com/r/shuzhao/asari.
-This image includes mono and ThermoRawFileParser, which converts Thermo .raw files to .mzML files.
+The images are multi-platform, based on an Debian Buster image. You will need to have Docker installed on your system to use these. 
+
+Both Dockerfiles provide mono and the ThermoRawFileParser, which converts Thermo .raw files to .mzML files. 
 
 Example use
 To launch with volume mapping `$ docker run -v /Users/shuzhao/data:/home -ti shuzhao/asari`.
