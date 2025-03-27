@@ -253,16 +253,30 @@ Anaconda has various channels to distribute conda pacages. After looking into co
 Conda is excellent in handling virtual environments. Because we often use tools of different dependencies, virtual environments are great for preventing conflicts. This screen shot shows asari 1.13.1 installed in conda "base" environment and 1.11.4 in my native system environment.
 ![conda_screen_shot](docs/source/_static/conda_asari_screenshot.png)
 
-**What happened to Docker?**
+**Docker Usage**
 
-Two docker files are provided in the repository, a prod dockerfile and a dev dockerfile. The prod dockerfile is for production use and uses the published versions of Asari suite packages. The dev dockerfile is for development use and installs the main branch from github. This branch should be fully functional and often has new features not present in the release version; however, the dev version is for testing only. 
+The use of virtual environments makes using Docker largely obselete; however, virtual environments do not handle OS-level dependencies well. For example, the ThermoRawFileParser is a C# program that needs to be installed on the system level and MatchMS has strict version requirements. If you are having issues running or installing Asari in your native environment, use one of the dockerfiles as an alternative.
+
+Two docker files are provided in the repository, a prod dockerfile and a dev dockerfile. The prod dockerfile is for production use and uses the published versions of Asari suite packages. The dev dockerfile is for development use and installs the main Asari branch from github. This branch should be fully functional and often has new features not present in the release version; however, the dev version is for testing only. 
 
 The images are multi-platform, based on an Debian Buster image. You will need to have Docker installed on your system to use these. 
 
 Both Dockerfiles provide mono and the ThermoRawFileParser, which converts Thermo .raw files to .mzML files. 
 
+To build the container, you will need to run the following command in the terminal:
+
+`docker build -t <IMAGE_NAME> -f <DOCKERFILE> .` from within the Asari directory.
+
+Then you can interact with the container using `docker run -ti <IMAGE_NAME> bash`. 
+
+Note that docker essentially partitions your computer into separate environments, so any data you want to use in the container will need to be mounted as a volume. See below for examples on processing data with the container. You can pass the directory with your data `<INPUT_DATA>` and mount it as `<CONTAINER_PATH>` in the container by running:
+
+` docker run -v <INPUT_DATA>:<CONTAINER_PATH> -ti <IMAGE_NAME> bash`.
+
+See below for examples on processing data with the container. 
+ 
 Example use
-To launch with volume mapping `$ docker run -v /Users/shuzhao/data:/home -ti shuzhao/asari`.
+To launch with volume mapping `$ docker run -v /Users/shuzhao/data:/home -ti <shuzhao/asari>`.
 
 In the container, ThermoRawFileParser is under `/usr/local/thermo/`.
 ```
