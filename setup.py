@@ -47,6 +47,6 @@ setup(
                             'asari_gui=asari.gui:main_gui'],
     },
 
-  python_requires='>=3.7,<3.12',
+  python_requires='>=3.7',
   install_requires=requirements,
 )
