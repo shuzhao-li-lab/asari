@@ -250,11 +250,24 @@ class ext_Experiment:
 
     def process_all_GC(self):
         self.CMAP = CompositeMap(self)
-        sample_run_order = self.determine_acquisition_order()
-        mapping = self.associate_stds_samples(sample_run_order)
-        self.mapping = mapping
-        self.populate_RI_lookup(mapping)
-        #self.convert_to_RI(mapping)
+        retention_index_information = pd.read_csv(self.parameters['retention_index_standards'])
+        sample_names = set([x.name for x in self.all_samples])
+        tripped = False
+        for column in retention_index_information:
+            if column in sample_names:
+                print("Assuming RI Samples are Present - Will Align with Sample Method")
+                tripped = True
+                break
+        if not tripped:
+            print("Assuming Columns are Batch Substrings - Will Align with Batch Method")
+        
+        if tripped:
+            sample_run_order = self.determine_acquisition_order()
+            mapping = self.associate_stds_samples(sample_run_order)
+            self.mapping = mapping
+            self.populate_RI_lookup(mapping)
+        else:
+            print("To Implement")
         self.CMAP.construct_mass_grid()
         self.CMAP.build_composite_tracks_GC()
         self.CMAP.global_peak_detection()
