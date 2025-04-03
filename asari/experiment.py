@@ -250,10 +250,12 @@ class ext_Experiment:
 
     def determine_batches(self):
         sample_to_batch = {}
-        sample_names = set([(k, v['name']) for k,v in self.sample_registry.items()])
+        sample_names = set([v['name'] for _, v in self.sample_registry.items()])
         retention_index_information = pd.read_csv(self.parameters['retention_index_standards'])
         for column in retention_index_information:
+            column = column[-3:].rstrip()
             for sample in sample_names:
+                #print(column, sample, column in sample)
                 if column in sample and sample not in sample_to_batch:
                     sample_to_batch[sample] = column
                 elif column in sample and sample in sample_to_batch:
@@ -262,19 +264,15 @@ class ext_Experiment:
         for sample in sample_names:
             if sample not in sample_to_batch:
                 print(f"Warning: {sample} unmapped!")
+        return sample_to_batch
 
     def process_all_GC(self):
         self.CMAP = CompositeMap(self)
         retention_index_information = pd.read_csv(self.parameters['retention_index_standards'])
         sample_names = set([(k, v['name']) for k,v in self.sample_registry.items()])
-        print(self.all_samples)
-        print(self.all_sample_instances)
         tripped = False
         for column in retention_index_information:
-            print(column)
-            print(sample_names)
             if column in sample_names:
-                
                 print("Assuming RI Samples are Present - Will Align with Sample Method")
                 tripped = True
                 break
@@ -288,12 +286,11 @@ class ext_Experiment:
             self.populate_RI_lookup(mapping)
         else:
             sample_run_order = self.determine_batches()
+            print(sample_run_order)
             print("Work in Progress")
+            exit()
 
 
-
-
-            print("To Implement")
         self.CMAP.construct_mass_grid()
         self.CMAP.build_composite_tracks_GC()
         self.CMAP.global_peak_detection()
