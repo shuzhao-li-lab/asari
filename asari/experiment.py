@@ -285,11 +285,12 @@ class ext_Experiment:
             self.mapping = mapping
             self.populate_RI_lookup(mapping)
         else:
+            print("batching")
             sample_run_order = self.determine_batches()
-            print(sample_run_order)
-            print("Work in Progress")
-            exit()
-
+            print("mapping")
+            self.mapping = sample_run_order
+            print("populating")
+            self.populate_RI_lookup(sample_run_order)
 
         self.CMAP.construct_mass_grid()
         self.CMAP.build_composite_tracks_GC()
