@@ -344,8 +344,10 @@ def single_sample_EICs_(job):
     #todo, maybe job should be a dict or something, else, we can just pass the parameters right?
 
     sample_id, infile, outfile, parameters = job
-    try:
+    if True:
         if parameters['reuse_intermediates']:
+            if os.path.exists(os.path.join(parameters['reuse_intermediates'], 'pickle')): 
+                parameters['reuse_intermediates'] = os.path.join(parameters['reuse_intermediates'], 'pickle')
             for file in os.listdir(parameters['reuse_intermediates']):
                 if os.path.basename(file).split(".")[0] == os.path.basename(outfile).split(".")[0]:
                     print("Reusing Intermediate: %s." %file)
@@ -430,21 +432,21 @@ def single_sample_EICs_(job):
                             new['acquisition_time'], 
                             new if parameters['database_mode'] == 'memory' else {}, 
                             parameters['compress'])} 
-    except Exception as _:
-        print("Failed to extract: %s." %os.path.basename(infile))
-        return {sample_id: ('failed', # status:mzml_parsing
-                            'failed', # status:eic
-                            None, # outfile
-                            None, # max_scan_number
-                            None, # rt_numbers
-                            None, # rt_times
-                            None, # track_mzs
-                            None, # number_anchor_mz_pairs
-                            None, # anchor_mz_pairs
-                            None, # acquisition_time
-                            None, # sample_data
-                            parameters['compress'] # compress
-                            )}
+    #except Exception as _:
+    #    print("Failed to extract: %s." %os.path.basename(infile))
+    #    return {sample_id: ('failed', # status:mzml_parsing
+    #                        'failed', # status:eic
+    #                        None, # outfile
+    #                        None, # max_scan_number
+    #                        None, # rt_numbers
+    #                        None, # rt_times
+    #                        None, # track_mzs
+    #                        None, # number_anchor_mz_pairs
+    #                        None, # anchor_mz_pairs
+    #                        None, # acquisition_time
+    #                        None, # sample_data
+    #                        parameters['compress'] # compress
+    #                        )}
 
 # -----------------------------------------------------------------------------
 # main workflow for `xic`
