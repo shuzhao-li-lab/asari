@@ -20,7 +20,7 @@ setup(
   long_description_content_type="text/markdown",
   url='https://github.com/shuzhao-li/asari',
   license='BSD 3-Clause',
-  keywords='metabolomics bioinformatics mass spectrometry',
+  keywords='metabolomics bioinformatics mass spectrometry TESTING',
 
   classifiers=[
     'Intended Audience :: Developers',
