@@ -69,12 +69,22 @@ PARAMETERS = {
 
     # for annotation
     'anno': True,                       # to annotate features
-    'check_isotope_ratio': False,
-    'GC_Database': "MoNA_GCMS",         # path to GC database, 
-    'GC_Database_Manifest': None,       # 'memory' or 'ondisk' to implement
+    'check_isotope_ratio': False,       # if true, enable SMIRFE scoring (for non-commercial use only, to-implement)
+
     #computational improvements
     'compress': False,                  # if True, compress intermediate files ondisk
     'storage_format': 'pickle',         # 'pickle' or 'json', json is safer but bigger
+    
+    # GC-MS EI-MS Extraction
+    'coelute_threshold': 0.5,           # features within this value w.r.t. retention time are considered co-eluting
+
+    # GC-MS EI-MS Annotation
+    'GC_Database': "MoNA_GCMS",         # path to GC database, 
+    'GC_Database_Manifest': None,       # 'memory' or 'ondisk' to implement
+    'min_peaks': 3,                     # minimum number of peaks in an experimental EI-MS spectrum
+    'min_peaks_common': 1,              # annotations require at least this many peaks in common
+    'min_score_threshold': 0.70,        # annotations require a cosine similarity of this value or greater.
+    'similarity_metric': 'cosine',       # determines which similarity metric to use
 
     # default output names
     'output_feature_table': 'Feature_table.tsv',

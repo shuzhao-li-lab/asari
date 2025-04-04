@@ -389,8 +389,8 @@ class ext_Experiment:
     def annotate_GC(self):
         pref_ft = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
         full_ft = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
-        EI_MS_Library.annotate_gc_feature_table_with_library(pref_ft, self.parameters['GC_Database'])
-        EI_MS_Library.annotate_gc_feature_table_with_library(full_ft, self.parameters['GC_Database'])
+        EI_MS_Library.annotate_gc_feature_table_with_library(pref_ft, self.parameters['GC_Database'], coelute_threshold=self.parameters['coelute_threshold'])
+        EI_MS_Library.annotate_gc_feature_table_with_library(full_ft, self.parameters['GC_Database'], coelute_threshold=self.parameters['coelute_threshold'])
 
     def annotate(self):
         '''

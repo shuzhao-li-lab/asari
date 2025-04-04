@@ -407,21 +407,50 @@ def update_params_from_CLI(parameters, args, debug_print=True):
     else:
         debug_print(to_print=f"Using default retention_index_standards: {parameters['retention_index_standards']}")
 
-    if args.GC_Database_Manifest:
-        parameters['GC_Database_Manifest'] = args.GC_Database_Manifest
-        debug_print(to_print=f"Setting GC_Database_Manifest to {parameters['GC_Database_Manifest']}")
-    else:
-        parameters['GC_Database_Manifest'] = None
-        debug_print(to_print=f"Using default GC_Database_Manifest.")
+    #if args.GC_Database_Manifest:
+    #    parameters['GC_Database_Manifest'] = args.GC_Database_Manifest
+    #    debug_print(to_print=f"Setting GC_Database_Manifest to {parameters['GC_Database_Manifest']}")
+    #else:
+    #    parameters['GC_Database_Manifest'] = None
+    #    debug_print(to_print=f"Using default GC_Database_Manifest.")
 
     if args.GC_Database:
         parameters['GC_Database'] = args.GC_Database
-        EI_MS_Library.load_library_manifest()
+        #EI_MS_Library.load_library_manifest()
         debug_print(to_print=f"Setting GC_Database to {parameters['GC_Database']}")
     else:
         debug_print(to_print=f"Using default GC_Database: {parameters['GC_Database']}")
 
-    print(args.run)
+    if args.coelute_threshold:
+        parameters['coelute_threshold'] = args.coelute_threshold
+        debug_print(to_print=f"Setting coelute_threshold to {parameters['coelute_threshold']}")
+    else:
+        debug_print(to_print=f"Using default coelute_threshold to {parameters['coelute_threshold']}")
+
+    if args.min_peaks:
+        parameters['min_peaks'] = args.min_peaks
+        debug_print(to_print=f"Setting min_peaks to {parameters['min_peaks']}")
+    else:
+        debug_print(to_print=f"Setting min_peaks to {parameters['min_peaks']}")
+
+    if args.min_peaks_common:
+        parameters['min_peaks_common'] = args.min_peaks_common
+        debug_print(to_print=f"Setting min_peaks to {parameters['min_peaks_common']}")
+    else:
+        debug_print(to_print=f"Setting min_peaks to {parameters['min_peaks_common']}")
+
+    if args.min_score_threshold:
+        parameters['min_score_threshold'] = args.min_score_threshold
+        debug_print(to_print=f"Setting min_peaks to {parameters['min_score_threshold']}")
+    else:
+        debug_print(to_print=f"Setting min_peaks to {parameters['min_score_threshold']}")
+
+    if args.similarity_metric:
+        parameters['similarity_metric'] = args.similarity_metric
+        debug_print(to_print=f"Setting min_peaks to {parameters['similarity_metric']}")
+    else:
+        debug_print(to_print=f"Setting min_peaks to {parameters['similarity_metric']}")
+
     if args.run:
         parameters['run'] = args.run.rstrip()
         debug_print(to_print=f"Setting run to {parameters['run']}")
@@ -513,6 +542,10 @@ def build_parser():
             help='Path to GC database, or GCMS database name for retrieval')
     parser.add_argument('--GC_Database_Manifest', type=str,
             help='Path to GC database manifest file')
+    parser.add_argument('--coelute_threshold', type=float,
+            help='Features whose retention time is less than this are co-eluting')
+    parser.add_argument('--similarity_metric', type=str,
+            help='determines EI-MS similarity method')
     try:
         args = parser.parse_args()
     except:
