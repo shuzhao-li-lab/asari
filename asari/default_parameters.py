@@ -80,7 +80,7 @@ PARAMETERS = {
 
     # GC-MS EI-MS Annotation
     'GC_Database': "MoNA_GCMS",         # path to GC database, 
-    'GC_Database_Manifest': None,       # 'memory' or 'ondisk' to implement
+    #'GC_Database_Manifest': None,       # 'memory' or 'ondisk' to implement
     'min_peaks': 3,                     # minimum number of peaks in an experimental EI-MS spectrum
     'min_peaks_common': 1,              # annotations require at least this many peaks in common
     'min_score_threshold': 0.70,        # annotations require a cosine similarity of this value or greater.

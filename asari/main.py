@@ -546,6 +546,12 @@ def build_parser():
             help='Features whose retention time is less than this are co-eluting')
     parser.add_argument('--similarity_metric', type=str,
             help='determines EI-MS similarity method')
+    parser.add_argument('--min_peaks', type=int,
+            help='min number of peaks in EI-MS spectra')
+    parser.add_argument('--min_peaks_common', type=int,
+            help='min number of peaks that must be shared for annotation')
+    parser.add_argument('--min_score_threshold', type=float,
+            help='min score for annotation')
     try:
         args = parser.parse_args()
     except:
