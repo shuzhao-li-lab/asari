@@ -116,6 +116,17 @@ class ext_Experiment:
             return sorted(sample_order_by_timestamp, key=lambda x: x[1])
         except:
             return sorted(sample_order_by_timestamp, key=lambda x: x[0])
+        
+    def associate_stds_batches(self, batch_map):
+        found = set()
+        association = {}
+        for sample_name, batch_id in batch_map.items():
+            for sample_id , sample_info in self.sample_registry.items():
+                if sample_id not in found and sample_info['name'] == sample_name:
+                    sample_info['batch_id'] = batch_id
+                    association[sample_id] = batch_id
+                    found.add(sample_id)
+        return association
     
     def associate_stds_samples(self, sample_run_order):
         association = {}
@@ -199,6 +210,55 @@ class ext_Experiment:
         #    self.CMAP.mock_rentention_alignment()
         #self.CMAP.build_composite_tracks()
         self.CMAP.global_peak_detection()
+
+    def populate_RI_lookup_batch(self, batch_map):
+        batch_to_sample_map = {}
+        for sample_name, batch_id in batch_map.items():
+            if batch_id not in batch_to_sample_map:
+                batch_to_sample_map[batch_id] = []
+            batch_to_sample_map[batch_id].append(sample_name)
+        RI_list = pd.read_csv(self.parameters['retention_index_standards'])
+        RI_maps = {}
+        RI_models = {}
+        reverse_RI_models = {} 
+        for batch, sample_nos in batch_to_sample_map.items():
+            RI_list[batch] = RI_list[batch] * 60
+            alkane_indices = RI_list['Index']
+            for sample_no in sample_nos:
+                print(f"\tAligning: {sample_no} in batch {batch}")
+                #RI_maps[sample_no] = {}
+                sample_instance = SimpleSample(self.sample_registry[sample_no], experiment=self)
+                prev_index, next_index = None, None
+                prev_rt, next_rt = None, None
+                RTs, indexes, scan_nos = [], [], []
+
+                for rt, scan_no in zip(sample_instance.list_retention_time, sample_instance.list_scan_numbers):
+                    RTs.append(rt)
+                    scan_nos.append(scan_no)
+                    for index, index_rt in zip(alkane_indices, RI_list[batch]):
+                        #index, index_rt = int(index), float(index_rt)
+                        if rt > index_rt:
+                            prev_index, prev_rt = index, index_rt
+                        elif rt <= index_rt:
+                            _, next_rt = index, index_rt
+                            break
+                    if next_rt is None:
+                        next_rt = max(sample_instance.list_retention_time) * 1.1
+                        _ = max(RI_list['Index']) + 1
+                    RI_value = 100 * (prev_index + ((rt - prev_rt)/(next_rt - rt)))
+                    indexes.append(RI_value)
+
+                sample_instance.list_retention_indices = indexes
+                    #RI_maps[sample_no][rt] = RI_value
+                model = lowess(indexes, RTs)
+                model2 = lowess(indexes, scan_nos)
+                newx, newy = list(zip(*model))
+                interf = interpolate.interp1d(newx, newy, fill_value="extrapolate", bounds_error=False)
+                RI_models[sample_no] = interf
+                newx, newy = list(zip(*model2))
+                reverse_RI_models[sample_no] = interpolate.interp1d(newy, newx, fill_value="extrapolate", bounds_error=False)
+        self.RI_models = RI_models
+        self.reverse_RI_models = reverse_RI_models
 
     def populate_RI_lookup(self, sample_map):
         RI_maps = {}
@@ -285,12 +345,10 @@ class ext_Experiment:
             self.mapping = mapping
             self.populate_RI_lookup(mapping)
         else:
-            print("batching")
             sample_run_order = self.determine_batches()
-            print("mapping")
-            self.mapping = sample_run_order
-            print("populating")
-            self.populate_RI_lookup(sample_run_order)
+            mapping = self.associate_stds_batches(sample_run_order)
+            self.mapping = mapping
+            self.populate_RI_lookup_batch(mapping)
 
         self.CMAP.construct_mass_grid()
         self.CMAP.build_composite_tracks_GC()

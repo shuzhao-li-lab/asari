@@ -406,6 +406,10 @@ class CompositeMap:
         for sample in self.experiment.all_samples[1:]:      # first sample is reference
             sample.rt_cal_dict, sample.reverse_rt_cal_dict = {}, {}
 
+    def perform_index_alignment2(self):
+        pass
+
+
     def perform_index_alignment(self):
         mzDict = dict(self.MassGrid['mz'])
         mzlist = list(self.MassGrid.index)                          # this gets indices as keys, per mass track
@@ -504,7 +508,7 @@ class CompositeMap:
         self.composite_mass_tracks = result
 
     def build_composite_tracks_GC(self):
-        self.perform_index_alignment()
+        self.perform_index_alignment2()
 
     def START(self):
         # Spanning Tree Alignment of Retention Time (START)
