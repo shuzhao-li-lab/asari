@@ -407,8 +407,16 @@ class CompositeMap:
             sample.rt_cal_dict, sample.reverse_rt_cal_dict = {}, {}
 
     def perform_index_alignment2(self):
-        pass
+        # what we need to do here to make it a proper solution is this. Essentially, this is no different
+        # from retention time alignment, except, we need to align in RI space. Before we did this with a 
+        # hack, but what we need to do is essentiall the exact same as the LC-MS workflow, but we need
+        # to just put the retention times through the mapping function and then undo it.
 
+        # so obvious to do it that way now...
+
+
+        mzDict = dict(self.MassGrid['mz'])
+        pass
 
     def perform_index_alignment(self):
         mzDict = dict(self.MassGrid['mz'])
