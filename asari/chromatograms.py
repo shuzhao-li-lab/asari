@@ -321,9 +321,14 @@ def get_thousandth_bins(mzTree, mz_tolerance_ppm=5, min_timepoints=5, min_peak_h
 # retention time alignment
 # -----------------------------------------------------------------------------
 
+
 def rt_lowess_calibration(good_landmark_peaks, 
                           selected_reference_landmark_peaks, 
-                          sample_rt_numbers, reference_rt_numbers, num_iterations, sample_name, outdir):
+                          sample_rt_numbers, 
+                          reference_rt_numbers, 
+                          num_iterations, 
+                          sample_name, 
+                          outdir):
     '''
     This is the alignment function of retention time between samples.
     Use LOWESS, Locally Weighted Scatterplot Smoothing, to create 
