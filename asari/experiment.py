@@ -76,6 +76,7 @@ class ext_Experiment:
         self.check_isotope_ratio = self.parameters['check_isotope_ratio']
         self.database_mode = parameters['database_mode']
         self.reference_sample_id = self.get_reference_sample_id()
+        self.list_sample_indices = {}
         
     def get_reference_sample_id(self):
         '''
@@ -221,10 +222,13 @@ class ext_Experiment:
         RI_maps = {}
         RI_models = {}
         reverse_RI_models = {} 
+
         for batch, sample_nos in batch_to_sample_map.items():
             RI_list[batch] = RI_list[batch] * 60
             alkane_indices = RI_list['Index']
             for sample_no in sample_nos:
+                if sample_no in RI_models:
+                    continue
                 print(f"\tAligning: {sample_no} in batch {batch}")
                 #RI_maps[sample_no] = {}
                 sample_instance = SimpleSample(self.sample_registry[sample_no], experiment=self)
@@ -247,9 +251,9 @@ class ext_Experiment:
                         _ = max(RI_list['Index']) + 1
                     RI_value = 100 * (prev_index + ((rt - prev_rt)/(next_rt - rt)))
                     indexes.append(RI_value)
+                self.list_sample_indices[sample_no] = indexes
 
                 sample_instance.list_retention_indices = indexes
-                    #RI_maps[sample_no][rt] = RI_value
                 model = lowess(indexes, RTs)
                 model2 = lowess(indexes, scan_nos)
                 newx, newy = list(zip(*model))
@@ -328,6 +332,7 @@ class ext_Experiment:
 
     def process_all_GC(self):
         self.CMAP = CompositeMap(self)
+        self.CMAP.construct_mass_grid()
         retention_index_information = pd.read_csv(self.parameters['retention_index_standards'])
         sample_names = set([(k, v['name']) for k,v in self.sample_registry.items()])
         tripped = False
@@ -344,15 +349,15 @@ class ext_Experiment:
             mapping = self.associate_stds_samples(sample_run_order)
             self.mapping = mapping
             self.populate_RI_lookup(mapping)
+            self.CMAP.build_composite_tracks_GC()
         else:
             sample_run_order = self.determine_batches()
             mapping = self.associate_stds_batches(sample_run_order)
             self.mapping = mapping
             self.populate_RI_lookup_batch(mapping)
-
-        self.CMAP.construct_mass_grid()
-        self.CMAP.build_composite_tracks_GC()
+            self.CMAP.build_composite_tracks_GC()
         self.CMAP.global_peak_detection()
+
 
     def export_all(self, anno=True, mode="LC"):
         '''
@@ -389,8 +394,9 @@ class ext_Experiment:
     def annotate_GC(self):
         pref_ft = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
         full_ft = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
-        EI_MS_Library.annotate_gc_feature_table_with_library(pref_ft, self.parameters['GC_Database'], coelute_threshold=self.parameters['coelute_threshold'])
-        EI_MS_Library.annotate_gc_feature_table_with_library(full_ft, self.parameters['GC_Database'], coelute_threshold=self.parameters['coelute_threshold'])
+        library = EI_MS_Library(self.parameters)
+        library.annotate_gc_feature_table(pref_ft)
+        library.annotate_gc_feature_table(full_ft)
 
     def annotate(self):
         '''

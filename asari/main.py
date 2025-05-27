@@ -435,21 +435,21 @@ def update_params_from_CLI(parameters, args, debug_print=True):
 
     if args.min_peaks_common:
         parameters['min_peaks_common'] = args.min_peaks_common
-        debug_print(to_print=f"Setting min_peaks to {parameters['min_peaks_common']}")
+        debug_print(to_print=f"Setting min_peaks_common to {parameters['min_peaks_common']}")
     else:
-        debug_print(to_print=f"Setting min_peaks to {parameters['min_peaks_common']}")
+        debug_print(to_print=f"Setting min_peaks_common to {parameters['min_peaks_common']}")
 
     if args.min_score_threshold:
         parameters['min_score_threshold'] = args.min_score_threshold
-        debug_print(to_print=f"Setting min_peaks to {parameters['min_score_threshold']}")
+        debug_print(to_print=f"Setting min_score_threshold to {parameters['min_score_threshold']}")
     else:
-        debug_print(to_print=f"Setting min_peaks to {parameters['min_score_threshold']}")
+        debug_print(to_print=f"Setting min_score_threshold to {parameters['min_score_threshold']}")
 
     if args.similarity_metric:
         parameters['similarity_metric'] = args.similarity_metric
-        debug_print(to_print=f"Setting min_peaks to {parameters['similarity_metric']}")
+        debug_print(to_print=f"Setting similarity_metric to {parameters['similarity_metric']}")
     else:
-        debug_print(to_print=f"Setting min_peaks to {parameters['similarity_metric']}")
+        debug_print(to_print=f"Setting similarity_metric to {parameters['similarity_metric']}")
 
     if args.run:
         parameters['run'] = args.run.rstrip()

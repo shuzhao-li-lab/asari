@@ -24,7 +24,8 @@ except ImportError:
 class EI_MS_Library():
     def __init__(self, parameters) -> None:
         self.parameters = parameters
-        self.library_path = parameters['GC_Database']
+        self.library_path = "/Users/mitchjo/Projects/Asari/Asari/asari/db/MoNA-export-GC-MS_Spectra.msp"
+        #self.library_path = parameters['GC_Database']
         self.library = self.load_library()
         self.multicores = parameters['multicores']    
     
@@ -50,11 +51,12 @@ class EI_MS_Library():
         else:
             raise Exception("Download Not Implemented")
                 
-    def annotate_gc_feature_table(self, feature_table_path):
-        coelute_threshold = self.parameters['coelute_threshold']
-        min_peaks = self.parameters['min_peaks']
-        min_peaks_common = self.parameters['min_peaks_common']
-        min_score_threshold = self.parameters['min_score_threshold']
+    def annotate_gc_feature_table(self, feature_table_path, coelute_threshold=None):
+        if coelute_threshold is None:
+            coelute_threshold = self.parameters['coelute_threshold']
+        min_peaks = self.parameters.get('min_peaks', 1)
+        min_peaks_common = self.parameters.get('min_peaks_common', 1)
+        min_score_threshold = self.parameters.get('min_score_threshold', 0.70)
 
         raw_ftgraph = FeatureGraph.ftgraph_from_ft(feature_table_path)
         coelute_ftgraph = raw_ftgraph.filter_graph(drt=coelute_threshold)
@@ -64,23 +66,20 @@ class EI_MS_Library():
         print(f"Total Library Spectra: {len(self.library)}")
         print(f"Total Comparisons: {len(extracted_spectra) * len(self.library)}, this may take some time...")
 
-        modes = {
-            "cosine": CosineGreedy()
-        }
-        comparator = partial(modes[self.parameters['similarity_metric']])
+        comparator = CosineGreedy()
         matches = []
-        with mp.Pool(self.parameters['multicores']) as pool:
-            scores = pool.imap(comparator, product(extracted_spectra, self.library))
-            pbar = tqdm.tqdm(scores, desc=f"Comparing Spectra, matches found {len(matches)}", total=len(extracted_spectra) * len(self.library))
-            for (extract, library), score in pbar:
+        pbar = tqdm.tqdm(extracted_spectra)
+        for extracted_spectrum in pbar:
+            for lib in self.library:
+                score = comparator.pair(extracted_spectrum, lib)
                 score = score.tolist()
                 if len(score) == 2:
                     similarity = score[0]
                     match_peaks = score[1]
                     if similarity >= min_score_threshold and match_peaks >= min_peaks_common:
                         matches.append({
-                            "extract": extract,
-                            "library": library,
+                            "extract": extracted_spectrum,
+                            "library": lib,
                             "similarity": similarity,
                             "match_peaks": match_peaks,
                             "method": self.parameters['similarity_metric']
