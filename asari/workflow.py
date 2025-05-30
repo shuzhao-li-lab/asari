@@ -159,7 +159,6 @@ def register_samples(list_input_files):
     '''
     return {ii : {'sample_id': ii, 'input_file': file} for ii, file in enumerate(list_input_files)}
 
-
 def create_export_folders(parameters, time_stamp=None):
     '''
     Creates local directory for storing temporary files and output result.
@@ -201,7 +200,6 @@ def create_export_folders(parameters, time_stamp=None):
             os.mkdir(parameters['tmp_pickle_dir'])
         except FileExistsError:
             print("Warning, pickle directory exists, this is normal in some circumstances")
-
 
 def remove_intermediate_pickles(parameters):
     '''

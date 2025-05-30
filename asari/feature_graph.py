@@ -8,6 +8,7 @@ from matchms.filtering import default_filters, normalize_intensities
 
 class FeatureGraph():
     def __init__(self, ft_path, graph=None):
+        self.drt = 0.5
         if ft_path:
             self.ft_path = ft_path
             self.df = pd.read_csv(self.ft_path, sep='\t')
@@ -18,6 +19,7 @@ class FeatureGraph():
             self.graph = self.ft_to_graph()
         self.clusters = None
         self.reverse_clusters = None
+        
 
         assert self.graph is not None, "Either a graph or a feature table path must be provided"
         assert self.df is not None, "Either a graph or a feature table path must be provided"
@@ -44,15 +46,16 @@ class FeatureGraph():
             for y in df_dict:
                 if x['id_number'] != y['id_number']:
                     m = FeatureGraph.metric(x, y)
-                    G.add_edges_from([(x['id_number'], y['id_number'], {"dmz": m[0], "drt": m[1]})])
+                    if m[1] < self.drt * 10:
+                        G.add_edges_from([(x['id_number'], y['id_number'], {"dmz": m[0], "drt": m[1]})])
         return G
     
     def graph_to_ft(self):
         return pd.DataFrame([d for n, d in self.graph.nodes(data=True)])
     
-    def filter_graph(self, drt=.5):
+    def filter_graph(self, drt=None):
         H = nx.Graph()
-        selected_edges = [(u, v) for u, v, d in tqdm.tqdm(self.graph.edges(data=True), desc="Filtering Edges") if d['drt'] < drt]
+        selected_edges = [(u, v) for u, v, d in tqdm.tqdm(self.graph.edges(data=True), desc="Filtering Edges") if d['drt'] < self.drt]
         H.add_edges_from(selected_edges)
         return FeatureGraph.ftgraph_from_graph(self.ft_path, graph=H)
 
