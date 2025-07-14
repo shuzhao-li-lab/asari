@@ -22,13 +22,53 @@ except ImportError:
     from feature_graph import FeatureGraph
 
 class EI_MS_Library():
+    """
+    Handles loading and annotation of EI-MS spectra from a local or remote MoNA library.
+    """
+    MONA_MSP_URL = (
+        "https://mona.fiehnlab.ucdavis.edu/rest/downloads/retrieve/a09f9652-c7bc-48b2-9dd9-0dc4343bb360"
+    )
+
     def __init__(self, parameters) -> None:
         self.parameters = parameters
-        self.library_path = "/Users/mitchjo/Projects/Asari/Asari/asari/db/MoNA-export-GC-MS_Spectra.msp"
-        #self.library_path = parameters['GC_Database']
+        # Allow overriding via CLI (--GC_Database)
+        user_db = self.parameters.get('GC_Database')
+        if user_db:
+            self.library_path = user_db
+        else:
+            # Default location inside package resources under `db/`
+            pkg_root = pkg_resources.files(__name__).parent
+            db_dir = pkg_root / 'db'
+            self.library_path = str(db_dir)
+        self.multicores = parameters.get('multicores', mp.cpu_count())
+        self._ensure_library()
         self.library = self.load_library()
-        self.multicores = parameters['multicores']    
     
+    def _ensure_library(self):
+        """
+        Ensure the MSP library exists locally. If not, download and extract from MoNA.
+        """
+        # If path is a file or directory and exists, nothing to do
+        if os.path.exists(self.library_path):
+            return
+
+        # Otherwise, attempt to download and unzip the MoNA export
+        try:
+            raise NotImplementedError
+            # print(f"Downloading MoNA GC-MS library from {self.MONA_MSP_URL} ...")
+            # download_and_unzip_to_pkg_resources will extract under <package>/data by default;
+            # here we target subdir 'db'
+            # download_and_unzip_to_pkg_resources(
+            #     self.MONA_MSP_URL,
+            #     package=__name__.split('.')[0],
+            #     subdir='db'
+            # )
+            # After extraction, the .msp file should be in the same path
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to download or extract MoNA library: {e}"
+            )
+
     @staticmethod
     def extract_spectra(msp_paths):
         combined_spectra = []
@@ -38,18 +78,26 @@ class EI_MS_Library():
         return combined_spectra
 
     def load_library(self):
+        """
+        Load spectra from MSP files in the library_path.
+        Supports both a single .msp file or a directory containing multiple .msp files.
+        """
         if os.path.isdir(self.library_path):
             msp_paths = []
-            abs_lib_path = os.path.abspath(self.library_path)
             for filename in os.listdir(self.library_path):
-                if filename.lower().endswith(".msp"):
-                    msp_paths.append(abs_lib_path, filename)
+                if filename.lower().endswith('.msp'):
+                    msp_paths.append(
+                        os.path.join(self.library_path, filename)
+                    )
             return self.extract_spectra(msp_paths)
+
         elif os.path.isfile(self.library_path):
-            if self.library_path.lower().endswith(".msp"):
-                return self.extract_spectra([os.path.abspath(self.library_path)])
-        else:
-            raise Exception("Download Not Implemented")
+            if self.library_path.lower().endswith('.msp'):
+                return self.extract_spectra([self.library_path])
+
+        raise FileNotFoundError(
+            f"EI-MS library not found at {self.library_path}."
+        )
                 
     def annotate_gc_feature_table(self, feature_table_path, coelute_threshold=None):
         if coelute_threshold is None:

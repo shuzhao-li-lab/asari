@@ -215,61 +215,58 @@ class ext_Experiment:
     def populate_RI_lookup_batch(self, batch_map):
         batch_to_sample_map = {}
         for sample_name, batch_id in batch_map.items():
-            batch_to_sample_map.setdefault(batch_id, []).append(sample_name)
-
+            if batch_id not in batch_to_sample_map:
+                batch_to_sample_map[batch_id] = []
+            batch_to_sample_map[batch_id].append(sample_name)
         RI_list = pd.read_csv(self.parameters['retention_index_standards'])
         RI_maps = {}
         RI_models = {}
-        reverse_RI_models = {}
+        reverse_RI_models = {} 
 
         for batch, sample_nos in batch_to_sample_map.items():
-            RI_list[batch] *= 60
-            alkane_indices = RI_list['Index'].values
-            batch_rts = RI_list[batch].values
-            batch_length = len(batch_rts)
-
+            RI_list[batch] = RI_list[batch] * 60
+            alkane_indices = RI_list['Index']
             for sample_no in sample_nos:
+                last_index = 0
                 if sample_no in RI_models:
                     continue
                 print(f"\tAligning: {sample_no} in batch {batch}")
-
+                #RI_maps[sample_no] = {}
                 sample_instance = SimpleSample(self.sample_registry[sample_no], experiment=self)
-                sample_rts = sample_instance.list_retention_time
-                sample_scans = sample_instance.list_scan_numbers
-                sample_length = len(sample_rts)
+                prev_index, next_index = None, None
+                prev_rt, next_rt = None, None
+                RTs, indexes, scan_nos = [], [], []
 
-                indexes = []
-                i = 0  # pointer for batch_rts
-
-                for rt in sample_rts:
-                    while i < batch_length and rt > batch_rts[i]:
-                        i += 1
-
-                    if i == 0:
-                        prev_index, prev_rt = alkane_indices[0] - 1, batch_rts[0] * 0.9
-                    else:
-                        prev_index, prev_rt = alkane_indices[i - 1], batch_rts[i - 1]
-
-                    if i == batch_length:
-                        next_index, next_rt = alkane_indices[-1] + 1, batch_rts[-1] * 1.1
-                    else:
-                        next_index, next_rt = alkane_indices[i], batch_rts[i]
-
-                    RI_value = 100 * (prev_index + ((rt - prev_rt) / (next_rt - prev_rt)))
+                for rt, scan_no in zip(sample_instance.list_retention_time, sample_instance.list_scan_numbers):
+                    RTs.append(rt)
+                    scan_nos.append(scan_no)
+                    for jj, (index, index_rt) in enumerate(zip(alkane_indices, RI_list[batch])):
+                        if jj < last_index:
+                            continue
+                        if rt > index_rt:
+                            prev_index, prev_rt = index, index_rt
+                            last_index = prev_index
+                        elif rt <= index_rt:
+                            _, next_rt = index, index_rt
+                            break
+                    if next_rt is None:
+                        next_rt = max(sample_instance.list_retention_time) * 1.1
+                        _ = max(RI_list['Index']) + 1
+                    RI_value = 100 * (prev_index + ((rt - prev_rt)/(next_rt - rt)))
                     indexes.append(RI_value)
 
                 self.list_sample_indices[sample_no] = indexes
+
                 sample_instance.list_retention_indices = indexes
-
-                #model = lowess(indexes, sample_rts)
-                #model2 = lowess(indexes, sample_scans)
-
-                #newx, newy = zip(*model)
-                RI_models[sample_no] = 1 #.interp1d(newx, newy, fill_value="extrapolate", bounds_error=False)
-
-                #newx, newy = zip(*model2)
-                reverse_RI_models[sample_no] = 1 #interpolate.interp1d(newy, newx, fill_value="extrapolate", bounds_error=False)
-
+                RI_models[sample_no] = 1
+                reverse_RI_models[sample_no] = 1
+                #model = lowess(indexes, RTs)
+                #model2 = lowess(indexes, scan_nos)
+                #newx, newy = list(zip(*model))
+                #interf = interpolate.interp1d(newx, newy, fill_value="extrapolate", bounds_error=False)
+                #RI_models[sample_no] = interf
+                #newx, newy = list(zip(*model2))
+                #reverse_RI_models[sample_no] = interpolate.interp1d(newy, newx, fill_value="extrapolate", bounds_error=False)
         self.RI_models = RI_models
         self.reverse_RI_models = reverse_RI_models
 
@@ -352,7 +349,8 @@ class ext_Experiment:
                 break
         if not tripped:
             print("Assuming Columns are Batch Substrings - Will Align with Batch Method")
-        
+            print("Batch Method is Not As Tested!!!")
+
         if tripped:
             sample_run_order = self.determine_acquisition_order()
             mapping = self.associate_stds_samples(sample_run_order)
