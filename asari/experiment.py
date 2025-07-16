@@ -337,6 +337,7 @@ class ext_Experiment:
         return sample_to_batch
 
     def process_all_GC(self):
+        print("HERE THERE!!!")
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
         retention_index_information = pd.read_csv(self.parameters['retention_index_standards'])
@@ -365,7 +366,6 @@ class ext_Experiment:
             self.CMAP.build_composite_tracks_GC()
         self.CMAP.global_peak_detection()
 
-
     def export_all(self, anno=True, mode="LC"):
         '''
         Export all files.
@@ -377,7 +377,8 @@ class ext_Experiment:
             if true, generate annotation files, export CMAP pickle and do QC plot;
             else skip annotating.
         '''
-        if self.parameters['workflow'] == "LC":
+        print(self.parameters['workflow'])
+        if self.parameters['workflow'] == "LC" or mode.rstrip().upper() == "LC":
             self.CMAP.MassGrid.to_csv(
                 os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
             if anno:
@@ -389,7 +390,8 @@ class ext_Experiment:
             self.export_feature_tables()
             self.export_log()
             self.export_readme()
-        elif self.parameters['workflow'] == "GC":
+        elif self.parameters['workflow'] == "GC" or mode.rstrip().upper() == "GC":
+            print("HERE!")
             self.export_feature_tables()
             self.CMAP.MassGrid.to_csv(
                 os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']))
@@ -397,6 +399,9 @@ class ext_Experiment:
                 self.annotate_GC()
             self.export_log()
             self.export_readme()
+        else:
+            print("EXITING")
+            exit()
 
     def annotate_GC(self):
         pref_ft = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])

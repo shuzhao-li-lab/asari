@@ -557,212 +557,7 @@ class CompositeMap:
         self.composite_mass_tracks = result
 
     def build_composite_tracks_GC(self):
-        print("indexing")
         self.perform_index_alignment2()
-
-    def START(self):
-        # Spanning Tree Alignment of Retention Time (START)
-
-        # An alternative to traditional alignment based on a reference sample, 
-        # rather, each sample may have a chain of reference samples back to the 
-        # master reference sample. This requires more alignments per sample possibly,
-        # but allows similar samples to align to one another before attempting to align
-        # across sample types. For instance, each blank can align with other blanks, 
-        # and the blank most like a biological sample, will be used to align the blanks
-        # to study samples. 
-
-        # First we need to estimate the 'goodness' of each possible alignment. This needs 
-        # to be fast / simple enough to evaluate for all samples. Here we will use the number of 
-        # shared anchor peaks to start.
-        import seaborn as sns
-        import matplotlib.pyplot as plt
-        import networkx as nx
-        import numpy as np
-        
-        CAL_MIN_PEAK_HEIGHT = self.experiment.parameters['cal_min_peak_height']
-        MIN_PEAK_NUM = self.experiment.parameters['peak_number_rt_calibration']
-        NUM_ITERATIONS = self.experiment.parameters['num_lowess_iterations']
-        MIN_C_SELECTIVITY = 0.99
-
-        mg = self.MassGrid.copy()
-        selectivities = calculate_selectivity(mg['mz'], self.experiment.parameters['mz_tolerance_ppm'])
-        mgd_inv = {i: x for i, x in enumerate(self.MassGrid.to_dict(orient='records'))}
-        mgd = {}
-        for index, mz_row in mgd_inv.items():
-            for k, v in mz_row.items():
-                if not pd.isna(v):
-                    mgd[(k, v)] = index
-
-
-        # find all candidate peaks for alignment
-        reference_peaks_per_sample = {}
-        for sample in self.experiment.all_samples:
-            reference_peaks_per_sample[sample.name] = []
-            mass_tracks = SimpleSample.get_mass_tracks_for_sample(sample)
-            for index, mass_track in enumerate(mass_tracks):
-                mapped_index = mgd.get((sample.name, index), None)
-                if mapped_index is not None:
-                    if selectivities[mapped_index] > MIN_C_SELECTIVITY:
-                        Upeak = quick_detect_unique_elution_peak(mass_track['intensity'], 
-                                    min_peak_height=CAL_MIN_PEAK_HEIGHT, 
-                                    min_fwhm=3, 
-                                    min_prominence_threshold_ratio=0.2)
-                        if Upeak:
-                            Upeak['mz'] = round(mass_track['mz'], 3)
-                            Upeak['index'] = mapped_index
-                            reference_peaks_per_sample[sample.name].append(Upeak)                    
-
-        def __similarity(s1, s2):
-            # similarity must give back a metric, the larger the metric, the better the alignment
-            # similarity must be order invariant, i.e., F(s1, s2) = F(s2, s1)
-            # spanning tree wants costs not similarity, so -F(s1, s2) is the cost of 
-            # aligning s1, s2.
-
-            s1_indices = set([x['index'] for x in reference_peaks_per_sample[s1.name]])
-            s2_indices = set([x['index'] for x in reference_peaks_per_sample[s2.name]])
-            return len(s1_indices.intersection(s2_indices))/len(s1_indices.union(s2_indices))
-        
-        def __cost(s1, s2):
-            return 1-__similarity(s1, s2)
-        
-        def __pairwise_cost(samples):
-            # cost is the negative of similarity
-            return np.array([[__cost(s1, s2) for s2 in samples] for s1 in samples], dtype=np.float16)
-
-        def __pairwise_similarity(samples):
-            return np.array([[__similarity(s1, s2) for s2 in samples] for s1 in samples], dtype=np.float16)
-
-        def __distance_to_graph(dmatrix):
-            # convert to networkx graph
-            # use networkx to find the minimum spanning tree
-            # return graph
-            # note that __similarity is positive, but spanning
-            # tree assumes that the edge weights are cost.
-            return nx.from_numpy_array(dmatrix)
-
-        def __find_graph_root(dgraph):
-            # the root is the node that is the closest to all
-            # other nodes. It is the most central node. We can
-            # remove a "layer" of leaf nodes until we are left 
-            # with the root of the graph. 
-            root = nx.center(dgraph)[0]
-            a, b = __align_pair(self.experiment.all_samples[root], self.experiment.all_samples[root])
-            self.experiment.all_samples[root].rt_cal_dict = a
-            self.experiment.all_samples[root].reverse_rt_cal_dict = b
-            return nx.center(dgraph)[0]
-
-        def __pairwise_traverse(distance_graph, root, target):
-            for path in nx.shortest_simple_paths(distance_graph, source=root, target=target):
-                return path # its a spanning tree, there is only one path
-
-        @lru_cache(maxsize=128)
-        def __align_pair(s1, s2):
-            print("Aligning: ", s1.name, " to ", s2.name)
-            peaks_mzs_s1 = set([x['mz'] for x in reference_peaks_per_sample[s1.name]])
-            peaks_mzs_s2 = set([x['mz'] for x in reference_peaks_per_sample[s2.name]])
-            shared_peak_mzs = peaks_mzs_s1.intersection(peaks_mzs_s2)
-            print("\tPeaks - Shared / Sample 1 / Sample 2: ", len(shared_peak_mzs), " / ", len(peaks_mzs_s1), " / ", len(peaks_mzs_s2))
-            reference_pairs = {}
-            for peak in reference_peaks_per_sample[s1.name]:
-                if peak['mz'] in shared_peak_mzs:
-                    if peak['mz'] not in reference_pairs:
-                        reference_pairs[peak['mz']] = [None, None]
-                    reference_pairs[peak['mz']][0] = peak['apex']
-            for peak in reference_peaks_per_sample[s2.name]:
-                if peak['mz'] in shared_peak_mzs:
-                    reference_pairs[peak['mz']][1] = peak['apex']
-
-            X, Y = [], []
-            for mz, (apex1, apex2) in reference_pairs.items():
-                X.append(apex1)
-                Y.append(apex2)
-
-            from .chromatograms import clean_rt_calibration_points
-            reference_rt_numbers = s1.rt_numbers
-            sample_rt_numbers = s2.rt_numbers
-            reference_rt_bound = max(s1.rt_numbers)
-            sample_rt_bound = max(s2.rt_numbers)
-            rt_rightend_ = 1.1 * sample_rt_bound
-            xx, yy = [-0.1 * sample_rt_bound,]*3, [-0.1 * sample_rt_bound,]*3
-            rt_cal = clean_rt_calibration_points([(x[0], x[1]) for x in reference_pairs.values()])
-            xx += [L[0] for L in rt_cal] + [rt_rightend_]*3
-            yy += [L[1] for L in rt_cal] + [rt_rightend_]*3
-
-            from statsmodels.nonparametric.smoothers_lowess import lowess
-            lowess_predicted = __hacked_lowess__(yy, xx, frac=0.5, it=3, xvals=sample_rt_numbers)            
-            # scale frac parameter like a sigmoid of number of data points when len(rt_cal) is in (50,150).
-
-            interf = interpolate.interp1d(lowess_predicted, sample_rt_numbers, fill_value="extrapolate")
-            ref_interpolated = interf( reference_rt_numbers )
-            lowess_predicted = [ii for ii in lowess_predicted]
-
-            rt_cal_dict = dict([(x,y) for x,y in zip(sample_rt_numbers, lowess_predicted) if x!=y and 0<=y<=reference_rt_bound] )
-
-            ref_interpolated = [ii for ii in ref_interpolated]
-            reverse_rt_cal_dict = dict([(x,y) for x,y in zip(reference_rt_numbers, ref_interpolated) if x!=y and 0<=y<=sample_rt_bound])
-                
-            return rt_cal_dict, reverse_rt_cal_dict
-
-        alignment_cache = {}
-        def __align(path):
-            # walk each path, start with root as s1 and neighbors as
-            # various s2s. Then continue by letting those s2 be s1s, 
-            # and their neighbor nodes various s2s. 
-            #
-            # dictionary mapping scan nos in s1 to s2
-            calibrated_domain = self.experiment.all_samples[path[0]].rt_numbers
-            for i in range(len(path)-1):
-                s1, s2 = self.experiment.all_samples[path[i]], self.experiment.all_samples[path[i+1]]
-                calibrated_domain = [__align_pair(s1, s2)[0].get(x, x) for x in calibrated_domain]
-            calibrated_domain = [int(round(x)) for x in calibrated_domain]
-            rt_cal_dict = dict(zip(self.experiment.all_samples[path[0]].rt_numbers, calibrated_domain))
-            reverse_rt_cal_dict = dict(zip(calibrated_domain, self.experiment.all_samples[path[0]].rt_numbers))
-            s2.rt_cal_dict, s2.reverse_rt_cal_dict, s2.is_rt_aligned = rt_cal_dict, reverse_rt_cal_dict, True
-            return rt_cal_dict, reverse_rt_cal_dict
-
-        # With this similarity metric, build the similarity matrix between all samples.
-        # Note that similarity is simple the inverse of distance, so simply flip sign to get
-        # a distance matrix.
-
-        # build similarity matrix
-        # sample_similarity = np.zeros((len(self.experiment.all_samples), len(self.experiment.all_samples)), dtype=np.float64)
-
-        D = __pairwise_cost(self.experiment.all_samples)
-        G = __distance_to_graph(D)
-        T = nx.minimum_spanning_tree(G)
-        root = __find_graph_root(T)
-        for node in G.nodes:
-            if node != root:
-                path = __pairwise_traverse(T, root, node)
-                __align(path)
-
-
-        mzDict = dict(self.MassGrid['mz'])
-        mzlist = list(self.MassGrid.index)                          # this gets indices as keys, per mass track
-        basetrack = np.zeros(self.rt_length, dtype=np.int64)        # self.rt_length defines max rt number
-        
-        _comp_dict = {}
-        for k in mzlist: 
-            _comp_dict[k] = basetrack.copy()
-
-        for SM in self.experiment.all_samples:
-            SM.is_rt_aligned = True
-            list_mass_tracks = SimpleSample.get_mass_tracks_for_sample(SM)
-            for k in mzlist:
-                ref_index = self.MassGrid[SM.name][k]
-                if not pd.isna(ref_index): # ref_index can be NA 
-                    _comp_dict[k] += remap_intensity_track( 
-                        list_mass_tracks[int(ref_index)]['intensity'],  
-                        basetrack.copy(), SM.rt_cal_dict 
-                        )
-        result = {}
-        for k,v in _comp_dict.items():
-            result[k] = {
-                'id_number': k, 
-                'mz': mzDict[k], 
-                'intensity': v
-                }
-        self.composite_mass_tracks = result
 
     def build_composite_tracks(self):
         '''
@@ -1120,6 +915,7 @@ class CompositeMap:
         '''
         Initiate and populate self.FeatureTable, each sample per column in dataframe.
         '''
+        print("Extracting Feature Table")
         peak_area_methods = {
             'auc': self.get_peak_area_auc,
             'sum': self.get_peak_area_sum,
@@ -1132,7 +928,7 @@ class CompositeMap:
             if not self.experiment.parameters['drop_unaligned_samples'] or SM.is_rt_aligned:
                 FeatureTable[SM.name] = self.extract_features_per_sample(SM, peak_area_function)
         print("\nFeature Table: ", FeatureTable.shape)
-        self.FeatureTable = FeatureTable
+        self.FeatureTable = FeatureTable 
 
 
     def extract_features_per_sample(self, sample, peak_area_function):

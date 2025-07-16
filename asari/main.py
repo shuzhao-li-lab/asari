@@ -466,7 +466,7 @@ def build_parser():
     # The CLI takes priority over an optional parameter file which takes priority over
     # any of the default_parameters.
 
-    parser = argparse.ArgumentParser(description='asari, LC-MS metabolomics data preprocessing')
+    parser = argparse.ArgumentParser(description='asari, GC and LC-MS metabolomics data preprocessing')
 
     parser.add_argument('-v', '--version', action='version', version=__version__, 
             help='print version and exit')

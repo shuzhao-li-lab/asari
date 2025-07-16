@@ -50,6 +50,7 @@ def workflow_setup(list_input_files, parameters):
     return EE
 
 def workflow_cleanup(EE, list_input_files, parameters):
+    print(parameters)
     if not parameters['keep_intermediates'] and parameters['database_mode'] != 'memory':
         remove_intermediate_pickles(parameters)
 
@@ -96,7 +97,10 @@ def process_project(list_input_files, parameters):
     }
     print(f'Processing Experiment Using {parameters["workflow"]} Workflow...')
     workflow_export_mode[parameters['workflow']][0]()
+    print("Exporting...")
     EE.export_all(anno=parameters['anno'], mode=workflow_export_mode[parameters['workflow']][1])
+    print("Done")
+    exit()
     workflow_cleanup(EE, list_input_files, parameters)
 
 def read_project_dir(directory, file_pattern='.mzML'):
