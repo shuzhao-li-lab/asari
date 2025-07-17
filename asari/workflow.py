@@ -95,12 +95,8 @@ def process_project(list_input_files, parameters):
         'LC': (EE.process_all_LC, 'LC'),
         'LC_start': (EE.process_all_LC_start, 'LC')
     }
-    print(f'Processing Experiment Using {parameters["workflow"]} Workflow...')
     workflow_export_mode[parameters['workflow']][0]()
-    print("Exporting...")
     EE.export_all(anno=parameters['anno'], mode=workflow_export_mode[parameters['workflow']][1])
-    print("Done")
-    exit()
     workflow_cleanup(EE, list_input_files, parameters)
 
 def read_project_dir(directory, file_pattern='.mzML'):

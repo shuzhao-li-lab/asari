@@ -3,6 +3,8 @@ import tqdm
 import networkx as nx
 import pandas as pd 
 import numpy as np
+import json
+
 from itertools import combinations
 
 import matchms
@@ -16,18 +18,10 @@ class EI_MS_Library():
     """
     Handles loading and annotation of EI-MS spectra from a local or remote MoNA library.
     """
-    MONA_MSP_URL = (
-        "https://mona.fiehnlab.ucdavis.edu/rest/downloads/retrieve/a09f9652-c7bc-48b2-9dd9-0dc4343bb360"
-    )
 
     def __init__(self, parameters) -> None:
-        # kind of hackey
-        database_path = parameters.get('GC_Database')
-        if database_path is None:
-            assert os.path.exists(database_path) is True
-            raise Exception("Need to provide path to database MSP or directory of MSPs")
-
         # load required params
+        # this should not have default paths
         self.library_path = str(parameters.get('GC_Database'))
         self.multicores = parameters.get('multicores', 4)
         self.min_peaks = parameters.get('min_peaks', 1)
@@ -136,7 +130,6 @@ class SpectraExtractor():
         df = pd.read_csv(self.ft_path, sep='\t')
         graph = self.__ft_to_graph(df)
         components = nx.connected_components(graph)
-
         feature_to_cluster = {}
         cluster_to_feature = {}
         for clique_id, component_graph in enumerate(components):
@@ -175,22 +168,70 @@ class SpectraExtractor():
                         processed_spectra.append(selected_spectrum)
         self.spectra = processed_spectra
     
-    def apply_annotations(self, annotations, to_extract=['compound_name', 'inchikey', 'formula']):
+    def apply_annotations(self, annotations):
         ft_dict = {x['id_number']: x for x in pd.read_csv(self.ft_path, sep="\t").to_dict(orient='records')}
-        for match in annotations:
+        annotations_for_output = []
+        for ii, match in enumerate(annotations):
+            annot_id = f"annot_{ii}"
             cluster_id = match['extract'].metadata['cluster_id']
             for feature in self.clusters[cluster_id]:
-                annotation = []
-                for field in to_extract:
-                    annotation.append(match['library'].metadata.get(field, 'Not Found'))
-                    annotation.append(match['similarity'])
-                    annotation.append(match['match_peaks'])
-                    if "annotations" not in ft_dict[feature]:
-                        ft_dict[feature]["annotations"] = [annotation]
-                    else:
-                        ft_dict[feature]["annotations"].append(annotation)
+                annotation = {
+                    'compound_name': match['library'].metadata.get('compound_name', None),
+                    'inchikey': match['library'].metadata.get('inchikey', None),
+                    'formula': match['library'].metadata.get('formula', None),
+                    'similarity': match['similarity'],
+                    'match_peaks': match['match_peaks'],
+                    'cluster_id': cluster_id,
+                    'annot_id': annot_id,
+                }
+                annotations_for_output.append(annotation)
+        serialized_annotations = self.save_graph(annotations_for_output)
+        for cluster_id, cluster_data in serialized_annotations.items():
+            best_annotation = (None, 0, 0, 0)
+            for _, (annotation, combo_score, score, min_peaks) in cluster_data['best_annotations'].items():
+                if combo_score > best_annotation[1]:
+                    best_annotation = (annotation, combo_score, score, min_peaks)
+            if best_annotation[0] is not None:
+                for feature in cluster_data['features']:
+                    if "annotation_score" not in ft_dict[feature]:
+                        ft_dict[feature]["annotation_inchikey"] = annotation['inchikey']
+                        ft_dict[feature]["annotation_name"] = annotation['compound_name']
+                        ft_dict[feature]["annotation_score"] = annotation['similarity']
+                        ft_dict[feature]["annotation_peak_match"] = annotation['match_peaks']
         self.df = pd.DataFrame([d for n, d in ft_dict.items()])
         self.df.to_csv(self.ft_path.replace(".tsv", "_annotated_gc_beta.tsv"), sep='\t', index=False)
+        self.save_graph(annotations_for_output)
+
+    def save_graph(self, annotations):
+        serialized_clusters = {}
+        for cluster_id in self.clusters:
+            serialized_clusters[cluster_id] = {
+                "annotations": {
+                    'compound_name': {},
+                    'inchikey': {},
+                    'formula': {},
+                },
+                "best_annotations": {
+                    'compound_name': (None, 0, 0, 0),
+                    'inchikey': (None, 0, 0, 0),
+                    'formula': (None, 0, 0, 0)
+                },
+                "features": list(self.clusters[cluster_id])
+            }
+        for annotation in annotations:
+            score = annotation['similarity']
+            min_peaks = annotation['match_peaks']
+            for z in ['compound_name', 'inchikey', 'formula']:
+                if score > serialized_clusters[annotation['cluster_id']]["annotations"][z].get(annotation[z], [0])[0]:
+                    serialized_clusters[annotation['cluster_id']]["annotations"][z][annotation[z]] = (score, min_peaks)
+
+                if score > serialized_clusters[annotation['cluster_id']]["best_annotations"].get(z, [None, 0])[1] * min_peaks:
+                    serialized_clusters[annotation['cluster_id']]["best_annotations"][z] = (annotation, score * min_peaks, score, min_peaks)
+
+        with open(self.ft_path.replace(".tsv", "_annotation_graph.json"), 'w+') as out_fh:
+            json.dump(serialized_clusters, out_fh, indent=4)
+
+        return serialized_clusters
 
     @staticmethod
     def classify_edges(m1, m2, ppm) -> list[str]:
