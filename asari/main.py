@@ -151,7 +151,7 @@ SPECIAL_RULES = {
 PATH_VARS = {
     "input": (os.path.isdir, "Input must be a directory."),
     "target": (os.path.isfile, "Target file not found."),
-    "output": (lambda p: True, ""),  # allow auto-creation
+    "outdir": (lambda p: True, ""),  # allow auto-creation
     "reference": (os.path.exists, "Reference file not found."),
     "reuse_intermediates": (os.path.isdir, "Reuse intermediates must be a directory."),
     "spikeins": (os.path.isfile, "Spikein file not found."),
@@ -228,7 +228,7 @@ def _build_parser() -> argparse.Namespace:
         "-m --mode": dict(),
         "--ppm": dict(type=int),
         "-i --input": dict(),
-        "-o --output": dict(),
+        "-o --outdir": dict(),
         "-j --project": dict(dest="project_name"),
         "-c --multicores": dict(type=int),
         "--reference": dict(),

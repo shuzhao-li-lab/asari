@@ -176,9 +176,9 @@ def create_export_folders(parameters, time_stamp=None):
         return None
 
     if time_stamp is None:
-        parameters['outdir'] = '_'.join([parameters['outdir'], parameters['project_name'], parameters['time_stamp_for_dir']])
-    else:
-        parameters['outdir'] = '_'.join([parameters['outdir'], parameters['project_name'], time_stamp])
+        time_stamp = parameters['time_stamp_for_dir']
+    
+    parameters['outdir'] = os.path.join(os.path.abspath(parameters['outdir']), parameters['project_name'] + "_" + time_stamp)
 
 
     os.makedirs(parameters['outdir'])
