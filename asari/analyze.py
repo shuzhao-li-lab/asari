@@ -14,7 +14,7 @@ from .mass_functions import flatten_tuplelist
 from .utils import bulk_process
 
 def analyze_single_sample(infile, 
-            mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000,
+            # mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000,
             parameters={}):
     '''
     Analyze single mzML file and print statistics. Used by asari subcommand `analyze`.
@@ -36,7 +36,8 @@ def analyze_single_sample(infile,
         not used, just place holder to use ext_Experiment class.
     '''
     print("Analysis of %s\n" %infile)
-    mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(infile,mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
+    mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(
+        infile, parameters, return_sample=False)
     EE = ext_Experiment({}, parameters)
     EE.load_annotation_db()
     mass_accuracy_ratio = EE.KCD.evaluate_mass_accuracy_ratio(mz_landmarks, mode, mz_tolerance_ppm=10)
@@ -44,8 +45,6 @@ def analyze_single_sample(infile,
     print("\n")
 
 def get_file_masstrack_stats(infile, parameters, return_sample=False):
-                        #mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000,
-                        #return_sample=False):
     '''
     Extract mass tracks from a file and get statistics.
     The ionization_mode is assumed on one scan, thus not supporting polarity switch in a single file.
@@ -87,34 +86,35 @@ def get_file_masstrack_stats(infile, parameters, return_sample=False):
 
         Mass accuracy was estimated on 203 matched values as -0.4 ppm.
 
-    To-do: to add output info on instrumentation.
+    To-do: to add output info on instrumentation. Not sure how pymzml handles the info if at all.
     '''
     mz_tolerance_ppm = parameters['mz_tolerance_ppm']
     min_intensity = parameters['min_intensity_threshold']
     min_timepoints = parameters['min_timepoints']
     min_peak_height = parameters['min_peak_height']
-
-    
     
     new = {'sample_id': infile, 'input_file': infile, 'ion_mode': '',}
     list_mass_tracks = []
-    
-    jj = 0
+
+    jj, L1, L2 = 0, 0, 0
     with pymzml.run.Reader(infile) as exp:
         for spec in exp:
-            if spec.ms_level == 1:                          # MS Level 1 only
+            if spec.ms_level == 1:
+                L1 += 1
                 if spec["positive scan"]:
                     ionization_mode = 'pos'
                     jj += 1
                 else:
                     ionization_mode = 'neg'
+            elif spec.ms_level == 2:
+                L2 += 1
 
-    xdict = extract_massTracks_(infile, 
+    xdict = extract_massTracks_(infile,                 # MS level 1
                 mz_tolerance_ppm=mz_tolerance_ppm, 
                 min_intensity=min_intensity, 
                 min_timepoints=min_timepoints, 
                 min_peak_height=min_peak_height)
-    new['list_scan_numbers'] = xdict['rt_numbers']            # list of scans, starting from 0
+    new['list_scan_numbers'] = xdict['rt_numbers']        # list of scans, starting from 0
     new['list_retention_time'] = xdict['rt_times']        # full RT time points in sample
     ii = 0
     # already in ascending order of m/z from extract_massTracks_, get_thousandth_regions
@@ -151,6 +151,8 @@ def get_file_masstrack_stats(infile, parameters, return_sample=False):
     else:
         print("of which %d is positive ionization mode." %jj)
     print("Assuming ionization mode is %s.\n" %ionization_mode)
+
+    print("Total number of MS2 spectra: %d" %L2)
 
     print("Maxium retention time (sec): %f" %max(new['list_retention_time']))
     print("m/z range: (min %f, median %f, max %f)\n" %(np.min(all_mz), np.median(all_mz), np.max(all_mz)))
