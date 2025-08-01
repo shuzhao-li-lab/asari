@@ -437,7 +437,7 @@ def build_parser():
     # The CLI takes priority over an optional parameter file which takes priority over
     # any of the default_parameters.
 
-    parser = argparse.ArgumentParser(description='asari, LC-MS metabolomics data preprocessing')
+    parser = argparse.ArgumentParser(description='asari, MS metabolomics data preprocessing')
 
     parser.add_argument('-v', '--version', action='version', version=__version__, 
             help='print version and exit')
@@ -567,7 +567,7 @@ def run_asari(parameters, args=None):
 
 def main():
     '''
-    asari, Trackable and scalable Python program for high-resolution LC-MS metabolomics data preprocessing.
+    asari, Trackable and scalable Python program for high-resolution MS metabolomics data preprocessing.
 
         * analyze: analyze a single mzML file to print summary of statistics and recommended parameters.
         * process: LC-MS data preprocessing

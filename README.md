@@ -315,7 +315,7 @@ The asari suite includes
 - mass2chem: common utilities in interpreting mass spectrometry data, annotation (https://github.com/shuzhao-li-lab/mass2chem)
 - khipu: a Python library for generalized, low-level annotation of MS metabolomics (https://github.com/shuzhao-li-lab/khipu)
 - JMS: Json's Metabolite Services. Search functions, annotation and metabolic models (https://github.com/shuzhao-li-lab/JMS)
-- pcpfm pipeline (https://github.com/shuzhao-li-lab/PythonCentricPipelineForMetabolomics)
+- Full pipeline (pcpfm) including asari processing, QC and annotation based on standards and MS/MS (https://github.com/shuzhao-li-lab/PythonCentricPipelineForMetabolomics)
 - asari-x: the eXposome miner (to be released)
 
 
