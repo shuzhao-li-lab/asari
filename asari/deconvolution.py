@@ -443,6 +443,7 @@ class MSMSAnnotator:
     user-provided spectral libraries.
     """
     def __init__(self, feature_table_dict, sample_cols, params):
+        print(params)
         if not all([load_from_msp, Spectrum, CosineGreedy]):
             raise ImportError("MatchMS library is not installed. Cannot perform GC-MS annotation.")
         
@@ -459,7 +460,12 @@ class MSMSAnnotator:
 
     @property
     def spectral_libraries(self):
-        return self.params.get("spectral_libraries", [])
+        libs = self.params.get("GC_Database", [])
+        print("lib: ", libs)
+        if isinstance(libs, str):
+            return [libs]
+        else:
+            return libs
 
     @property
     def min_matched_peaks(self):
@@ -740,7 +746,7 @@ class AsariProcessor:
     # --- Configuration Properties ---
     @property
     def mode(self):
-        return self.params.get("mode", "gc").lower()
+        return self.params.get("workflow", "gc").lower()
 
     @property
     def id_column(self):
@@ -826,7 +832,7 @@ class AsariProcessor:
             return False
         
         if self.mode == 'gc':
-            annotator = MSMSAnnotator(self.feature_dict, self.samples, self.gc_annotation_params)
+            annotator = MSMSAnnotator(self.feature_dict, self.samples, self.params)
             self.deconvoluted_compounds = annotator.annotate_compounds(self.deconvoluted_compounds, self.num_cores)
         elif self.mode == 'lc':
             annotator = FormulaAnnotator(self.lc_annotation_params)
