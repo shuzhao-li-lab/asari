@@ -10,6 +10,7 @@ import time
 import os
 import pickle
 import zipfile
+import sqlite3
 
 import json_tricks as json 
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
@@ -50,7 +51,6 @@ def workflow_setup(list_input_files, parameters):
     return EE
 
 def workflow_cleanup(EE, list_input_files, parameters):
-    print(parameters)
     if not parameters['keep_intermediates'] and parameters['database_mode'] != 'memory':
         remove_intermediate_pickles(parameters)
 
@@ -281,170 +281,294 @@ def batch_EIC_from_samples_(sample_registry, parameters):
     single_sample_EICs_
     '''
     sample_data = {}
-    for sample_datum in bulk_process(single_sample_EICs_, 
+    for sample_datum in bulk_process(single_sample_EICs, 
                                      make_iter_parameters(sample_registry, parameters), 
-                                     dask_ip=parameters['dask_ip'], 
-                                     jobs_per_worker=parameters['multicores']):
+                                     dask_ip=parameters['dask_ip']):
         sample_data.update(sample_datum)
     return sample_data
 
-def single_sample_EICs_(job):
-    '''
-    Extraction of mass tracks from a single sample. Used by multiprocessing in batch_EIC_from_samples_.
-    `shared_dict` is used to pass back information, thus critical. Designed here as
-    sample_id: 
-        ('status:mzml_parsing', 'status:eic', outfile,
-        max_scan_number, list_scan_numbers, list_retention_time,
-        track_mzs,
-        number_anchor_mz_pairs, anchor_mz_pairs, 
-        dict({mass tracks}) )
+def _save_to_database(sample_data, db_path):
+    """
+    Saves a sample's data into the appropriate tables in an SQLite database.
 
-    track_mzs or anchor_mz_pairs are used later for aligning m/z tracks.
-
-    list of scans starts from 0. 
-    
-    `anchor_mz_pairs` are defined as m/z pairs that match to 13C/12C pattern.
-    More anchors mean better coverage of features, helpful to select reference sample.
+    Assumes the database has two tables: 'samples' for metadata and 
+    'mass_tracks' for the detailed track data points.
 
     Parameters
     ----------
-    sample_id : int
-        sample id passed from sample_registry by make_iter_parameters.
-    infile : str
-        input mzML filepath, passed from sample_registry by make_iter_parameters.
-    ion_mode: str
-        from parameter dictionary, marks if acquisition was in positive or negative mode 
-    database_mode: str
-        from parameter dictionary, marks if intermediatesare kept on disk or in memory
-    mz_tolerance_ppm: float
-        from parameter dictionray, the assumed mz resolution of the instrument
-    min_intensity: float
-        peaks below this value are ignored
-    min_timepoints: int
-        then number of time points a peak must span to be considered a peak
-    min_peak_height: float
-        peaks below this height are ignored
-    outfile : str
-        where the output will be written
-        passed from parameter dictionary by make_iter_parameters.
-    shared_dict : dict
-        dictionary object used to pass data btw multiple processing.
+    sample_data : dict
+        The sample data dictionary to save.
+    db_path : str
+        The file path of the SQLite database.
+    """
+    # Use a 'with' statement to ensure the connection is safely managed
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        
+        # Use a transaction to ensure data integrity
+        try:
+            # 1. Insert the sample's metadata into the 'samples' table
+            # Complex Python objects are serialized to JSON strings for storage
+            cursor.execute('''
+                INSERT OR REPLACE INTO samples (
+                    sample_id, name, input_file, data_location, max_scan_number,
+                    rt_numbers, list_retention_time, track_mzs, anchor_mz_pairs, ms2_spectra
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                sample_data.get('sample_id'),
+                sample_data.get('name', os.path.basename(sample_data.get('input_file', ''))),
+                sample_data.get('input_file'),
+                # The data_location will be the URI pointing to this DB record
+                f"sqlite://{os.path.abspath(db_path)}?sample_id={sample_data.get('sample_id')}",
+                sample_data.get('max_scan_number'),
+                json.dumps(sample_data.get('rt_numbers', [])),
+                json.dumps(sample_data.get('list_retention_time', [])),
+                json.dumps(sample_data.get('track_mzs', [])),
+                json.dumps(sample_data.get('anchor_mz_pairs', [])),
+                json.dumps(sample_data.get('ms2_spectra', []))
+            ))
 
-    Updates
-    -------
-    shared_dict : dict
-        dictionary object used to pass data btw multiple processing.
-
-    See also
-    --------
-    batch_EIC_from_samples_, make_iter_parameters
-    '''
-    #todo, maybe job should be a dict or something, else, we can just pass the parameters right?
-
-    sample_id, infile, outfile, parameters = job
-    if True:
-        if parameters['reuse_intermediates']:
-            if os.path.exists(os.path.join(parameters['reuse_intermediates'], 'pickle')): 
-                parameters['reuse_intermediates'] = os.path.join(parameters['reuse_intermediates'], 'pickle')
-            for file in os.listdir(parameters['reuse_intermediates']):
-                if os.path.basename(file).split(".")[0] == os.path.basename(outfile).split(".")[0]:
-                    print("Reusing Intermediate: %s." %file)
-                    new = SimpleSample.load_intermediate(os.path.join(parameters['reuse_intermediates'], file))
-                    return {sample_id: ('passed', 
-                                        'passed', 
-                                        os.path.join(parameters['reuse_intermediates'], file),
-                                        new['max_scan_number'], 
-                                        new['xdict']['rt_numbers'], 
-                                        new['xdict']['rt_times'],
-                                        new['track_mzs'],
-                                        new['number_anchor_mz_pairs'], 
-                                        new['anchor_mz_pairs'],  
-                                        new['acquisition_time'],
-                                        {}, 
-                                        zipfile.is_zipfile(file))} 
+            # 2. Prepare the detailed mass track data for batch insertion
+            track_data_to_insert = []
+            for track in sample_data.get('list_mass_tracks', []):
+                track_id = track.get('id_number')
+                mz = track.get('mz')
                 
-        new = {
-            'sample_id': sample_id, 
-            'input_file': infile, 
-            'ion_mode': parameters['mode'], 
-            'list_mass_tracks': []
-            }        
-        xdict = extract_massTracks_(infile, 
-                    mz_tolerance_ppm=parameters['mz_tolerance_ppm'], 
-                    min_intensity=parameters['min_intensity_threshold'], 
-                    min_timepoints=parameters['min_timepoints'], 
-                    min_peak_height=parameters['min_peak_height'])
-        if xdict['tracks']:
-            audit_fields = "baseline", "noise_level", "scaling_factor", "min_peak_height", "list_intensity"
-            audits = [dict(zip(audit_fields, audit_mass_track(t[1], 
-                                       round(0.5 * parameters['min_timepoints']), 
-                                       parameters['min_intensity_threshold'], 
-                                       parameters['min_peak_height'], 
-                                       parameters['signal_noise_ratio']))) for t in xdict['tracks']]
-            new['list_mass_tracks'] = [{'id_number': ii, 'mz': t[0], 'intensity': t[1], 'audit_results': audits[ii]} for ii, t in enumerate(xdict['tracks'])]
-            print("Extracted %s to %d mass tracks." %(os.path.basename(infile), len(xdict['tracks'])))
+                # Assume intensities correspond 1:1 with scan numbers in xdict
+                # A more robust implementation might store scans directly with intensities
+                scans = sample_data.get('xdict', {}).get('rt_numbers', [])
+                
+                for i, intensity in enumerate(track.get('intensity', [])):
+                    # This assumes the intensity array matches the full scan list
+                    if i < len(scans):
+                        scan_number = scans[i]
+                        track_data_to_insert.append(
+                            (sample_data.get('sample_id'), track_id, mz, scan_number, intensity)
+                        )
+            
+            # 3. Clear any old track data for this sample before inserting new data
+            cursor.execute("DELETE FROM mass_tracks WHERE sample_id = ?", (sample_data.get('sample_id'),))
+            
+            # 4. Perform a batch insert into the 'mass_tracks' table
+            if track_data_to_insert:
+                cursor.executemany('''
+                    INSERT INTO mass_tracks (sample_id, track_id, mz, scan_number, intensity)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', track_data_to_insert)
 
-        anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(new['list_mass_tracks'], mz_tolerance_ppm=parameters['mz_tolerance_ppm'])
-        # find_mzdiff_pairs_from_masstracks is not too sensitive to massTrack format
-        new.update({
+            # Commit the transaction to save all changes
+            conn.commit()
+            
+        except Exception as e:
+            print(f"❌ Database Error: {e}. Rolling back transaction.")
+            conn.rollback()
+            raise # Re-raise the exception after rolling back
+
+def _save_sample_data(data, outfile_base, storage_format, compress):
+    """
+    Handles saving sample data to disk in the specified format, with optional compression.
+    Falls back to uncompressed saving if compression fails.
+    """
+    was_compressed = compress
+    
+    # Determine the file extension and writer function
+    if storage_format == 'pickle':
+        ext = '.pickle'
+        writer = lambda f: pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
+        binary_mode = True
+    elif storage_format == 'json':
+        ext = '.json'
+        writer = lambda f: f.write(json.dumps(data).encode('utf-8'))
+        binary_mode = True # Write bytes to zip
+    else:
+        raise ValueError(f"Unsupported storage format: {storage_format}")
+
+    outfile = outfile_base.replace('.pickle', ext)
+
+    if not compress:
+        with open(outfile, 'wb' if binary_mode else 'w') as f:
+            writer(f)
+        return outfile, was_compressed
+
+    # Attempt to save compressed
+    zip_outfile = outfile_base.replace('.pickle', '.zip')
+    try:
+        with zipfile.ZipFile(zip_outfile, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # The name of the file inside the zip archive
+            arcname = os.path.basename(outfile)
+            with zipf.open(arcname, 'w') as f:
+                writer(f)
+        return zip_outfile, was_compressed
+    except Exception as e:
+        print(f"⚠️ Warning: Compression failed for {os.path.basename(outfile)} ({e}). Saving uncompressed.")
+        # Fallback to uncompressed
+        was_compressed = False
+        with open(outfile, 'wb' if binary_mode else 'w') as f:
+            writer(f)
+        return outfile, was_compressed
+
+def _get_failure_payload(sample_id):
+    """Generates the standard return tuple for a failed job."""
+    return {sample_id: ('failed', 'failed', None, None, None, None, None, None, None, None, {}, False)}
+
+def single_sample_EICs(job):
+    """
+    Extracts mass tracks from a single sample mzML file.
+
+    This function is designed to be used by a multiprocessing pool. It processes
+    a single file, extracts ion chromatograms (mass tracks), identifies 
+    13C/12C isotope pairs (anchor pairs), and saves the result.
+
+    Parameters
+    ----------
+    job : tuple
+        A tuple containing the necessary parameters for processing a single sample:
+        - sample_id (int): A unique identifier for the sample.
+        - infile (str): The full path to the input mzML file.
+        - outfile (str): The base path for the output file (e.g., '.pickle').
+        - parameters (dict): A dictionary of processing parameters, including:
+            - 'reuse_intermediates' (str): Path to look for pre-computed results.
+            - 'mode' (str): Ion mode ('positive' or 'negative').
+            - 'database_mode' (str): 'ondisk' or 'memory'.
+            - 'mz_tolerance_ppm' (float): Mass tolerance in PPM.
+            - 'min_intensity_threshold' (float): Minimum intensity to consider.
+            - 'min_timepoints' (int): Minimum length of a valid mass track.
+            - 'min_peak_height' (float): Minimum peak height for auditing.
+            - 'signal_noise_ratio' (float): S/N ratio for peak auditing.
+            - 'storage_format' (str): 'pickle' or 'json'.
+            - 'compress' (bool): Whether to compress the output file.
+
+    Returns
+    -------
+    dict
+        A dictionary with the sample_id as the key. The value is a tuple 
+        containing the processing results and status:
+        (
+            str,  # 'passed' or 'failed' (mzML parsing status)
+            str,  # 'passed' or 'failed' (EIC status)
+            str,  # Output file path
+            int,  # Maximum scan number
+            list, # List of scan numbers (timepoints)
+            list, # List of retention times
+            list, # List of (m/z, track_index) tuples
+            int,  # Number of anchor m/z pairs found
+            list, # List of anchor m/z pairs
+            float, # Acquisition time in minutes
+            dict, # The extracted data dict (if database_mode=='memory')
+            bool  # True if the output file was successfully compressed
+        )
+    """
+    sample_id, infile, outfile, parameters = job
+
+    try:
+        # 1. Check for and reuse intermediate files if available
+        if interm_dir := parameters.get('reuse_intermediates'):
+            pickle_dir = os.path.join(interm_dir, 'pickle')
+            search_dir = pickle_dir if os.path.exists(pickle_dir) else interm_dir
+            
+            base_name = os.path.basename(outfile).split('.')[0]
+            for file in os.listdir(search_dir):
+                if file.startswith(base_name):
+                    print(f"Reusing intermediate: {file}")
+                    reused_path = os.path.join(search_dir, file)
+                    data = SimpleSample.load_intermediate(reused_path)
+                    return {sample_id: ('passed', 'passed', reused_path,
+                                        data['max_scan_number'], data['xdict']['rt_numbers'],
+                                        data['xdict']['rt_times'], data['track_mzs'],
+                                        data['number_anchor_mz_pairs'], data['anchor_mz_pairs'],
+                                        data['acquisition_time'], {}, zipfile.is_zipfile(reused_path))}
+
+        # 2. Extract mass tracks from the mzML file
+        xdict = extract_massTracks_(
+            infile,
+            mz_tolerance_ppm=parameters['mz_tolerance_ppm'],
+            min_intensity=parameters['min_intensity_threshold'],
+            min_timepoints=parameters['min_timepoints'],
+            min_peak_height=parameters['min_peak_height']
+        )
+        
+        sample_data = {
+            'sample_id': sample_id,
+            'input_file': infile,
+            'ion_mode': parameters['mode'],
+            'list_mass_tracks': []
+        }
+
+        # 3. Audit extracted tracks and format results
+        if xdict['tracks']:
+            #print(f"Extracted {len(xdict['tracks'])} mass tracks from {os.path.basename(infile)}.")
+            audit_fields = ("baseline", "noise_level", "scaling_factor", "min_peak_height", "list_intensity")
+            audits = [
+                dict(zip(audit_fields, audit_mass_track(
+                    t[1], round(0.5 * parameters['min_timepoints']),
+                    parameters['min_intensity_threshold'], parameters['min_peak_height'],
+                    parameters['signal_noise_ratio']
+                ))) for t in xdict['tracks']
+            ]
+            sample_data['list_mass_tracks'] = [
+                {'id_number': i, 'mz': t[0], 'intensity': t[1], 'audit_results': audits[i]}
+                for i, t in enumerate(xdict['tracks'])
+            ]
+
+        # 4. Find anchor pairs (e.g., 13C/12C isotopes)
+        anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(
+            sample_data['list_mass_tracks'], mz_tolerance_ppm=parameters['mz_tolerance_ppm']
+        )
+        
+        # 5. Assemble final data dictionary
+        sample_data.update({
             'anchor_mz_pairs': anchor_mz_pairs,
             'number_anchor_mz_pairs': len(anchor_mz_pairs),
             'xdict': xdict,
-            'track_mzs': [(t[0], ii) for ii, t in enumerate(xdict['tracks'])],
+            'track_mzs': [(t[0], i) for i, t in enumerate(xdict['tracks'])],
             'ms2_spectra': xdict['ms2_spectra'],
-            'max_scan_number': max(xdict['rt_numbers']),
+            'max_scan_number': max(xdict['rt_numbers']) if xdict['rt_numbers'] else 0,
             'acquisition_time': xdict['acquisition_time']
         })
 
-        #todo - clean this up
-        data_filepath = outfile
-        if parameters['database_mode'] == 'ondisk':
-            if not parameters['compress']:
-                if parameters['storage_format'] == 'pickle':
-                    data_filepath = outfile
-                    with open(outfile, 'wb') as f:
-                        pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
-                elif parameters['storage_format'] == 'json':
-                    data_filepath = outfile.replace(".pickle", ".json")
-                    with open(outfile.replace(".pickle", ".json"), 'w') as f:
-                        json.dump(new, f)
-            else:
-                data_filepath = outfile.replace(".pickle", ".zip")
-                with zipfile.ZipFile(data_filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                    if parameters['storage_format'] == 'pickle':
-                        with zipf.open(os.path.basename(outfile), 'w') as f:
-                            pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
-                    elif parameters['storage_format'] == 'json':
-                        with zipf.open(os.path.basename(outfile).replace(".pickle", ".json"), 'w') as f:
-                            f.write(json.dumps(new).encode('utf-8'))
-            print(f"\tExtracted to {data_filepath}, {round(os.path.getsize(data_filepath)/1024/1024, 2)} MiB.")
-        return {sample_id: ('passed', 
-                            'passed', 
-                            data_filepath,
-                            new['max_scan_number'], 
-                            xdict['rt_numbers'], 
-                            xdict['rt_times'],
-                            new['track_mzs'],
-                            new['number_anchor_mz_pairs'], 
-                            anchor_mz_pairs,
-                            new['acquisition_time'], 
-                            new if parameters['database_mode'] == 'memory' else {}, 
-                            parameters['compress'])} 
-    #except Exception as _:
-    #    print("Failed to extract: %s." %os.path.basename(infile))
-    #    return {sample_id: ('failed', # status:mzml_parsing
-    #                        'failed', # status:eic
-    #                        None, # outfile
-    #                        None, # max_scan_number
-    #                        None, # rt_numbers
-    #                        None, # rt_times
-    #                        None, # track_mzs
-    #                        None, # number_anchor_mz_pairs
-    #                        None, # anchor_mz_pairs
-    #                        None, # acquisition_time
-    #                        None, # sample_data
-    #                        parameters['compress'] # compress
-    #                        )}
+        # 6. Save results to the specified backend and generate the data location URI
+        data_location_uri = None
+        was_compressed = parameters.get('compress', False)
+        
+        # database_mode now determines the storage backend
+        storage_backend = parameters.get('database_mode', 'ondisk')
+
+        if storage_backend == 'ondisk':
+            data_filepath, was_compressed = _save_sample_data(
+                sample_data,
+                outfile,
+                parameters.get('storage_format', 'pickle'),
+                was_compressed
+            )
+            data_location_uri = f"file://{os.path.abspath(data_filepath)}"
+            print(f"\tSaved to file: {data_filepath}")
+
+        elif storage_backend == 'memory':
+            # In memory mode, there is no URI, but the data is passed directly
+            pass
+
+        # 7. Construct and return the success payload with the new URI
+        return {sample_id: (
+            'passed',
+            'passed',
+            data_location_uri,  # CRITICAL: This is now a URI
+            sample_data.get('max_scan_number', 0),
+            xdict['rt_numbers'],
+            xdict['rt_times'],
+            sample_data.get('track_mzs', []),
+            sample_data.get('number_anchor_mz_pairs', 0),
+            anchor_mz_pairs,
+            sample_data.get('acquisition_time', 0.0),
+            sample_data if storage_backend == 'memory' else {},
+            was_compressed
+        )}
+
+    except Exception as e:
+        print(f"Error processing {os.path.basename(infile)}: {e}")
+        # Return a failure payload
+        return {sample_id: ('failed', 'failed', None, None, None, None, None, None, None, None, {}, False)}
+
+
 
 # -----------------------------------------------------------------------------
 # main workflow for `xic`

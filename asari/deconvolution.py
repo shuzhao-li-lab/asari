@@ -80,7 +80,7 @@ parameters = {
 
     # --- Deconvolution (AutoKhipu) Parameters ---
     "deconvolution": {
-        "neutral_loss_file": "./data/neutral_losses.json", # Path to plausible neutral losses
+        "neutral_loss_file": "./data/plausible_neutral_losses.json", # Path to plausible neutral losses
         "nl_tolerance": 0.002, # Mass tolerance (Da) for neutral loss matching
         "rt_window": 1.0, # Retention time window for grouping features
         "correlation_threshold_bc": 0.8, # Bhattacharyya coefficient threshold
@@ -162,18 +162,20 @@ class DeconvolutionFramework:
     into isotopic clusters and then into putative compounds based on neutral
     losses and statistical correlations.
     """
-    def __init__(self, feature_dict, samples, params):
+    def __init__(self, feature_dict, samples, params, default_abs_mz_tolerance=0.0002):
         self.feature_dict = feature_dict
         self.samples = samples
         self.params = params
+        self.default_abs_mz_tolerance = default_abs_mz_tolerance
+
         self.neutral_loss_data = self._load_neutral_losses()
+        self.neutral_loss_tree = self._build_neutral_loss_tree()
 
         self.comparison_cache = {}
         self.statistical_baselines = {}
         self.isotopic_clusters = {}
         self.final_compounds = {}
         self.ALPHA = 0.05
-        self.neutral_loss_tree = self._build_neutral_loss_tree()
 
         self.ISOTOPE_DELTAS = {
             "13C": 1.00335483507, "15N": 0.99703489445, "37Cl": 1.99704992,
@@ -181,14 +183,34 @@ class DeconvolutionFramework:
             "29Si": 0.99956813, "81Br": 1.9979521, "78Se": -1.99921256
         }
 
+    # --- Configuration Properties ---
+    @property
+    def neutral_loss_file(self):
+        return self.params.get("neutral_loss_file")
+
+    @property
+    def neutral_loss_tolerance(self):
+        # Renamed from nl_tolerance in params for clarity
+        return self.params.get("nl_tolerance", self.default_abs_mz_tolerance)
+
+    @property
+    def isotope_delta_tolerance(self):
+        return self.params.get("isotope_mz_tolerance", self.default_abs_mz_tolerance)
+
+    @property
+    def rt_window(self):
+        return self.params.get("rt_window", 1.0)
+
+    @property
+    def correlation_threshold_bc(self):
+        return self.params.get("correlation_threshold_bc", 0.8)
 
     def _load_neutral_losses(self):
         """Loads neutral loss data from the file specified in parameters."""
-        nl_file = self.params.get("neutral_loss_file")
-        if nl_file and os.path.exists(nl_file):
-            print(f"--- Loading neutral loss file: {nl_file} ---")
+        if self.neutral_loss_file and os.path.exists(self.neutral_loss_file):
+            print(f"--- Loading neutral loss file: {self.neutral_loss_file} ---")
             try:
-                with open(nl_file, 'r') as f:
+                with open(self.neutral_loss_file, 'r') as f:
                     return json.load(f)
             except Exception as e:
                 print(f"Error reading neutral loss file: {e}")
@@ -200,11 +222,10 @@ class DeconvolutionFramework:
             return None
         print("Building neutral loss interval tree...")
         tree = IntervalTree()
-        tolerance = self.params.get("nl_tolerance", 0.002)
         for loss in self.neutral_loss_data:
             mass = calculate_formula_mass(loss['neutral_loss_formula'])
             loss['mass'] = mass
-            tree.add(Interval(mass - tolerance, mass + tolerance, loss))
+            tree.add(Interval(mass - self.neutral_loss_tolerance, mass + self.neutral_loss_tolerance, loss))
         print(f"Neutral loss tree built with {len(tree)} intervals.")
         return tree
 
@@ -276,7 +297,7 @@ class DeconvolutionFramework:
                     for fid in rt_window_fids:
                         if fid not in used_fids and fid not in found_isotopes:
                             candidate_mz = self.feature_dict[fid]['mz']
-                            if abs(candidate_mz - expected_mz) < self.params.get("isotope_mz_tolerance", 0.002):
+                            if abs(candidate_mz - expected_mz) < self.isotope_delta_tolerance:
                                 stats = self._compare_features(last_found_fid, fid)
                                 if stats['bc'] > 0.9 and stats.get('r_pearson', 0) > self.statistical_baselines['r_pearson']['median']:
                                     best_candidate = fid
@@ -313,8 +334,7 @@ class DeconvolutionFramework:
                     continue
 
                 anchor_rt = self.feature_dict[anchor_fid]['rtime']
-                rt_window = self.params.get("rt_window", 1.0)
-                rt_window_fids = [fid for fid in rt_sorted_fids if abs(self.feature_dict[fid]['rtime'] - anchor_rt) < rt_window]
+                rt_window_fids = [fid for fid in rt_sorted_fids if abs(self.feature_dict[fid]['rtime'] - anchor_rt) < self.rt_window]
                 
                 annotated_envelope = self._find_isotopic_envelope(anchor_fid, rt_window_fids, used_fids)
                 envelope_fids = {f['id'] for f in annotated_envelope}
@@ -355,19 +375,17 @@ class DeconvolutionFramework:
             a, b = find(a), find(b)
             if a != b: parent[b] = a
 
-        bc_thresh = self.params.get("correlation_threshold_bc", 0.8)
-
         # --- Step 1: Targeted merging via neutral losses ---
         if self.neutral_loss_tree:
             print("\n--- Phase 2a: Targeted merging via neutral losses ---")
             for i in tqdm.tqdm(range(len(cluster_ids)), desc="Targeted Merge"):
                 for j in range(i + 1, len(cluster_ids)):
                     c1_id, c2_id = cluster_ids[i], cluster_ids[j]
-                    if abs(self.feature_dict[c1_id]['rtime'] - self.feature_dict[c2_id]['rtime']) > self.params.get("rt_window", 1.0):
+                    if abs(self.feature_dict[c1_id]['rtime'] - self.feature_dict[c2_id]['rtime']) > self.rt_window:
                         continue
                     if self._find_neutral_loss(self.feature_dict[c1_id]['mz'], self.feature_dict[c2_id]['mz']):
                         stats = self._compare_features(c1_id, c2_id)
-                        if stats['bc'] > bc_thresh and stats.get('r_pearson', 0) > self.statistical_baselines['r_pearson']['median']:
+                        if stats['bc'] > self.correlation_threshold_bc and stats.get('r_pearson', 0) > self.statistical_baselines['r_pearson']['median']:
                             unite(c1_id, c2_id)
 
         # --- Step 2: Salvage merging via statistical correlation ---
@@ -376,9 +394,9 @@ class DeconvolutionFramework:
             for j in range(i + 1, len(cluster_ids)):
                 c1_id, c2_id = cluster_ids[i], cluster_ids[j]
                 if find(c1_id) == find(c2_id): continue
-                if abs(self.feature_dict[c1_id]['rtime'] - self.feature_dict[c2_id]['rtime']) < self.params.get("rt_window", 1.0):
+                if abs(self.feature_dict[c1_id]['rtime'] - self.feature_dict[c2_id]['rtime']) < self.rt_window:
                     stats = self._compare_features(c1_id, c2_id)
-                    if stats['bc'] > bc_thresh and stats.get('r_pearson', 0) > self.statistical_baselines['r_pearson']['median']:
+                    if stats['bc'] > self.correlation_threshold_bc and stats.get('r_pearson', 0) > self.statistical_baselines['r_pearson']['median']:
                         unite(c1_id, c2_id)
         
         # --- Assemble final compounds ---
@@ -432,14 +450,38 @@ class MSMSAnnotator:
         self.sample_cols = sample_cols
         self.params = params
         self.lib_spectra = self._load_libraries()
-        self.cosine_greedy = CosineGreedy(tolerance=params.get("msms_tolerance", 0.005))
+        self.cosine_greedy = CosineGreedy(tolerance=self.msms_tolerance)
+
+    # --- Configuration Properties ---
+    @property
+    def msms_tolerance(self):
+        return self.params.get("msms_tolerance", 0.005)
+
+    @property
+    def spectral_libraries(self):
+        return self.params.get("spectral_libraries", [])
+
+    @property
+    def min_matched_peaks(self):
+        return self.params.get("min_matched_peaks", 1)
+
+    @property
+    def min_cosine_score(self):
+        return self.params.get("min_cosine_score", 0.7)
+
+    @property
+    def mirror_plot_dir(self):
+        return self.params.get("mirror_plot_dir")
+
+    @property
+    def top_k_matches(self):
+        return self.params.get("top_k_matches", 10)
 
     def _load_libraries(self):
         """Loads and preprocesses spectral libraries."""
-        lib_files = self.params.get("spectral_libraries", [])
         lib_spectra = []
         print("\n--- Loading spectral libraries ---")
-        for lib_path in lib_files:
+        for lib_path in self.spectral_libraries:
             if os.path.exists(lib_path):
                 print(f"Loading {lib_path}...")
                 try:
@@ -527,15 +569,14 @@ class MSMSAnnotator:
         for libname, lspec in self.lib_spectra:
             score_tuple = self.cosine_greedy.pair(qspec, lspec)
             score, n_matches = score_tuple['score'], score_tuple['matches']
-            if n_matches >= self.params.get("min_matched_peaks", 1) and score > self.params.get("min_cosine_score", 0.7):
+            if n_matches >= self.min_matched_peaks and score > self.min_cosine_score:
                 lib_compound_name = lspec.get("compound_name") or lspec.get("name") or "unknown"
                 
                 # Create mirror plot if directory is set
-                plot_dir = self.params.get("mirror_plot_dir")
-                if plot_dir:
-                    os.makedirs(plot_dir, exist_ok=True)
+                if self.mirror_plot_dir:
+                    os.makedirs(self.mirror_plot_dir, exist_ok=True)
                     fname = f"{fid}_{lib_compound_name.replace(' ', '_').replace('/', '_')}.png"
-                    fpath = os.path.join(plot_dir, fname)
+                    fpath = os.path.join(self.mirror_plot_dir, fname)
                     title = f"Compound {fid} vs {lib_compound_name}\n(Score: {score:.2f}, Matched Peaks: {n_matches})"
                     self._plot_mirror(qspec, lspec, fpath, title=title)
                 
@@ -548,7 +589,7 @@ class MSMSAnnotator:
         scores.sort(key=lambda x: (-x["score"], -x["matched_peaks"]))
         return fid, {
             "representative_sample": rep_sample,
-            "top_matches": scores[:self.params.get("top_k_matches", 10)]
+            "top_matches": scores[:self.top_k_matches]
         }
 
     def annotate_compounds(self, compounds, num_cores=4):
@@ -583,14 +624,26 @@ class FormulaAnnotator:
     def __init__(self, params):
         self.params = params
 
+    # --- Configuration Properties ---
+    @property
+    def formula_predictor_cmd(self):
+        return self.params.get("formula_predictor_cmd")
+
+    @property
+    def temp_csv_dir(self):
+        return self.params.get("temp_csv_dir", "./temp_l4")
+
+    @property
+    def formula_mass_tolerance(self):
+        return self.params.get("formula_mass_tolerance", 0.001)
+
     def _run_external_predictor(self, input_csv_path, output_csv_path):
         """Executes the external formula prediction command using subprocess."""
-        cmd_template = self.params.get("formula_predictor_cmd")
-        if not cmd_template:
+        if not self.formula_predictor_cmd:
             print("Warning: 'formula_predictor_cmd' not defined in parameters. Skipping formula prediction.")
             return False
         
-        command = cmd_template.format(
+        command = self.formula_predictor_cmd.format(
             input_csv=shlex.quote(input_csv_path),
             output_csv=shlex.quote(output_csv_path)
         )
@@ -639,16 +692,14 @@ class FormulaAnnotator:
             return compounds
 
         # Prepare CSV files for the external tool
-        temp_dir = self.params.get("temp_csv_dir", "./temp_l4")
-        os.makedirs(temp_dir, exist_ok=True)
-        input_csv = os.path.join(temp_dir, "l4_input_masses.csv")
-        output_csv = os.path.join(temp_dir, "l4_output_formulas.csv")
+        os.makedirs(self.temp_csv_dir, exist_ok=True)
+        input_csv = os.path.join(self.temp_csv_dir, "l4_input_masses.csv")
+        output_csv = os.path.join(self.temp_csv_dir, "l4_output_formulas.csv")
         pd.DataFrame(masses_to_predict).drop_duplicates().to_csv(input_csv, index=False)
         
         # Run predictor and process results
         if self._run_external_predictor(input_csv, output_csv) and os.path.exists(output_csv):
             possible_formulas = {}
-            mass_tolerance = self.params.get("formula_mass_tolerance", 0.001)
             results_df = pd.read_csv(output_csv)
             
             for _, row in results_df.iterrows():
@@ -658,7 +709,7 @@ class FormulaAnnotator:
                 if isinstance(row.get('FormulaList'), str):
                     for f_prob in row['FormulaList'].split(';'):
                         formula = f_prob.split('_')[0]
-                        if abs(calculate_formula_mass(formula) - float(mass)) < mass_tolerance:
+                        if abs(calculate_formula_mass(formula) - float(mass)) < self.formula_mass_tolerance:
                             possible_formulas[mass].append(formula)
             
             # Add predictions back to the compounds
@@ -684,6 +735,55 @@ class AsariProcessor:
         self.feature_dict = None
         self.samples = []
         self.deconvoluted_compounds = {}
+        self.output_path = None
+
+    # --- Configuration Properties ---
+    @property
+    def mode(self):
+        return self.params.get("mode", "gc").lower()
+
+    @property
+    def id_column(self):
+        return self.params.get("id_column", "id_number")
+
+    @property
+    def sample_start_col(self):
+        return self.params.get("sample_start_col", 11)
+        
+    @property
+    def output_prefix(self):
+        return self.params.get("output_prefix", "asari_results")
+
+    @property
+    def num_cores(self):
+        return self.params.get("num_cores", 4)
+
+    # Properties for sub-dictionaries to pass to other classes
+    @property
+    def deconvolution_params(self):
+        return self.params.get("deconvolution", {})
+
+    @property
+    def gc_annotation_params(self):
+        return self.params.get("gc_annotation", {})
+
+    @property
+    def lc_annotation_params(self):
+        return self.params.get("lc_annotation", {})
+
+    def default_workflow(self, filepath):
+        """Runs the full, standard workflow on a given feature table file."""
+        final_data = {}
+        print(filepath)
+        if self.output_path is None:
+            self.output_path = os.path.join(self.parameters['outdir'], '/export/')
+        if self.load_feature_table(filepath):
+            if self.run_deconvolution():
+                self.run_annotation()
+                self.save_results()
+                final_data = self.get_results()
+                print(f"\nProcessing complete. Found {len(final_data)} compounds.")
+        return final_data
 
     def load_feature_table(self, filepath):
         """Loads and prepares the feature table from a CSV or TSV file."""
@@ -693,17 +793,15 @@ class AsariProcessor:
             self.feature_table = pd.read_csv(filepath, sep=sep)
             print(f"Loaded table with shape: {self.feature_table.shape}")
 
-            id_col = self.params.get("id_column", "id_number")
-            if id_col not in self.feature_table.columns:
-                raise ValueError(f"ID column '{id_col}' not found in the feature table.")
+            if self.id_column not in self.feature_table.columns:
+                raise ValueError(f"ID column '{self.id_column}' not found in the feature table.")
 
-            start_col = self.params.get("sample_start_col", 11)
-            self.samples = list(self.feature_table.columns[start_col:])
+            self.samples = list(self.feature_table.columns[self.sample_start_col:])
             print(f"Found {len(self.samples)} samples.")
             
-            self.feature_table[id_col] = self.feature_table[id_col].astype(str)
+            self.feature_table[self.id_column] = self.feature_table[self.id_column].astype(str)
             self.feature_table.fillna(0.0, inplace=True)
-            self.feature_dict = {row[id_col]: row for row in self.feature_table.to_dict(orient='records')}
+            self.feature_dict = {row[self.id_column]: row for row in self.feature_table.to_dict(orient='records')}
             print(f"Loaded {len(self.feature_dict)} features.")
             return True
         
@@ -717,8 +815,7 @@ class AsariProcessor:
             print("Feature table not loaded. Cannot run deconvolution.")
             return False
         
-        deconvolution_params = self.params.get("deconvolution", {})
-        framework = DeconvolutionFramework(self.feature_dict, self.samples, deconvolution_params)
+        framework = DeconvolutionFramework(self.feature_dict, self.samples, self.deconvolution_params)
         self.deconvoluted_compounds = framework.run()
         return True
 
@@ -727,30 +824,24 @@ class AsariProcessor:
         if not self.deconvoluted_compounds:
             print("Deconvolution not performed. Cannot run annotation.")
             return False
-
-        mode = self.params.get("mode", "gc").lower()
-        num_cores = self.params.get("num_cores", 4)
         
-        if mode == 'gc':
-            gc_params = self.params.get("gc_annotation", {})
-            annotator = MSMSAnnotator(self.feature_dict, self.samples, gc_params)
-            self.deconvoluted_compounds = annotator.annotate_compounds(self.deconvoluted_compounds, num_cores)
-        elif mode == 'lc':
-            lc_params = self.params.get("lc_annotation", {})
-            annotator = FormulaAnnotator(lc_params)
+        if self.mode == 'gc':
+            annotator = MSMSAnnotator(self.feature_dict, self.samples, self.gc_annotation_params)
+            self.deconvoluted_compounds = annotator.annotate_compounds(self.deconvoluted_compounds, self.num_cores)
+        elif self.mode == 'lc':
+            annotator = FormulaAnnotator(self.lc_annotation_params)
             self.deconvoluted_compounds = annotator.annotate_compounds(self.deconvoluted_compounds)
         else:
-            print(f"Warning: Unknown mode '{mode}'. No annotation will be performed.")
+            print(f"Warning: Unknown mode '{self.mode}'. No annotation will be performed.")
             return False
         return True
 
     def save_results(self):
         """Saves the final annotated compound data to a JSON file."""
-        output_prefix = self.params.get("output_prefix", "asari_results")
-        output_path = f"{output_prefix}_final.json"
-        print(f"\n--- Saving final results to: {output_path} ---")
+        #output_path = os.path.join(self.output_path, f"{self.output_prefix}_final.json")
+        print(f"\n--- Saving final results to: {self.output_path} ---")
         try:
-            with open(output_path, 'w') as f:
+            with open(self.output_path, 'w') as f:
                 json.dump(self.deconvoluted_compounds, f, indent=2)
             print("Save complete.")
         except Exception as e:
@@ -780,27 +871,17 @@ if __name__ == '__main__':
         with open(parameters['deconvolution']['neutral_loss_file'], 'w') as f:
             json.dump([{"neutral_loss_formula": "H2O"}], f) # Dummy loss
             
-    # Create a dummy feature table
-    dummy_feature_table_path = sys.argv[1]
+    # Expects the path to a feature table as a command-line argument
+    if len(sys.argv) < 2:
+        print("Usage: python your_script_name.py <path_to_feature_table.csv>")
+        sys.exit(1)
+        
+    feature_table_path = sys.argv[1]
 
     # --- Main Workflow Execution ---
     
     # 1. Initialize the processor with global parameters
     processor = AsariProcessor(parameters)
-
-    # 2. Load the data
-    if processor.load_feature_table(dummy_feature_table_path):
     
-        # 3. Run feature deconvolution
-        if processor.run_deconvolution():
-        
-            # 4. Run annotation based on the mode in the parameters dict
-            processor.run_annotation()
-            
-            # 5. Save the final results
-            processor.save_results()
-
-            # You can also get the results as a dictionary
-            final_data = processor.get_results()
-            print(f"\nProcessing complete. Found {len(final_data)} compounds.")
-
+    # 2. Run the full workflow
+    processor.default_workflow(feature_table_path)

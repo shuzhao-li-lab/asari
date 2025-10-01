@@ -4,6 +4,7 @@ import json
 import pickle
 import functools
 import pandas as pd
+from .deconvolution import DeconvolutionFramework, AsariProcessor
 from scipy import interpolate
 from .chromatograms import __hacked_lowess__
 from scipy.ndimage import uniform_filter1d
@@ -16,7 +17,6 @@ from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 from .default_parameters import adduct_search_patterns, \
     adduct_search_patterns_neg, isotope_search_patterns, extended_adducts, \
     readme_doc_str
-from .gc_annotation import EI_MS_Library
 from .mass_functions import all_mass_paired_mapping
 from .constructors import CompositeMap
 from .json_encoder import NpEncoder
@@ -337,7 +337,7 @@ class ext_Experiment:
         return sample_to_batch
 
     def process_all_GC(self):
-        print("HERE THERE!!!")
+        print("Processing using GC Workflow...")
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
         retention_index_information = pd.read_csv(self.parameters['retention_index_standards'])
@@ -377,7 +377,6 @@ class ext_Experiment:
             if true, generate annotation files, export CMAP pickle and do QC plot;
             else skip annotating.
         '''
-        print(self.parameters['workflow'])
         if self.parameters['workflow'] == "LC" or mode.rstrip().upper() == "LC":
             self.CMAP.MassGrid.to_csv(
                 os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
@@ -391,24 +390,17 @@ class ext_Experiment:
             self.export_log()
             self.export_readme()
         elif self.parameters['workflow'] == "GC" or mode.rstrip().upper() == "GC":
-            print("HERE!")
             self.export_feature_tables()
             self.CMAP.MassGrid.to_csv(
                 os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']))
             if self.parameters['anno']:
-                self.annotate_GC()
+                deconvolution = AsariProcessor(self.parameters)
+                deconvolution.output_path = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table']).replace(".tsv", "_annotated_compounds.json")
+                deconvolution.default_workflow(os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table']))
             self.export_log()
             self.export_readme()
         else:
-            print("EXITING")
-            exit()
-
-    def annotate_GC(self):
-        pref_ft = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
-        full_ft = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
-        library = EI_MS_Library(self.parameters)
-        library.annotate_gc_feature_table(pref_ft)
-        library.annotate_gc_feature_table(full_ft)
+            raise Exception("Invalid workflow provided, specify LC or GC workflow")
 
     def annotate(self):
         '''

@@ -32,7 +32,7 @@ SUBCOMMANDS = {
     "process": lambda p, a: _process(p),
     "xic": lambda p, a: _xic(p, a),
     "extract": lambda p, a: _extract(p, a),
-    "annotate": lambda p, a: annotate_user_featuretable(a.input, parameters=p, rtime_tolerance=2),
+    "annotate": lambda p, a: annotate_user_featuretable(a.input, parameters=p),
     "join": lambda *_: print("NOT IMPLEMENTED"),
     "viz": lambda p, a: _viz(p, a),
     "list_workflows": lambda *_: _list_workflows(),
@@ -181,7 +181,7 @@ def _apply_cli_overrides(params: dict, args, verbose: bool = True) -> dict:
         if key == "mode":
             assert val in {"pos", "neg"}, "Mode must be pos or neg."
         if key == "database_mode":
-            assert val in {"auto", "ondisk", "memory"}, "Invalid database_mode"
+            assert val in {"auto", "ondisk", "memory", "database"}, "Invalid database_mode"
         if key == "storage_format":
             assert val in {"pickle", "json"}, "Invalid storage_format"
         if key == "table_for_viz":

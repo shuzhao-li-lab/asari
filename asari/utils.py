@@ -7,106 +7,8 @@ import multiprocessing as mp
 import os
 import time
 import hashlib
-import zipfile
-from io import BytesIO
-from importlib import resources as pkg_resources
-
-import requests
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
 import pymzml
 import tqdm
-
-def download_and_unzip_to_pkg_resources(url, package, subdir="data"):
-    """Downloads a ZIP archive from a URL and extracts it into a package's resource directory."""
-    print("HERE")
-    # Get the package directory
-    package_dir = os.path.dirname(pkg_resources.files(package))
-    
-    # Target extraction directory within the package
-    extract_to = os.path.join(package_dir, subdir)
-    os.makedirs(extract_to, exist_ok=True)  # Ensure the directory exists
-
-    # Download the ZIP file
-    response = requests.get(url, stream=True)
-    response.raise_for_status()
-
-    # Extract the ZIP archive to the target directory
-    with zipfile.ZipFile(BytesIO(response.content)) as zip_ref:
-        zip_ref.extractall(extract_to)
-
-    print(f"Extracted to: {extract_to}")
-
-def download_and_unzip(url, extract_to):
-    """Downloads a ZIP archive from a URL and extracts it to the specified directory."""
-    response = requests.get(url, stream=True)
-    response.raise_for_status()  # Raise an error for bad responses
-
-    with zipfile.ZipFile(BytesIO(response.content)) as zip_ref:
-        zip_ref.extractall(extract_to)
-
-    print(f"Extracted to: {extract_to}")
-
-def plot_correlations(feature_table_path):
-    ft = pd.read_csv(feature_table_path, sep='\t')
-    ft["sum_intensity_max"] = np.log2(ft.iloc[:, 11:]+1).max(axis=1)
-    ft["sum_intensity_mean"] = np.log2(ft.iloc[:, 11:]+1).mean(axis=1)
-    ft["sum_intensity_median"] = np.log2(ft.iloc[:, 11:]+1).median(axis=1)
-    ft["sum_intensity_min"] = np.log2(ft.iloc[:, 11:]+1).min(axis=1)
-    ft["peak_area"] = np.log2(ft["peak_area"]+1)
-
-    fig, axs = plt.subplots(2, 2, figsize=(15, 10))
-
-    # Max
-    print("max")
-    axs[0, 0].scatter(ft["sum_intensity_max"], ft["peak_area"])
-    sns.regplot(x=ft["sum_intensity_max"], y=ft["peak_area"], scatter=False, color='blue', robust=True, ax=axs[0, 0])
-    r2_value_max = round(np.corrcoef(ft['sum_intensity_max'], ft['peak_area'])[0, 1]**2, 2)
-    axs[0, 0].set_title(f"max vs peak_area (R2 = {r2_value_max})")
-    axs[0, 0].set_xlabel("max")
-    axs[0, 0].set_ylabel("peak_area")
-
-    # Mean
-    print("mean")
-    axs[0, 1].scatter(ft["sum_intensity_mean"], ft["peak_area"])
-    sns.regplot(x=ft["sum_intensity_mean"], y=ft["peak_area"], scatter=False, color='blue', robust=True, ax=axs[0, 1])
-    r2_value_mean = round(np.corrcoef(ft['sum_intensity_mean'], ft['peak_area'])[0, 1]**2, 2)
-    axs[0, 1].set_title(f"mean vs peak_area (R2 = {r2_value_mean})")
-    axs[0, 1].set_xlabel("mean")
-    axs[0, 1].set_ylabel("peak_area")
-
-    # Median
-    print("median")
-    axs[1, 0].scatter(ft["sum_intensity_median"], ft["peak_area"])
-    sns.regplot(x=ft["sum_intensity_median"], y=ft["peak_area"], scatter=False, color='blue', robust=True, ax=axs[1, 0])
-    r2_value_median = round(np.corrcoef(ft['sum_intensity_median'], ft['peak_area'])[0, 1]**2, 2)
-    axs[1, 0].set_title(f"median vs peak_area (R2 = {r2_value_median})")
-    axs[1, 0].set_xlabel("median")
-    axs[1, 0].set_ylabel("peak_area")
-
-    # Min
-    print("min")
-    axs[1, 1].scatter(ft["sum_intensity_min"], ft["peak_area"])
-    sns.regplot(x=ft["sum_intensity_min"], y=ft["peak_area"], scatter=False, color='blue', robust=True, ax=axs[1, 1])
-    r2_value_min = round(np.corrcoef(ft['sum_intensity_min'], ft['peak_area'])[0, 1]**2, 2)
-    axs[1, 1].set_title(f"min vs peak_area (R2 = {r2_value_min})")
-    axs[1, 1].set_xlabel("min")
-    axs[1, 1].set_ylabel("peak_area")
-
-    # Adjust layout
-    plt.tight_layout()
-    plt.show()
-
-def validate_mzml_file(file):
-    try:
-        with pymzml.run.Reader(file) as reader:
-            for spec in reader:
-                pass
-    except:
-        return False
-    return True
 
 def build_boolean_dict():
     return {
@@ -158,83 +60,78 @@ def get_ionization_mode_mzml(mzml_file, limit=50):
                 break
     return list(ion_modes)[0]
 
-def bulk_process(command, arguments, dask_ip=None, jobs_per_worker=False, job_multiplier=1):
-    if arguments:
-        if dask_ip:
-            try:
-                from dask.distributed import Client, as_completed, progress
-            except:
-                raise ImportError("Dask must be installed to use dask_ip=True")
-            client = Client(f"tcp://{dask_ip}:8786")
-            client.scatter(arguments)
-            client.scatter(command)
-            results = []
-            if jobs_per_worker == 'auto':
-                total_thread = sum(worker_info['nthreads'] for worker_info in client.scheduler_info()['workers'].values())
-                total_workers = len(client.scheduler_info()['workers'])
-                jobs_per_worker = total_thread // total_workers * job_multiplier
-            if jobs_per_worker:
-                pbar = tqdm.tqdm(total=len(arguments), desc="processing...")
+import multiprocessing as mp
+import tqdm
 
-                # Submit initial batch of jobs
-                futures = {i: client.submit(command, arg) for i, arg in enumerate(arguments[:len(client.scheduler_info()['workers']) * int(jobs_per_worker)])}
-                remaining_args = arguments[len(futures):]
+def _process_with_dask(command, arguments, scheduler_ip):
+    """Processes arguments in parallel using a Dask cluster."""
+    try:
+        from dask.distributed import Client, progress
+    except ImportError:
+        raise ImportError(
+            "Dask must be installed to use this feature. Run 'pip install dask distributed'."
+        )
 
-                # Process jobs as they complete and submit new ones
-                for _ in range(len(arguments)):
-                    completed_future = as_completed(futures.values()).next()
-                    completed_index = list(futures.keys())[list(futures.values()).index(completed_future)]
-                    pbar.update(1)
-                    results.append((completed_index, completed_future.result()))
-                    del futures[completed_index]
-                    if remaining_args:
-                        new_index = len(arguments) - len(remaining_args)
-                        new_future = client.submit(command, remaining_args.pop(0))
-                        futures[new_index] = new_future
+    print(f"Connecting to Dask scheduler at: tcp://{scheduler_ip}:8786")
+    with Client(f"tcp://{scheduler_ip}:8786") as client:
+        # client.map is the most straightforward and idiomatic approach.
+        # It submits all tasks at once, and Dask's scheduler manages the queue
+        # efficiently. Most importantly, it returns results in the same order
+        # as the input arguments, eliminating the need for manual sorting.
+        futures = client.map(command, arguments)
+        
+        # Use Dask's built-in progress bar for a rich console display.
+        print("All tasks submitted to the cluster. Waiting for completion...")
+        progress(futures, notebook=False)
+        
+        # client.gather collects results once all futures are complete.
+        results = client.gather(futures)
+        print("Processing complete.")
 
-                # Gather any remaining results
-                if futures:
-                    for future in futures.values():
-                        pbar.update(1)
-                        results.append((list(futures.keys())[list(futures.values()).index(future)], future.result()))
+    return results
 
-                # Sort results by original order
-                results.sort(key=lambda x: x[0])
-                return [result for _, result in results]
-            else:
-                # Default behavior: Submit all jobs at once
-                futures = client.map(command, arguments)
-                
-                # Optionally show progress
-                progress(futures)
-                
-                # Gather results once all tasks have completed
-                return [x for x in client.gather(futures)]
-        else:
-            if jobs_per_worker and jobs_per_worker != 'auto':
-                with mp.Pool(jobs_per_worker) as client:
-                    pbar = tqdm.tqdm(client.imap(command, arguments), total=len(arguments), desc="processing...")
-                    return [x for x in pbar]
-            with mp.Pool(mp.cpu_count()) as client:
-                pbar = tqdm.tqdm(client.imap(command, arguments), total=len(arguments), desc="processing...")
-                return [x for x in pbar]
+def _process_with_multiprocessing(command, arguments, num_workers=None):
+    """Processes arguments in parallel using a local multiprocessing pool."""
+    # Default to the number of CPU cores if num_workers is not specified.
+    pool_size = num_workers if isinstance(num_workers, int) and num_workers > 0 else mp.cpu_count()
+    print(f"Starting a local multiprocessing pool with {pool_size} workers.")
+
+    with mp.Pool(pool_size) as pool:
+        # pool.imap is memory-efficient and returns an ordered iterator.
+        # We wrap it with tqdm for a clean, real-time progress bar.
+        pbar = tqdm.tqdm(pool.imap(command, arguments), total=len(arguments), desc="Processing")
+        # Collect the results from the progress bar iterator.
+        results = list(pbar)
+        
+    return results
+
+def bulk_process(command, arguments, dask_ip=None, num_workers=None):
+    """
+    Executes a command in parallel for each item in a list of arguments.
+
+    This function acts as a dispatcher, choosing between a distributed Dask cluster
+    (if `dask_ip` is provided) or a local `multiprocessing` pool.
+
+    Args:
+        command (callable): The function to execute for each argument.
+        arguments (list): A list of arguments to be passed to the command.
+        dask_ip (str, optional): The IP address of the Dask scheduler. If provided,
+                                 Dask will be used for processing. Defaults to None.
+        num_workers (int, optional): The number of worker processes for local 
+                                     multiprocessing. Defaults to the number of
+                                     CPU cores. This parameter is ignored if 
+                                     `dask_ip` is set.
+
+    Returns:
+        list: A list containing the results in the same order as the input arguments.
+    """
+    if not arguments:
+        raise ValueError("The 'arguments' list cannot be empty.")
+
+    if dask_ip:
+        # Use Dask for distributed processing.
+        return _process_with_dask(command, arguments, dask_ip)
     else:
-        raise Exception("No Arguments Provided")
+        # Use local multiprocessing.
+        return _process_with_multiprocessing(command, arguments, num_workers)
     
-def pca_ftable(tsv_path):
-    import pandas as pd
-    from sklearn.decomposition import PCA
-    from sklearn.preprocessing import StandardScaler
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    import numpy as np
-
-    # Load the feature table
-    ftable = pd.read_csv(tsv_path, sep='\t')
-    pca = PCA(n_components=2)
-    results = pca.fit_transform(StandardScaler().fit_transform(ftable.iloc[:, 11:].T))
-    for i, (x, y) in enumerate(results):
-        plt.scatter(x, y, label=ftable.columns[11:][i])
-    plt.xlabel("PC1")
-    plt.ylabel("PC2")
-    plt.legend()

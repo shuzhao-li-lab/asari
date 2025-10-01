@@ -3,6 +3,7 @@ import zipfile
 import os 
 import json_tricks as json
 
+from urllib.parse import urlparse, parse_qs
 from matchms import Spectrum
 from matchms.exporting import save_spectra
 
@@ -171,28 +172,108 @@ class SimpleSample:
         return SimpleSample.load_intermediate(self.data_location)
 
     @staticmethod
-    def load_intermediate(data_location):
-        '''
-        Retrieve sample data from local pickle file.
-        '''
-        print("Loading intermediate: ", data_location)
+    def _load_from_database(db_path, sample_id):
+        """Loads sample data by querying the SQLite database."""
+        raise Exception("Not Implemented")
+        import sqlite3
+        import pandas as pd
+        if not os.path.exists(db_path):
+            raise FileNotFoundError(f"Database file not found: {db_path}")
+
+        with sqlite3.connect(db_path) as conn:
+            # 1. Retrieve sample metadata
+            query = "SELECT * FROM samples WHERE sample_id = ?"
+            # Use pandas for easy row-to-dict conversion
+            df_meta = pd.read_sql_query(query, conn, params=(sample_id,))
+            if df_meta.empty:
+                raise ValueError(f"No data found for sample_id {sample_id} in {db_path}")
+            
+            # Convert the first row to a dictionary
+            sample_data = df_meta.iloc[0].to_dict()
+
+            # 2. Deserialize JSON fields back to Python objects
+            for key, value in sample_data.items():
+                if isinstance(value, str) and value.startswith(('[', '{')):
+                    try:
+                        sample_data[key] = json.loads(value)
+                    except json.JSONDecodeError:
+                        pass # Keep as string if not valid JSON
+
+            # 3. Retrieve and reconstruct mass tracks
+            query_tracks = "SELECT track_id, mz, scan_number, intensity FROM mass_tracks WHERE sample_id = ?"
+            df_tracks = pd.read_sql_query(query_tracks, conn, params=(sample_id,))
+            
+            list_mass_tracks = []
+            if not df_tracks.empty:
+                df_tracks = df_tracks.sort_values(['track_id', 'scan_number'])
+                grouped = df_tracks.groupby(['track_id', 'mz'])['intensity'].apply(list).reset_index()
+                list_mass_tracks = [
+                    {'id_number': row.track_id, 'mz': row.mz, 'intensity': row.intensity}
+                    for row in grouped.itertuples()
+                ]
+            
+            sample_data['list_mass_tracks'] = list_mass_tracks
+            
+        return sample_data
+
+    @staticmethod
+    def _load_from_file(file_path):
+        """Loads sample data from a local pickle or json file."""
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Data file not found: {file_path}")
+
         sample_data = None
-        if zipfile.is_zipfile(data_location):
-            with zipfile.ZipFile(data_location, 'r') as z:
-                with z.open(z.namelist()[0]) as f:
-                    if z.namelist()[0].endswith('.pickle'):
+        if zipfile.is_zipfile(file_path):
+            with zipfile.ZipFile(file_path, 'r') as z:
+                filename_in_zip = z.namelist()[0]
+                with z.open(filename_in_zip) as f:
+                    if filename_in_zip.endswith('.pickle'):
                         sample_data = pickle.load(f)
-                    elif z.namelist()[0].endswith('.json'):
+                    elif filename_in_zip.endswith('.json'):
                         sample_data = json.loads(f.read().decode('utf-8'))
         else:
-            if data_location.endswith('.pickle'):
-                with open(data_location, 'rb') as f:
+            if file_path.endswith('.pickle'):
+                with open(file_path, 'rb') as f:
                     sample_data = pickle.load(f)
-            elif data_location.endswith('.json'):
-                with open(data_location, 'r') as f:
+            elif file_path.endswith('.json'):
+                with open(file_path, 'r') as f:
                     sample_data = json.load(f)
-            else:
-                raise ValueError("Unknown file format: ", data_location)
+        
         if sample_data is None:
-            raise ValueError("Failed to load sample data from: ", data_location)
+            raise ValueError(f"Failed to load sample data from: {file_path}")
         return sample_data
+
+    @staticmethod
+    def load_intermediate(data_location_uri):
+        """
+        Retrieves sample data from its storage location based on the URI scheme.
+
+        Parameters
+        ----------
+        data_location_uri : str
+            A URI specifying the data location, e.g.,
+            'file:///path/to/data.pickle' or 
+            'sqlite:///path/to/db.sqlite?sample_id=101'.
+        """
+        print(f"Loading intermediate from: {data_location_uri}")
+        try:
+            parsed_uri = urlparse(data_location_uri)
+            
+            if parsed_uri.scheme == 'file':
+                # Path for local files might need adjustment for Windows drive letters
+                file_path = os.path.abspath(parsed_uri.netloc + parsed_uri.path)
+                return SimpleSample._load_from_file(file_path)
+                
+            elif parsed_uri.scheme == 'sqlite':
+                db_path = os.path.abspath(parsed_uri.path)
+                query_params = parse_qs(parsed_uri.query)
+                if 'sample_id' not in query_params:
+                    raise ValueError("Missing 'sample_id' in sqlite URI query")
+                sample_id = int(query_params['sample_id'][0])
+                return SimpleSample._load_from_database(db_path, sample_id)
+                
+            else:
+                raise ValueError(f"Unsupported storage scheme: '{parsed_uri.scheme}'")
+        except Exception as e:
+            print(f"Error loading data from {data_location_uri}: {e}")
+            raise
