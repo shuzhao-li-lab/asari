@@ -303,6 +303,7 @@ def _save_to_database(sample_data, db_path):
         The file path of the SQLite database.
     """
     # Use a 'with' statement to ensure the connection is safely managed
+    raise NotImplementedError()
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
         

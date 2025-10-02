@@ -610,11 +610,13 @@ class CompositeMap:
                 # this is a bug - to fix
                 list_of_list_mass_tracks = bulk_process(SimpleSample.get_mass_tracks_for_sample, 
                                                         batch, 
-                                                        dask_ip=False)
+                                                        dask_ip=False,
+                                                        num_workers=self.experiment.parameters['multicores'])
             else:
                 list_of_list_mass_tracks = bulk_process(SimpleSample.get_mass_tracks_for_sample, 
                                                         batch, 
-                                                        dask_ip=self.experiment.parameters['dask_ip'])
+                                                        dask_ip=self.experiment.parameters['dask_ip'],
+                                                        num_workers=self.experiment.parameters['multicores'])
             for (SM, list_mass_tracks) in zip(batch, list_of_list_mass_tracks):
                 print("   ", SM.name)
                 if SM.is_reference:
