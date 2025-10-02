@@ -283,7 +283,8 @@ def batch_EIC_from_samples_(sample_registry, parameters):
     sample_data = {}
     for sample_datum in bulk_process(single_sample_EICs, 
                                      make_iter_parameters(sample_registry, parameters), 
-                                     dask_ip=parameters['dask_ip']):
+                                     dask_ip=parameters['dask_ip'],
+                                     num_workers=parameters['multicores']):
         sample_data.update(sample_datum)
     return sample_data
 
@@ -396,7 +397,7 @@ def _save_sample_data(data, outfile_base, storage_format, compress):
         with zipfile.ZipFile(zip_outfile, 'w', zipfile.ZIP_DEFLATED) as zipf:
             # The name of the file inside the zip archive
             arcname = os.path.basename(outfile)
-            with zipf.open(arcname, 'w') as f:
+            with zipf.open(arcname, 'w', force_zip64=True) as f:
                 writer(f)
         return zip_outfile, was_compressed
     except Exception as e:
@@ -541,7 +542,7 @@ def single_sample_EICs(job):
                 was_compressed
             )
             data_location_uri = f"file://{os.path.abspath(data_filepath)}"
-            print(f"\tSaved to file: {data_filepath}")
+            #print(f"\tSaved to file: {data_filepath}")
 
         elif storage_backend == 'memory':
             # In memory mode, there is no URI, but the data is passed directly

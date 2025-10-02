@@ -413,7 +413,6 @@ class CompositeMap:
         # to just put the retention times through the mapping function and then undo it.
 
         # so obvious to do it that way now...
-        print("HERE")
         cal_min_peak_height = self.experiment.parameters['cal_min_peak_height']
         MIN_PEAK_NUM = self.experiment.parameters['peak_number_rt_calibration']
         NUM_ITERATIONS = self.experiment.parameters['num_lowess_iterations']
@@ -611,13 +610,11 @@ class CompositeMap:
                 # this is a bug - to fix
                 list_of_list_mass_tracks = bulk_process(SimpleSample.get_mass_tracks_for_sample, 
                                                         batch, 
-                                                        dask_ip=False,
-                                                        jobs_per_worker=self.experiment.paramters['multicores'])
+                                                        dask_ip=False)
             else:
                 list_of_list_mass_tracks = bulk_process(SimpleSample.get_mass_tracks_for_sample, 
                                                         batch, 
-                                                        dask_ip=self.experiment.parameters['dask_ip'],
-                                                        jobs_per_worker=self.experiment.parameters['multicores'])
+                                                        dask_ip=self.experiment.parameters['dask_ip'])
             for (SM, list_mass_tracks) in zip(batch, list_of_list_mass_tracks):
                 print("   ", SM.name)
                 if SM.is_reference:

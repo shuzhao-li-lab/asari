@@ -255,7 +255,7 @@ class SimpleSample:
             'file:///path/to/data.pickle' or 
             'sqlite:///path/to/db.sqlite?sample_id=101'.
         """
-        print(f"Loading intermediate from: {data_location_uri}")
+        #print(f"Loading intermediate from: {data_location_uri}")
         try:
             parsed_uri = urlparse(data_location_uri)
             
@@ -265,6 +265,7 @@ class SimpleSample:
                 return SimpleSample._load_from_file(file_path)
                 
             elif parsed_uri.scheme == 'sqlite':
+                raise NotImplementedError
                 db_path = os.path.abspath(parsed_uri.path)
                 query_params = parse_qs(parsed_uri.query)
                 if 'sample_id' not in query_params:
