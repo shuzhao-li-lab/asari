@@ -407,6 +407,8 @@ def _save_sample_data(data, outfile_base, storage_format, compress):
         with open(outfile, 'wb' if binary_mode else 'w') as f:
             writer(f)
         return outfile, was_compressed
+    finally:
+        return _get_failure_payload(data['sample_id'])
 
 def _get_failure_payload(sample_id):
     """Generates the standard return tuple for a failed job."""
