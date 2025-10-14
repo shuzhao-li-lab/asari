@@ -396,11 +396,85 @@ class ext_Experiment:
             if self.parameters['anno']:
                 deconvolution = AsariProcessor(self.parameters)
                 deconvolution.output_path = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table']).replace(".tsv", "_annotated_compounds.json")
-                deconvolution.default_workflow(os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table']))
+                results = deconvolution.default_workflow(os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table']))
+            self.export_gc_annotations(results, os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table']))
+            self.export_gc_annotations(results, os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table']))
             self.export_log()
             self.export_readme()
         else:
             raise Exception("Invalid workflow provided, specify LC or GC workflow")
+
+    def export_gc_annotations(self, results, table):
+        features = pd.read_csv(table, sep="\t")
+        ft_dict = {x['id_number']: x for x in features.to_dict(orient='records')}
+        feature_sub_annotations = {}
+
+        for _ii, (id, cpd) in enumerate(results.items()):
+            all_features = [cpd["anchor_fragment"]["id"]]
+            cpd_id = f"CPD_{_ii}"
+            iso_id = "M0"
+            if not cpd["fragments"] and not cpd["anchor_fragment"]["isotopes"]:
+                iso_id = "M0?"
+            anchor_mz = cpd["anchor_fragment"].get("mz", 0)
+            fragment = "Quant"
+            feature_sub_annotations[cpd["anchor_fragment"]["id"]] = {
+                "Compound_ID": cpd_id,
+                "Isotopologue": iso_id,
+                "Fragment": f"quant",
+            }
+            for isotope in cpd["anchor_fragment"].get("isotopes", []):
+                all_features.append(isotope["id"])
+                feature_sub_annotations[isotope["id"]] = {
+                    "Compound_ID": cpd_id,
+                    "Isotopologue": isotope["evidence"]["isotope_type"],
+                    "Fragment": f"quant" 
+                }
+            for fragment in cpd["fragments"]:
+                all_features.append(fragment["id"])
+                frag_mz = fragment["mz"]
+                if not fragment["isotopes"] and not fragment.get('fragments'):
+                    iso_id = "M0?"
+                feature_sub_annotations[fragment["id"]] = {
+                    "Compound_ID": cpd_id,
+                    "Isotopologue": iso_id,
+                    "Fragment": f"fragment_{round(anchor_mz - frag_mz, 3)}",
+                }
+                for isotope in fragment.get("isotopes", []):
+                    all_features.append(isotope['id'])
+                    feature_sub_annotations[isotope["id"]] = {
+                        "Compound_ID": cpd_id,
+                        "Isotopologue": isotope["evidence"]["isotope_type"],
+                        "Fragment": f"fragment_{round(anchor_mz - frag_mz, 3)}"
+                    }
+            
+            if "annotations" in cpd:
+                best_annotation = ("?", '', '', '', 0)
+                for annot in cpd["annotations"].get("top_matches", []):
+                    if annot['matched_peaks'] * annot['score'] > best_annotation[-1]:
+                        best_annotation = (
+                            annot["name"],
+                            annot["library"],
+                            annot["score"],
+                            annot["matched_peaks"]
+                        )
+                for feature in all_features:
+                    feature_sub_annotations[feature].update({
+                        "Annotation Name": best_annotation[0],
+                        "Annotation Source": best_annotation[1],
+                        "Annotation Score": best_annotation[2],
+                        "Annotation Matched Peaks": best_annotation[3]
+                    })
+                    
+        for x in tqdm.tqdm(feature_sub_annotations, desc="Exporting GC Feature Table"):
+            if x in ft_dict:
+                ft_dict[x].update(feature_sub_annotations[x]) 
+                for s in features.columns[11:]:
+                    old_val = ft_dict[x][s]
+                    del ft_dict[x][s]
+                    ft_dict[x][s] = old_val
+
+        pd.DataFrame(list(ft_dict.values())).to_csv(table.replace(".tsv", "_annotated.tsv"), sep="\t")
+
 
     def annotate(self):
         '''

@@ -60,9 +60,6 @@ def get_ionization_mode_mzml(mzml_file, limit=50):
                 break
     return list(ion_modes)[0]
 
-import multiprocessing as mp
-import tqdm
-
 def _process_with_dask(command, arguments, scheduler_ip):
     """Processes arguments in parallel using a Dask cluster."""
     try:
@@ -105,7 +102,20 @@ def _process_with_multiprocessing(command, arguments, num_workers=None):
         
     return results
 
-def bulk_process(command, arguments, dask_ip=None, num_workers=None):
+def _process_with_gen_multiprocessing(command, arguments, num_workers=None):
+    """Processes arguments in parallel using a local multiprocessing pool."""
+    # Default to the number of CPU cores if num_workers is not specified.
+    pool_size = num_workers if isinstance(num_workers, int) and num_workers > 0 else mp.cpu_count()
+    print(f"Starting a local multiprocessing pool with {pool_size} workers.")
+
+    with mp.Pool(pool_size) as pool:
+        # pool.imap is memory-efficient and returns an ordered iterator.
+        # We wrap it with tqdm for a clean, real-time progress bar.
+        pbar = tqdm.tqdm(pool.imap(command, arguments), total=len(arguments), desc="Processing")
+        # Collect the results from the progress bar iterator.
+        yield from pbar
+
+def bulk_process(command, arguments, dask_ip=None, num_workers=None, streaming=False):
     """
     Executes a command in parallel for each item in a list of arguments.
 
@@ -131,6 +141,9 @@ def bulk_process(command, arguments, dask_ip=None, num_workers=None):
     if dask_ip:
         # Use Dask for distributed processing.
         return _process_with_dask(command, arguments, dask_ip)
+    elif streaming:
+        raise NotImplementedError()
+        return _process_with_gen_multiprocessing(command, arguments, num_workers)
     else:
         # Use local multiprocessing.
         return _process_with_multiprocessing(command, arguments, num_workers)

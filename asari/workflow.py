@@ -109,7 +109,7 @@ def read_project_dir(directory, file_pattern='.mzML'):
     directory: str
         path to a directory containing mzML files
     file_pattern: str, optional, default: '.mzML'
-        files with this substring will be ingested
+        files with this substring ßbe ingested
 
     Return
     ------
@@ -408,8 +408,6 @@ def _save_sample_data(data, outfile_base, storage_format, compress):
         with open(outfile, 'wb' if binary_mode else 'w') as f:
             writer(f)
         return outfile, was_compressed
-    finally:
-        return _get_failure_payload(data['sample_id'])
 
 def _get_failure_payload(sample_id):
     """Generates the standard return tuple for a failed job."""
@@ -464,7 +462,8 @@ def single_sample_EICs(job):
     """
     sample_id, infile, outfile, parameters = job
 
-    try:
+    #try:
+    if True:
         # 1. Check for and reuse intermediate files if available
         if interm_dir := parameters.get('reuse_intermediates'):
             pickle_dir = os.path.join(interm_dir, 'pickle')
@@ -567,10 +566,10 @@ def single_sample_EICs(job):
             was_compressed
         )}
 
-    except Exception as e:
-        print(f"Error processing {os.path.basename(infile)}: {e}")
-        # Return a failure payload
-        return {sample_id: ('failed', 'failed', None, None, None, None, None, None, None, None, {}, False)}
+    #except Exception as e:
+    #    print(f"Error processing {os.path.basename(infile)}: {e}")
+    #    # Return a failure payload
+    #    return {sample_id: ('failed', 'failed', None, None, None, None, None, None, None, None, {}, False)}
 
 
 

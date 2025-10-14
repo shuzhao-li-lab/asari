@@ -8,6 +8,8 @@ from functools import lru_cache
 
 import pandas as pd
 import numpy as np
+import tqdm
+
 from scipy import interpolate
 from scipy.ndimage import maximum_filter1d
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
@@ -414,13 +416,10 @@ class CompositeMap:
 
         # so obvious to do it that way now...
         cal_min_peak_height = self.experiment.parameters['cal_min_peak_height']
-        MIN_PEAK_NUM = self.experiment.parameters['peak_number_rt_calibration']
-        NUM_ITERATIONS = self.experiment.parameters['num_lowess_iterations']
-        MAX_RETENTION_SHIFT = self.experiment.parameters['max_retention_shift']
+        self.good_reference_landmark_peaks = self.set_RT_reference(cal_min_peak_height)
+        MAX_RETENTION_SHIFT = self.experiment.parameters.get('max_retention_shift', np.inf)
         if MAX_RETENTION_SHIFT is None:
             MAX_RETENTION_SHIFT = np.inf
-        self.good_reference_landmark_peaks = self.set_RT_reference(cal_min_peak_height)
-
         mzDict = dict(self.MassGrid['mz'])
         mzlist = list(self.MassGrid.index)
         basetrack = np.zeros(self.rt_length, dtype=np.int64)
@@ -428,10 +427,9 @@ class CompositeMap:
         for k in mzlist:
             _comp_dict[k] = basetrack.copy()
 
-        retention_time_lists = {}
         for ii, SM in enumerate(self.experiment.all_samples):
-            retention_time_lists[ii] = list(SM.list_retention_time)
-            SM.list_retention_time = self.experiment.list_sample_indices[ii]
+            stored_times = SM.list_retention_time
+            SM.list_retention_time = SM.list_retention_index
             list_mass_tracks = SimpleSample.get_mass_tracks_for_sample(SM)
             if SM.is_reference:
                 print("\t\tgood_reference_landmark_peaks: ", len(self.good_reference_landmark_peaks))
@@ -440,10 +438,10 @@ class CompositeMap:
                     self.calibrate_sample_RT(SM, list_mass_tracks, 
                         calibration_fuction=rt_lowess_calibration,
                         cal_min_peak_height=cal_min_peak_height, 
-                        MIN_PEAK_NUM=MIN_PEAK_NUM,
-                        MAX_RETENTION_SHIFT=MAX_RETENTION_SHIFT,
-                        NUM_ITERATIONS=NUM_ITERATIONS)
-            SM.list_retention_time = retention_time_lists[ii]
+                        MIN_PEAK_NUM=self.experiment.parameters['peak_number_rt_calibration'],
+                        MAX_RETENTION_SHIFT=self.experiment.parameters.get('max_retention_shift', np.inf),
+                        NUM_ITERATIONS=self.experiment.parameters['num_lowess_iterations'])
+            SM.list_retention_time = stored_times
             if not self.experiment.parameters['drop_unaligned_samples'] or SM.is_rt_aligned:
                 for k in mzlist:
                     ref_index = self.MassGrid[SM.name][k]
@@ -452,11 +450,7 @@ class CompositeMap:
                             list_mass_tracks[int(ref_index)]['intensity'],  
                             basetrack.copy(), SM.rt_cal_dict 
                             )
-        result = {}
-        for k,v in _comp_dict.items():
-            result[k] = { 'id_number': k, 'mz': mzDict[k], 'intensity': v }
-
-        self.composite_mass_tracks = result
+        self.composite_mass_tracks = {k: {'id_number': k, 'mz': mzDict[k], 'intensity': v} for k, v in _comp_dict.items()}
 
     def perform_index_alignment(self):
         mzDict = dict(self.MassGrid['mz'])
@@ -495,7 +489,7 @@ class CompositeMap:
                             good_landmark_peaks.append(Upeak)
                             selected_reference_landmark_peaks.append(self.good_reference_landmark_peaks[jj])
             _NN = len(good_landmark_peaks)
-            print("\tgood_landmarks: ", index_sample.name, _NN)
+            #print("\tgood_landmarks: ", index_sample.name, _NN)
             
             from .chromatograms import clean_rt_calibration_points
 
@@ -526,9 +520,8 @@ class CompositeMap:
             index_sample.rt_cal_dict = rt_cal_dict
             index_sample.reverse_rt_cal_dict = reverse_rt_cal_dict
 
-        for ii, SM in enumerate(self.experiment.all_samples):
+        for ii, SM in enumerate(tqdm.tqdm(self.experiment.all_samples, desc="Aligning samples...")):
             list_mass_tracks = SimpleSample.get_mass_tracks_for_sample(SM)
-            print("Aligning: ", SM.name)
             if ii in self.experiment.mapping:
                 index_sample = self.experiment.all_samples[self.experiment.mapping[ii]]
 
@@ -605,45 +598,35 @@ class CompositeMap:
             batches[-1].append(SM)
         assert batches[-1], "Empty batch"
 
-        for batch in batches:
-            if self.experiment.parameters['database_mode'] == "memory":
-                # this is a bug - to fix
-                list_of_list_mass_tracks = bulk_process(SimpleSample.get_mass_tracks_for_sample, 
-                                                        batch, 
-                                                        dask_ip=False,
-                                                        num_workers=self.experiment.parameters['multicores'])
+
+        for SM in self.experiment.all_samples:
+            list_mass_tracks = SM._get_sample_data()
+            print("   ", SM.name)
+            if SM.is_reference:
+                print("\t\tgood_reference_landmark_peaks: ", len(self.good_reference_landmark_peaks))
             else:
-                list_of_list_mass_tracks = bulk_process(SimpleSample.get_mass_tracks_for_sample, 
-                                                        batch, 
-                                                        dask_ip=self.experiment.parameters['dask_ip'],
-                                                        num_workers=self.experiment.parameters['multicores'])
-            for (SM, list_mass_tracks) in zip(batch, list_of_list_mass_tracks):
-                print("   ", SM.name)
-                if SM.is_reference:
-                    print("\t\tgood_reference_landmark_peaks: ", len(self.good_reference_landmark_peaks))
-                else:
-                    if self.experiment.parameters['rt_align_on']:
-                        if self.experiment.parameters['debug_rtime_align']:
-                            cal_func = rt_lowess_calibration_debug
-                        else:
-                            cal_func = rt_lowess_calibration
+                if self.experiment.parameters['rt_align_on']:
+                    if self.experiment.parameters['debug_rtime_align']:
+                        cal_func = rt_lowess_calibration_debug
+                    else:
+                        cal_func = rt_lowess_calibration
 
-                        self.calibrate_sample_RT(SM, list_mass_tracks, 
-                                            calibration_fuction=cal_func,
-                                            cal_min_peak_height=cal_min_peak_height, 
-                                            MIN_PEAK_NUM=MIN_PEAK_NUM,
-                                            MAX_RETENTION_SHIFT=MAX_RETENTION_SHIFT,
-                                            NUM_ITERATIONS=NUM_ITERATIONS)
+                    self.calibrate_sample_RT(SM, list_mass_tracks, 
+                                        calibration_fuction=cal_func,
+                                        cal_min_peak_height=cal_min_peak_height, 
+                                        MIN_PEAK_NUM=MIN_PEAK_NUM,
+                                        MAX_RETENTION_SHIFT=MAX_RETENTION_SHIFT,
+                                        NUM_ITERATIONS=NUM_ITERATIONS)
 
-                # option to skip sample if not aligned
-                if not self.experiment.parameters['drop_unaligned_samples'] or SM.is_rt_aligned:
-                    for k in mzlist:
-                        ref_index = self.MassGrid[SM.name][k]
-                        if not pd.isna(ref_index): # ref_index can be NA 
-                            _comp_dict[k] += remap_intensity_track( 
-                                list_mass_tracks[int(ref_index)]['intensity'],  
-                                basetrack.copy(), SM.rt_cal_dict 
-                                )
+            # option to skip sample if not aligned
+            if not self.experiment.parameters['drop_unaligned_samples'] or SM.is_rt_aligned:
+                for k in mzlist:
+                    ref_index = self.MassGrid[SM.name][k]
+                    if not pd.isna(ref_index): # ref_index can be NA 
+                        _comp_dict[k] += remap_intensity_track( 
+                            list_mass_tracks[int(ref_index)]['intensity'],  
+                            basetrack.copy(), SM.rt_cal_dict 
+                            )
 
         result = {}
         for k,v in _comp_dict.items():
@@ -732,7 +715,8 @@ class CompositeMap:
 
                 if Upeak:
                     scan_no_delta = Upeak['apex'] - self.good_reference_landmark_peaks[jj]['apex']
-                    if abs(scan_no_delta) < MAX_RETENTION_SHIFT:
+                    
+                    if MAX_RETENTION_SHIFT is None or abs(scan_no_delta) < MAX_RETENTION_SHIFT:
                         Upeak.update({'ref_id_num': ii})
                         good_landmark_peaks.append(Upeak)
                         selected_reference_landmark_peaks.append(self.good_reference_landmark_peaks[jj])

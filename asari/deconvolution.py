@@ -493,6 +493,8 @@ class MSMSAnnotator:
                 try:
                     for s in load_from_msp(lib_path):
                         lib_spectra.append((os.path.basename(lib_path), self._prep_spectrum(s)))
+                        #if len(lib_spectra) > 10:
+                        #    break
                 except Exception as e:
                     print(f"Could not load library {lib_path}: {e}")
             else:

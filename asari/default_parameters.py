@@ -73,7 +73,7 @@ PARAMETERS = {
 
     #computational improvements
     'compress': False,                  # if True, compress intermediate files ondisk
-    'storage_format': 'pickle',         # 'pickle' or 'json', json is safer but bigger
+    'storage_format': 'json',         # 'pickle' or 'json', json is safer but bigger
     
     # GC-MS EI-MS Extraction
     'coelute_threshold': 0.5,           # features within this value w.r.t. retention time are considered co-eluting
