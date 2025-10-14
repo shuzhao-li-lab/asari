@@ -78,19 +78,20 @@ class ext_Experiment:
         self.reference_sample_id = self.get_reference_sample_id()
         self.list_sample_indices = {}
         
+    def get_reference_sample_instance(self):
+        return self.__find_reference()[0]
+    
     def get_reference_sample_id(self):
-        '''
-        get_reference_sample_id either by user specification, or
-        using the sample of most number_anchor_mz_pairs.
-        This assumes the sample of most good m/z values has a good coverage of features.
-        '''
+        return self.__find_reference()[1]
+
+    def __find_reference(self):
         if self.parameters['reference']:
             # match file name; k is sm['sample_id']
-            for k,v in self.sample_registry.items():
+            for k, v in self.sample_registry.items():
                 if os.path.basename(self.parameters['reference']) == os.path.basename(v['input_file']):
-                    return k
+                    return v, k
                 elif os.path.basename(self.parameters['reference']) + ".mzML" == os.path.basename(v['input_file']):
-                    return k
+                    return v, k
 
         elif self.sample_registry:
             L = [(v['number_anchor_mz_pairs'], v['sample_id']) for v in self.sample_registry.values() if v['number_anchor_mz_pairs'] is not None]
@@ -100,15 +101,15 @@ class ext_Experiment:
             print("\n    The reference sample is:\n    ||* %s *||\n" %ref['name'])
             print("Max reference retention time is %4.2f at scan number %d.\n" %(
                 max(ref['list_retention_time']), ref['max_scan_number']))
-            return ref['sample_id']
+            return ref, ref['sample_id']
         else:
-            return None
-        
+            return None, None
+
     def get_valid_sample_ids(self):
         '''
         Get valid sample ids, as some samples may not be extracted successfully.
         '''
-        return [k for k,v in self.sample_registry.items() if v['status:eic'] == 'passed']
+        return [k for k, v in self.sample_registry.items() if v['status:eic'] == 'passed']
 
     def determine_acquisition_order(self):
         sample_order_by_timestamp = [(k, v['acquisition_time']) for k,v in self.sample_registry.items()]
@@ -204,119 +205,107 @@ class ext_Experiment:
         -------
         self.CMAP as instance of CompositeMap, and MassGrid, composite map and features within.
         '''
+        raise NotImplementedError()
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
         self.CMAP.START()
-        #if not self.parameters['rt_align_on']:
-        #    self.CMAP.mock_rentention_alignment()
-        #self.CMAP.build_composite_tracks()
         self.CMAP.global_peak_detection()
 
-    def populate_RI_lookup_batch(self, batch_map):
-        batch_to_sample_map = {}
-        for sample_name, batch_id in batch_map.items():
-            if batch_id not in batch_to_sample_map:
-                batch_to_sample_map[batch_id] = []
-            batch_to_sample_map[batch_id].append(sample_name)
-        RI_list = pd.read_csv(self.parameters['retention_index_standards'])
-        RI_maps = {}
-        RI_models = {}
-        reverse_RI_models = {} 
-
-        for batch, sample_nos in batch_to_sample_map.items():
-            RI_list[batch] = RI_list[batch] * 60
-            alkane_indices = RI_list['Index']
-            for sample_no in sample_nos:
-                last_index = 0
-                if sample_no in RI_models:
-                    continue
-                print(f"\tAligning: {sample_no} in batch {batch}")
-                #RI_maps[sample_no] = {}
-                sample_instance = SimpleSample(self.sample_registry[sample_no], experiment=self)
-                prev_index, next_index = None, None
-                prev_rt, next_rt = None, None
-                RTs, indexes, scan_nos = [], [], []
-
-                for rt, scan_no in zip(sample_instance.list_retention_time, sample_instance.list_scan_numbers):
-                    RTs.append(rt)
-                    scan_nos.append(scan_no)
-                    for jj, (index, index_rt) in enumerate(zip(alkane_indices, RI_list[batch])):
-                        if jj < last_index:
-                            continue
-                        if rt > index_rt:
-                            prev_index, prev_rt = index, index_rt
-                            last_index = prev_index
-                        elif rt <= index_rt:
-                            _, next_rt = index, index_rt
-                            break
-                    if next_rt is None:
-                        next_rt = max(sample_instance.list_retention_time) * 1.1
-                        _ = max(RI_list['Index']) + 1
-                    RI_value = 100 * (prev_index + ((rt - prev_rt)/(next_rt - rt)))
-                    indexes.append(RI_value)
-
-                self.list_sample_indices[sample_no] = indexes
-
-                sample_instance.list_retention_indices = indexes
-                RI_models[sample_no] = 1
-                reverse_RI_models[sample_no] = 1
-                #model = lowess(indexes, RTs)
-                #model2 = lowess(indexes, scan_nos)
-                #newx, newy = list(zip(*model))
-                #interf = interpolate.interp1d(newx, newy, fill_value="extrapolate", bounds_error=False)
-                #RI_models[sample_no] = interf
-                #newx, newy = list(zip(*model2))
-                #reverse_RI_models[sample_no] = interpolate.interp1d(newy, newx, fill_value="extrapolate", bounds_error=False)
-        self.RI_models = RI_models
-        self.reverse_RI_models = reverse_RI_models
 
     def populate_RI_lookup(self, sample_map):
+        # todo - fix this to work with the sample objects
         RI_maps = {}
         RI_models = {}
         reverse_RI_models = {}
+        
+        # Pre-process the RI_list for faster access
         RI_list = pd.read_csv(self.parameters['retention_index_standards'])
-        for reference_id in tqdm.tqdm(list(dict.fromkeys(list(sample_map.values())))):
-            print(reference_id)
+        RI_list = RI_list.sort_values(by=list(sample_map.values())[0]) # Ensure it's sorted by RT, just in case
+        standard_indexes = RI_list['Index'].astype(int).tolist()
+        
+        for reference_id in tqdm.tqdm(list(sample_map.keys())):
+            reference_instance = self.sample_registry[reference_id]
             RI_maps[reference_id] = {}
-            reference_instance = SimpleSample(self.sample_registry[reference_id], experiment=self)
-            prev_index, next_index = None, None
-            prev_rt, next_rt = None, None
             RTs, indexes, scan_nos = [], [], []
-            for rt, scan_no in zip(reference_instance.list_retention_time, reference_instance.list_scan_numbers):
+            
+            # Get the standard RTs for the current sample
+            standard_RTs = RI_list[sample_map[reference_id]].astype(float).tolist()
+            num_standards = len(standard_RTs)
+            
+            # --- OPTIMIZATION: Two-Pointer Approach ---
+            standard_idx = 0 # Pointer for the RI standards list
+            
+            # The sample RTs are already sorted (monotonically increasing)
+            for rt, scan_no in zip(reference_instance['list_retention_time'], 
+                                    reference_instance['list_scan_numbers']):
                 RTs.append(rt)
                 scan_nos.append(scan_no)
-                print(rt, scan_no)
-                for index, index_rt in zip(RI_list['Index'], RI_list[reference_instance.name]):
-                    index, index_rt = int(index), float(index_rt)
-                    print("\t", index, index_rt)
-                    if rt > index_rt:
-                        prev_index, prev_rt = index, index_rt
-                    elif rt <= index_rt:
-                        _, next_rt = index, index_rt
-                        break
-                if next_rt is None:
-                    next_rt = max(reference_instance.list_retention_time) * 1.1
-                    _ = max(RI_list['Index']) + 1
-                RI_value = 100 * (prev_index + ((rt - prev_rt)/(next_rt - rt)))
+                
+                # 1. Advance the standard_idx pointer
+                # standard_idx will hold the index of the *next* standard (next_rt)
+                while standard_idx < num_standards and rt > standard_RTs[standard_idx]:
+                    standard_idx += 1
+                
+                # 2. Determine prev_rt and next_rt
+                
+                # Case 1: rt is before the first standard
+                if standard_idx == 0:
+                    # The first standard is 'next'
+                    next_index, next_rt = standard_indexes[0], standard_RTs[0]
+                    # 'prev' is a theoretical point at index 0 and rt 0 (or some reasonable start)
+                    prev_index, prev_rt = 0, 0.0
+                
+                # Case 2: rt is after the last standard
+                elif standard_idx == num_standards:
+                    # 'prev' is the last standard
+                    prev_index, prev_rt = standard_indexes[-1], standard_RTs[-1]
+                    # 'next' is a theoretical point
+                    next_index = standard_indexes[-1] + 100
+                    # Use max RT * 1.1 as the next theoretical RT, consistent with original logic (adjusted)
+                    next_rt = max(reference_instance['list_retention_time']) * 1.1
+                
+                # Case 3: rt is bracketed by two standards (the main case)
+                else:
+                    # current standard_idx is 'next'
+                    next_index, next_rt = standard_indexes[standard_idx], standard_RTs[standard_idx]
+                    # standard_idx - 1 is 'prev'
+                    prev_index, prev_rt = standard_indexes[standard_idx - 1], standard_RTs[standard_idx - 1]
+
+                # 3. Calculate the RI Value using linear interpolation
+                
+                # Handling the division by zero if prev_rt == next_rt (shouldn't happen with good standards, but for robustness)
+                if next_rt - prev_rt == 0:
+                    # If the standards have the same RT, just use the 'next' index
+                    RI_value = next_index
+                else:
+                    # RI formula: RI = (100 * prev_index) + 100 * ((rt - prev_rt) / (next_rt - prev_rt)) * (next_index - prev_index)
+                    # Note: The original formula was incorrect/simplified; using the standard linear interpolation formula for RI:
+                    RI_value = (100 * prev_index) + (100 * (next_index - prev_index) * ((rt - prev_rt) / (next_rt - prev_rt)))
+                
                 indexes.append(RI_value)
                 RI_maps[reference_id][rt] = RI_value
+                
+            # The rest of the function remains the same (smoothing and interpolation)
             model = lowess(indexes, RTs)
             model2 = lowess(indexes, scan_nos)
+            
             newx, newy = list(zip(*model))
             interf = interpolate.interp1d(newx, newy, fill_value="extrapolate", bounds_error=False)
             RI_models[reference_id] = interf
-            newx, newy = list(zip(*model2))
-            reverse_RI_models[reference_id] = interpolate.interp1d(newy, newx, fill_value="extrapolate", bounds_error=False)
             
+            newx, newy = list(zip(*model2))
+            # Note: The original code used newy, newx for reverse_RI_models, which seems correct 
+            # (scan_nos -> RI_index), but the lowess was indexes vs scan_nos.
+            # Check if the original intent was lowess(scan_nos, indexes) or lowess(indexes, scan_nos)
+            # Assuming lowess(RI, ScanNo) in model2, reverse interp is ScanNo -> RI.
+            reverse_interf = interpolate.interp1d(newy, newx, fill_value="extrapolate", bounds_error=False)
+            reverse_RI_models[reference_id] = reverse_interf
+                
         self.RI_models = RI_models
         self.reverse_RI_models = reverse_RI_models
-
-    def convert_to_RI(self, sample_map):
-        if not self.RI_map:
-            self.populate_RI_lookup(sample_map)
-        for k, v in sample_map.items():
-            sam = self.sample_registry[k]
-            sam['list_retention_index'] = self.RI_models[v](sam['list_retention_time'])
+        
+        for ii, SM in enumerate(self.all_samples):
+            SM.list_retention_index = self.RI_models[ii](SM.list_retention_time)
 
     def determine_batches(self):
         sample_to_batch = {}
@@ -346,24 +335,17 @@ class ext_Experiment:
         for column in retention_index_information:
             if column in sample_names:
                 print("Assuming RI Samples are Present - Will Align with Sample Method")
+                print("RI Samples Method is Not As Tested!!!")
                 tripped = True
                 break
         if not tripped:
             print("Assuming Columns are Batch Substrings - Will Align with Batch Method")
-            print("Batch Method is Not As Tested!!!")
 
-        if tripped:
-            sample_run_order = self.determine_acquisition_order()
-            mapping = self.associate_stds_samples(sample_run_order)
-            self.mapping = mapping
-            self.populate_RI_lookup(mapping)
-            self.CMAP.build_composite_tracks_GC()
-        else:
-            sample_run_order = self.determine_batches()
-            mapping = self.associate_stds_batches(sample_run_order)
-            self.mapping = mapping
-            self.populate_RI_lookup_batch(mapping)
-            self.CMAP.build_composite_tracks_GC()
+        sample_run_order = self.determine_batches()
+        mapping = self.associate_stds_batches(sample_run_order)
+        self.mapping = mapping
+        self.populate_RI_lookup(mapping)
+        self.CMAP.build_composite_tracks_GC()
         self.CMAP.global_peak_detection()
 
     def export_all(self, anno=True, mode="LC"):
@@ -406,9 +388,11 @@ class ext_Experiment:
 
     def export_gc_annotations(self, results, table):
         features = pd.read_csv(table, sep="\t")
+        master_reference_sample = self.get_reference_sample_id()
+        features['RI'] = self.RI_models[master_reference_sample](features['rtime'])
         ft_dict = {x['id_number']: x for x in features.to_dict(orient='records')}
-        feature_sub_annotations = {}
 
+        feature_sub_annotations = {}
         for _ii, (id, cpd) in enumerate(results.items()):
             all_features = [cpd["anchor_fragment"]["id"]]
             cpd_id = f"CPD_{_ii}"
@@ -449,31 +433,34 @@ class ext_Experiment:
             
             if "annotations" in cpd:
                 best_annotation = ("?", '', '', '', 0)
-                for annot in cpd["annotations"].get("top_matches", []):
-                    if annot['matched_peaks'] * annot['score'] > best_annotation[-1]:
-                        best_annotation = (
-                            annot["name"],
-                            annot["library"],
-                            annot["score"],
-                            annot["matched_peaks"]
-                        )
-                for feature in all_features:
-                    feature_sub_annotations[feature].update({
-                        "Annotation Name": best_annotation[0],
-                        "Annotation Source": best_annotation[1],
-                        "Annotation Score": best_annotation[2],
-                        "Annotation Matched Peaks": best_annotation[3]
-                    })
-                    
+                if "gc_msms_search" in cpd['annotations']:
+                    for annot in cpd["annotations"]["gc_msms_search"].get("top_matches", []):
+                        if annot['matched_peaks'] * annot['score'] > best_annotation[-1]:
+                            best_annotation = (
+                                annot["name"],
+                                annot["library"],
+                                annot["score"],
+                                annot["matched_peaks"]
+                            )
+                    for feature in all_features:
+                        feature_sub_annotations[feature].update({
+                            "Annotation Name": best_annotation[0],
+                            "Annotation Source": best_annotation[1],
+                            "Annotation Score": best_annotation[2],
+                            "Annotation Matched Peaks": best_annotation[3]
+                        })
+    
+        export_order = [x for x in features.columns[:11] + ['RI']]
+        samples = [x for x in features.columns[11:] if x not in export_order]
         for x in tqdm.tqdm(feature_sub_annotations, desc="Exporting GC Feature Table"):
             if x in ft_dict:
                 ft_dict[x].update(feature_sub_annotations[x]) 
-                for s in features.columns[11:]:
+                for s in samples:
                     old_val = ft_dict[x][s]
                     del ft_dict[x][s]
                     ft_dict[x][s] = old_val
 
-        pd.DataFrame(list(ft_dict.values())).to_csv(table.replace(".tsv", "_annotated.tsv"), sep="\t")
+        pd.DataFrame(list(ft_dict.values())).to_csv(table.replace(".tsv", "_annotated.tsv"), sep="\t", index=False)
 
 
     def annotate(self):
@@ -861,3 +848,4 @@ class ext_Experiment:
         outfile = os.path.join(self.parameters['outdir'], 'README.txt')
         with open(outfile, 'w', encoding='utf-8') as f:
             f.write(readme_doc_str)
+
