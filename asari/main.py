@@ -281,7 +281,6 @@ def _build_parser() -> argparse.Namespace:
 
 def main():
     print(f"\n\n~~~~~~~ Hello from Asari ({__version__}) ~~~~~~~~~\n")
-
     args = _build_parser()
 
     # clone default parameters so we don't mutate the import

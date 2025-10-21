@@ -443,7 +443,6 @@ class MSMSAnnotator:
     user-provided spectral libraries.
     """
     def __init__(self, feature_table_dict, sample_cols, params):
-        print(params)
         if not all([load_from_msp, Spectrum, CosineGreedy]):
             raise ImportError("MatchMS library is not installed. Cannot perform GC-MS annotation.")
         
@@ -461,11 +460,16 @@ class MSMSAnnotator:
     @property
     def spectral_libraries(self):
         libs = self.params.get("GC_Database", [])
-        print("lib: ", libs)
         if isinstance(libs, str):
-            return [libs]
-        else:
-            return libs
+            path = os.path.abspath(libs)
+            if os.path.isdir(path):
+                return [
+                    os.path.join(path, f)
+                    for f in os.listdir(path)
+                    if f.lower().endswith(".msp")
+                ]
+            return [path]
+        return libs
 
     @property
     def min_matched_peaks(self):
@@ -858,38 +862,3 @@ class AsariProcessor:
     def get_results(self):
         """Returns the final annotated compound data."""
         return self.deconvoluted_compounds
-
-
-# ==============================================================================
-# ==                            EXAMPLE USAGE                                 ==
-# ==============================================================================
-
-if __name__ == '__main__':
-    import sys
-    # This block demonstrates how to use the AsariProcessor.
-    # It replaces the command-line parsing from the original scripts.
-    
-    # --- Setup for Standalone Test ---
-    # To run this test, you need to create dummy data or point to real files.
-    # Create dummy directories and files for the example to run without errors.
-    print("--- Running Standalone Test ---")
-    if not os.path.exists("./data"): os.makedirs("./data")
-    if not os.path.exists("./libs"): os.makedirs("./libs")
-    if not os.path.exists(parameters['deconvolution']['neutral_loss_file']):
-        with open(parameters['deconvolution']['neutral_loss_file'], 'w') as f:
-            json.dump([{"neutral_loss_formula": "H2O"}], f) # Dummy loss
-            
-    # Expects the path to a feature table as a command-line argument
-    if len(sys.argv) < 2:
-        print("Usage: python your_script_name.py <path_to_feature_table.csv>")
-        sys.exit(1)
-        
-    feature_table_path = sys.argv[1]
-
-    # --- Main Workflow Execution ---
-    
-    # 1. Initialize the processor with global parameters
-    processor = AsariProcessor(parameters)
-    
-    # 2. Run the full workflow
-    processor.default_workflow(feature_table_path)

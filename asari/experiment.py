@@ -404,7 +404,6 @@ class ext_Experiment:
         compound_annotation_records = []
 
         for _ii, (id, cpd) in enumerate(tqdm.tqdm(results.items(), desc="Processing Compounds")):
-            
             cpd_id = f"CPD_{_ii}"
             
             # Collect all feature IDs belonging to this compound (anchor + isotopes + fragments + fragment isotopes)
@@ -498,10 +497,8 @@ class ext_Experiment:
         # Get standard and new columns
         base_cols = features.columns.tolist()
         # These columns should appear early in the output
-        export_order_prefix = [
-            'id_number', 'rtime', 'RI', 'mz', 'area', 'mass', 'rt_min', 
-            'Compound_ID', 'Isotopologue', 'Fragment'
-        ]
+        export_order_prefix = ['RI']
+        export_order_prefix += [x for x in base_cols[:11] if x not in export_order_prefix]
         
         # Get sample columns (those after the initial 11 in the original feature table)
         # This logic assumes the first 11 columns of the original table were metadata

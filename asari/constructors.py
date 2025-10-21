@@ -214,7 +214,6 @@ class MassGrid:
         
         self.experiment.all_samples.append(sample)
 
-
     def bin_track_mzs(self, tl, reference_id=None):
         '''
         Bin all track m/z values into centroids via clustering, to be used to build massGrid.
