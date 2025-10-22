@@ -213,99 +213,56 @@ class ext_Experiment:
 
 
     def populate_RI_lookup(self, sample_map):
-        # todo - fix this to work with the sample objects
-        RI_maps = {}
-        RI_models = {}
-        reverse_RI_models = {}
-        
-        # Pre-process the RI_list for faster access
+        RI_maps, RI_models, reverse_RI_models = {}, {}, {}
         RI_list = pd.read_csv(self.parameters['retention_index_standards'])
-        RI_list = RI_list.sort_values(by=list(sample_map.values())[0]) # Ensure it's sorted by RT, just in case
+        RI_list = RI_list.sort_values(by=list(sample_map.values())[0])
         standard_indexes = RI_list['Index'].astype(int).tolist()
-        
+
         for reference_id in tqdm.tqdm(list(sample_map.keys())):
             reference_instance = self.sample_registry[reference_id]
             RI_maps[reference_id] = {}
             RTs, indexes, scan_nos = [], [], []
-            
-            # Get the standard RTs for the current sample
-            standard_RTs = RI_list[sample_map[reference_id]].astype(float).tolist()
+
+            # Convert both feature and standard RTs to minutes
+            standard_RTs = (RI_list[sample_map[reference_id]].astype(float)).tolist()
             num_standards = len(standard_RTs)
-            
-            # --- OPTIMIZATION: Two-Pointer Approach ---
-            standard_idx = 0 # Pointer for the RI standards list
-            
-            # The sample RTs are already sorted (monotonically increasing)
-            for rt, scan_no in zip(reference_instance['list_retention_time'], 
-                                    reference_instance['list_scan_numbers']):
+            list_rt_minutes = [rt / 60.0 for rt in reference_instance['list_retention_time']]
+
+            standard_idx = 0
+            for rt, scan_no in zip(list_rt_minutes, reference_instance['list_scan_numbers']):
                 RTs.append(rt)
                 scan_nos.append(scan_no)
-                
-                # 1. Advance the standard_idx pointer
-                # standard_idx will hold the index of the *next* standard (next_rt)
                 while standard_idx < num_standards and rt > standard_RTs[standard_idx]:
                     standard_idx += 1
-                
-                # 2. Determine prev_rt and next_rt
-                
-                # Case 1: rt is before the first standard
                 if standard_idx == 0:
-                    # The first standard is 'next'
-                    next_index, next_rt = standard_indexes[0], standard_RTs[0]
-                    # 'prev' is a theoretical point at index 0 and rt 0 (or some reasonable start)
                     prev_index, prev_rt = 0, 0.0
-                
-                # Case 2: rt is after the last standard
+                    next_index, next_rt = standard_indexes[0], standard_RTs[0]
                 elif standard_idx == num_standards:
-                    # 'prev' is the last standard
                     prev_index, prev_rt = standard_indexes[-1], standard_RTs[-1]
-                    # 'next' is a theoretical point
-                    next_index = standard_indexes[-1] + 100
-                    # Use max RT * 1.1 as the next theoretical RT, consistent with original logic (adjusted)
-                    next_rt = max(reference_instance['list_retention_time']) * 1.1
-                
-                # Case 3: rt is bracketed by two standards (the main case)
+                    next_index = standard_indexes[-1]
+                    next_rt = max(list_rt_minutes) * 1.1
                 else:
-                    # current standard_idx is 'next'
-                    next_index, next_rt = standard_indexes[standard_idx], standard_RTs[standard_idx]
-                    # standard_idx - 1 is 'prev'
                     prev_index, prev_rt = standard_indexes[standard_idx - 1], standard_RTs[standard_idx - 1]
+                    next_index, next_rt = standard_indexes[standard_idx], standard_RTs[standard_idx]
 
-                # 3. Calculate the RI Value using linear interpolation
-                
-                # Handling the division by zero if prev_rt == next_rt (shouldn't happen with good standards, but for robustness)
-                if next_rt - prev_rt == 0:
-                    # If the standards have the same RT, just use the 'next' index
+                if next_rt == prev_rt:
                     RI_value = next_index
                 else:
-                    # RI formula: RI = (100 * prev_index) + 100 * ((rt - prev_rt) / (next_rt - prev_rt)) * (next_index - prev_index)
-                    # Note: The original formula was incorrect/simplified; using the standard linear interpolation formula for RI:
-                    RI_value = (100 * prev_index) + (100 * (next_index - prev_index) * ((rt - prev_rt) / (next_rt - prev_rt)))
-                
+                    RI_value = 100 * (prev_index + (rt - prev_rt) / (next_rt - prev_rt))
                 indexes.append(RI_value)
                 RI_maps[reference_id][rt] = RI_value
-                
-            # The rest of the function remains the same (smoothing and interpolation)
+
             model = lowess(indexes, RTs)
-            model2 = lowess(indexes, scan_nos)
-            
-            newx, newy = list(zip(*model))
-            interf = interpolate.interp1d(newx, newy, fill_value="extrapolate", bounds_error=False)
-            RI_models[reference_id] = interf
-            
-            newx, newy = list(zip(*model2))
-            # Note: The original code used newy, newx for reverse_RI_models, which seems correct 
-            # (scan_nos -> RI_index), but the lowess was indexes vs scan_nos.
-            # Check if the original intent was lowess(scan_nos, indexes) or lowess(indexes, scan_nos)
-            # Assuming lowess(RI, ScanNo) in model2, reverse interp is ScanNo -> RI.
-            reverse_interf = interpolate.interp1d(newy, newx, fill_value="extrapolate", bounds_error=False)
-            reverse_RI_models[reference_id] = reverse_interf
-                
+            model2 = lowess(RTs, indexes)
+            x1, y1 = zip(*model)
+            RI_models[reference_id] = interpolate.interp1d(x1, y1, fill_value="extrapolate", bounds_error=False)
+            x2, y2 = zip(*model2)
+            reverse_RI_models[reference_id] = interpolate.interp1d(y2, x2, fill_value="extrapolate", bounds_error=False)
+
         self.RI_models = RI_models
         self.reverse_RI_models = reverse_RI_models
-        
-        for ii, SM in enumerate(self.all_samples):
-            SM.list_retention_index = self.RI_models[ii](SM.list_retention_time)
+        for i, SM in enumerate(self.all_samples):
+            SM.list_retention_index = self.RI_models[i]([rt/60 for rt in SM.list_retention_time])
 
     def determine_batches(self):
         sample_to_batch = {}
@@ -395,8 +352,7 @@ class ext_Experiment:
         features = pd.read_csv(table, sep="\t")
         master_reference_sample = self.get_reference_sample_id()
         # Assuming self.RI_models is correctly populated
-        features['RI'] = self.RI_models[master_reference_sample](features['rtime'])
-        
+        features['RI'] = self.RI_models[master_reference_sample](features['rtime'] / 60)
         # Extract feature data into a dict for quick lookup and manipulation
         ft_dict = {x['id_number']: x for x in features.to_dict(orient='records')}
 
@@ -465,7 +421,7 @@ class ext_Experiment:
                     "name": "?", 
                     "library": "", 
                     "score": 0, 
-                    "matched_peaks": 0
+                    "matched_peaks": 0,
                 }]
 
             # Create a record for every feature and every annotation
@@ -485,7 +441,8 @@ class ext_Experiment:
                             "Annotation_Name": annot["name"],
                             "Annotation_Source": annot["library"],
                             "Annotation_Score": annot["score"],
-                            "Annotation_Matched_Peaks": annot["matched_peaks"]
+                            "Annotation_Matched_Peaks": annot["matched_peaks"],
+                            "Annotation_Library_Index": annot.get("retention_index", "not reported")
                         })
                         # Add the complete row to the list
                         compound_annotation_records.append(annot_record)
@@ -514,7 +471,8 @@ class ext_Experiment:
             "Annotation_Name",
             "Annotation_Source",
             "Annotation_Score",
-            "Annotation_Matched_Peaks"
+            "Annotation_Matched_Peaks",
+            "Annotation_Library_Index"
         ]
         export_order += sample_cols
         
@@ -531,7 +489,7 @@ class ext_Experiment:
         self.export_gc_all_annotations(results, table)
         features = pd.read_csv(table, sep="\t")
         master_reference_sample = self.get_reference_sample_id()
-        features['RI'] = self.RI_models[master_reference_sample](features['rtime'])
+        features['RI'] = self.RI_models[master_reference_sample](features['rtime'] / 60)
         ft_dict = {x['id_number']: x for x in features.to_dict(orient='records')}
 
         feature_sub_annotations = {}

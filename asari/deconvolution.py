@@ -52,7 +52,7 @@ except ImportError:
 try:
     from matchms.importing import load_from_msp
     from matchms import Spectrum
-    from matchms.filtering import default_filters, normalize_intensities
+    from matchms.filtering import default_filters, normalize_intensities, add_retention_index
     from matchms.similarity import CosineGreedy
 except ImportError:
     print("Warning: 'matchms' not found. Please install via 'pip install matchms'.")
@@ -510,6 +510,7 @@ class MSMSAnnotator:
         """Applies standard filters to a spectrum."""
         spec = default_filters(spec)
         spec = normalize_intensities(spec)
+        add_retention_index(spec)
         return spec
     
     def _plot_mirror(self, query, lib, outpath, title=None):
@@ -567,7 +568,7 @@ class MSMSAnnotator:
         order = np.argsort(mzs)
         mzs, ints = np.array(mzs)[order], np.array(ints)[order]
         precursor = float(anchor_row.get("mz", np.nan))
-
+        
         spec = Spectrum(mz=mzs, intensities=ints, metadata={"precursor_mz": precursor})
         return self._prep_spectrum(spec), rep_sample
 
@@ -581,6 +582,9 @@ class MSMSAnnotator:
         for libname, lspec in self.lib_spectra:
             score_tuple = self.cosine_greedy.pair(qspec, lspec)
             score, n_matches = score_tuple['score'], score_tuple['matches']
+            retention_index = lspec.get("retention_index", "Not Reported")
+
+
             if n_matches >= self.min_matched_peaks and score > self.min_cosine_score:
                 lib_compound_name = lspec.get("compound_name") or lspec.get("name") or "unknown"
                 
@@ -593,9 +597,12 @@ class MSMSAnnotator:
                     self._plot_mirror(qspec, lspec, fpath, title=title)
                 
                 scores.append({
-                    "library": libname, "name": lib_compound_name,
+                    "library": libname, 
+                    "name": lib_compound_name,
                     "precursor_mz": lspec.get("precursor_mz"),
-                    "score": float(score), "matched_peaks": int(n_matches)
+                    "score": float(score), 
+                    "matched_peaks": int(n_matches),
+                    "retention_index": retention_index
                 })
 
         scores.sort(key=lambda x: (-x["score"], -x["matched_peaks"]))
