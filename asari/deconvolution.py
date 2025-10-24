@@ -44,6 +44,14 @@ except ImportError:
         return 0.0
 
 try:
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_pdf import PdfPages  # <-- ADD THIS
+except ImportError:
+    print("Warning: 'matplotlib' not found. Please install via 'pip install matplotlib'.")
+    plt = None
+    PdfPages = None  # <-- ADD THIS
+
+try:
     from intervaltree import Interval, IntervalTree
 except ImportError:
     print("Warning: 'intervaltree' not found. Please install via 'pip install intervaltree'.")
@@ -59,56 +67,10 @@ except ImportError:
     load_from_msp, Spectrum, default_filters, normalize_intensities, CosineGreedy = [None] * 5
 
 try:
-    import matplotlib.pyplot as plt
+    from pypdf import PdfReader, PdfWriter
 except ImportError:
-    print("Warning: 'matplotlib' not found. Please install via 'pip install matplotlib'.")
-    plt = None
-
-
-# ==============================================================================
-# ==                           CONFIGURATION PARAMETERS                       ==
-# ==============================================================================
-# This dictionary holds all configurable parameters for the workflow.
-# Update these paths and settings for your environment.
-parameters = {
-    # --- General Parameters ---
-    "mode": "gc",  # 'gc' or 'lc'
-    "id_column": "id_number",
-    "sample_start_col": 11, # 0-indexed column where sample intensity data begins
-    "output_prefix": "asari_results",
-    "num_cores": 4, # Number of cores for multiprocessing
-
-    # --- Deconvolution (AutoKhipu) Parameters ---
-    "deconvolution": {
-        "neutral_loss_file": "./data/plausible_neutral_losses.json", # Path to plausible neutral losses
-        "nl_tolerance": 0.002, # Mass tolerance (Da) for neutral loss matching
-        "rt_window": 1.0, # Retention time window for grouping features
-        "correlation_threshold_bc": 0.8, # Bhattacharyya coefficient threshold
-        "isotope_mz_tolerance": 0.002,
-    },
-
-    # --- GC-MS Annotation Parameters ---
-    "gc_annotation": {
-        "spectral_libraries": [ # List of .msp library files
-            "./libs/MoNA-export-GC-MS_Spectra.msp",
-            "./libs/13C_ISTDs.MSP",
-        ],
-        "msms_tolerance": 0.005,
-        "min_matched_peaks": 1,
-        "min_cosine_score": 0.70,
-        "top_k_matches": 10,
-        "mirror_plot_dir": "./mirror_plots", # Directory to save mirror plots
-    },
-
-    # --- LC-MS Annotation Parameters ---
-    "lc_annotation": {
-        # Path to the external formula prediction tool executable (e.g., Tipu)
-        # This is an example; you will need to adapt it to your tool.
-        "formula_predictor_cmd": "go run /path/to/your/Tipu.go --input {input_csv} --output {output_csv}",
-        "formula_mass_tolerance": 0.001,
-        "temp_csv_dir": "./temp_l4", # Directory for temporary CSV files
-    }
-}
+    print("Warning: 'pypdf' not found. Please install via 'pip install pypdf'. PDF bookmarks will not be generated.")
+    PdfReader, PdfWriter = None, None
 
 
 # ==============================================================================
@@ -480,12 +442,19 @@ class MSMSAnnotator:
         return self.params.get("min_cosine_score", 0.7)
 
     @property
-    def mirror_plot_dir(self):
-        return self.params.get("mirror_plot_dir")
+    def mirror_plot_pdf(self):
+        """Defines the output path for the PDF plot report."""
+        prefix = self.params.get("output_prefix", "asari_results")
+        outdir = self.params.get("outdir", ".") 
+        pdf_path = os.path.join(outdir, f"{prefix}_mirror_plots.pdf")
+        return os.path.abspath(pdf_path)
 
     @property
-    def top_k_matches(self):
-        return self.params.get("top_k_matches", 10)
+    def generate_plots(self):
+        """Flag to enable/disable plot generation."""
+        # We need both matplotlib and PdfPages to be available
+        return plt is not None and PdfPages is not None and self.mirror_plot_pdf
+
 
     def _load_libraries(self):
         """Loads and preprocesses spectral libraries."""
@@ -497,8 +466,6 @@ class MSMSAnnotator:
                 try:
                     for s in load_from_msp(lib_path):
                         lib_spectra.append((os.path.basename(lib_path), self._prep_spectrum(s)))
-                        #if len(lib_spectra) > 10:
-                        #    break
                 except Exception as e:
                     print(f"Could not load library {lib_path}: {e}")
             else:
@@ -513,25 +480,31 @@ class MSMSAnnotator:
         add_retention_index(spec)
         return spec
     
-    def _plot_mirror(self, query, lib, outpath, title=None):
-        """Generates and saves a mirror plot."""
-        if not plt: return
+    def _plot_mirror(self, query, lib, pdf_object, title=None):
+        """Generates a mirror plot and saves it directly to the PDF object."""
+        if not plt or not pdf_object: return
+        
+        # Create a new figure and axes for this plot
+        fig = plt.figure(figsize=(8, 5))
+        ax = fig.add_subplot(111)
+
         q_mz, q_ints = query.peaks.mz, query.peaks.intensities
         l_mz, l_ints = lib.peaks.mz, lib.peaks.intensities
         q_ints = q_ints / q_ints.max() if q_ints.max() > 0 else q_ints
         l_ints = l_ints / l_ints.max() if l_ints.max() > 0 else l_ints
 
-        plt.figure(figsize=(8, 5))
-        plt.vlines(q_mz, 0, q_ints, color="blue", lw=1, label="Query")
-        plt.vlines(l_mz, -l_ints, 0, color="red", lw=1, label="Library")
-        plt.axhline(0, color='black', lw=0.5)
-        plt.xlabel("m/z")
-        plt.ylabel("Relative Intensity")
-        plt.title(title or "Mirror Plot")
-        plt.legend()
+        ax.vlines(q_mz, 0, q_ints, color="blue", lw=1, label="Query")
+        ax.vlines(l_mz, -l_ints, 0, color="red", lw=1, label="Library")
+        ax.axhline(0, color='black', lw=0.5)
+        ax.set_xlabel("m/z")
+        ax.set_ylabel("Relative Intensity")
+        ax.set_title(title or "Mirror Plot")
+        ax.legend()
         plt.tight_layout()
-        plt.savefig(outpath, dpi=150)
-        plt.close()
+        
+        # Save the current figure to the PDF and close it to free memory
+        pdf_object.savefig(fig)
+        plt.close(fig)
 
     def _get_feature_row(self, fid):
         """Safely retrieves a feature row from the dictionary."""
@@ -573,28 +546,24 @@ class MSMSAnnotator:
         return self._prep_spectrum(spec), rep_sample
 
     def _score_compound(self, fid_cpd_tuple):
-        """Scores a single compound against all library spectra."""
+        """
+        Scores a compound against all library spectra.
+        Returns annotation data and data required for plotting.
+        """
         fid, cpd = fid_cpd_tuple
         qspec, rep_sample = self._spectrum_for_compound(cpd)
-        if qspec is None: return fid, None
+        if qspec is None: return fid, None, []  # Return empty list for plots
 
         scores = []
+        plot_data = [] # List to hold plotting info
+
         for libname, lspec in self.lib_spectra:
             score_tuple = self.cosine_greedy.pair(qspec, lspec)
             score, n_matches = score_tuple['score'], score_tuple['matches']
             retention_index = lspec.get("retention_index", "Not Reported")
 
-
             if n_matches >= self.min_matched_peaks and score > self.min_cosine_score:
                 lib_compound_name = lspec.get("compound_name") or lspec.get("name") or "unknown"
-                
-                # Create mirror plot if directory is set
-                if self.mirror_plot_dir:
-                    os.makedirs(self.mirror_plot_dir, exist_ok=True)
-                    fname = f"{fid}_{lib_compound_name.replace(' ', '_').replace('/', '_')}.png"
-                    fpath = os.path.join(self.mirror_plot_dir, fname)
-                    title = f"Compound {fid} vs {lib_compound_name}\n(Score: {score:.2f}, Matched Peaks: {n_matches})"
-                    self._plot_mirror(qspec, lspec, fpath, title=title)
                 
                 scores.append({
                     "library": libname, 
@@ -604,20 +573,52 @@ class MSMSAnnotator:
                     "matched_peaks": int(n_matches),
                     "retention_index": retention_index
                 })
+                
+                # If plotting is enabled, store the data needed to make the plot
+                if self.generate_plots:
+                    title = (
+                        f"Compound {fid} (Query) vs {lib_compound_name} (Library)\n"
+                        f"(Score: {score:.2f}, Matched Peaks: {n_matches}, "
+                        f"Rep Sample: {rep_sample})"
+                    )
+                    plot_data.append({
+                        "fid": fid,
+                        "query_spec": qspec,
+                        "lib_spec": lspec,
+                        "title": title
+                    })
 
         scores.sort(key=lambda x: (-x["score"], -x["matched_peaks"]))
+        
         return fid, {
             "representative_sample": rep_sample,
-            "top_matches": scores[:self.top_k_matches]
-        }
+            "top_matches": scores
+        }, plot_data  # Return plot data
 
     def annotate_compounds(self, compounds, num_cores=4):
-        """Runs the annotation process for all compounds."""
+        """
+        Runs the annotation process for all compounds, separating
+        scoring (parallel) from PDF plotting (serial).
+        """
         print("\n--- Phase 3 (GC): Annotating compounds via MS/MS search ---")
         if not self.lib_spectra:
             print("No libraries loaded, skipping MS/MS annotation.")
             return compounds
 
+        pdf_object = None
+        all_plot_data = []
+        
+        # 1. Initialize PDF object in the main process
+        if self.generate_plots:
+            pdf_path = self.mirror_plot_pdf
+            # Ensure output directory exists
+            os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
+            print(f"--- Initializing PDF report at: {pdf_path} ---")
+            pdf_object = PdfPages(pdf_path)
+        else:
+            print("Skipping PDF plot generation (matplotlib/PdfPages not found or no output path set).")
+
+        # 2. Run multiprocessing pool to get scores and plot *data*
         with mp.Pool(num_cores) as pool:
             results = list(tqdm.tqdm(
                 pool.imap(self._score_compound, compounds.items()),
@@ -625,9 +626,37 @@ class MSMSAnnotator:
                 desc="GC-MS Annotation"
             ))
 
-        for fid, annotation in results:
+        # 3. Process results in the main process
+        print("Processing results and annotations...")
+        for fid, annotation, plot_data in results:
             if annotation:
                 compounds[fid]['annotations']['gc_msms_search'] = annotation
+            if plot_data:
+                # Store plot data
+                all_plot_data.extend(plot_data)
+        
+        # 4. Generate plots (in the main process)
+        if pdf_object:
+            print(f"--- Generating {len(all_plot_data)} mirror plots for PDF ---")
+            
+            # Sort plots by feature ID (fid) to "index" the report
+            all_plot_data.sort(key=lambda x: (
+                # Try to sort numerically by extracting digits from the ID
+                int(''.join(filter(str.isdigit, str(x["fid"]))) or 0), 
+                str(x["fid"]) # Fallback to string sort
+            ))
+            
+            for plot_item in tqdm.tqdm(all_plot_data, desc="Saving plots to PDF"):
+                self._plot_mirror(
+                    plot_item["query_spec"],
+                    plot_item["lib_spec"],
+                    pdf_object,
+                    plot_item["title"]
+                )
+            
+            # 5. Close the PDF object
+            pdf_object.close()
+            print(f"--- PDF report generation complete. ---")
         
         return compounds
 

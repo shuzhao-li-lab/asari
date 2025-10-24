@@ -2,15 +2,13 @@ import os
 import sys
 import json
 import pickle
-import functools
+import numpy as np
 import pandas as pd
-from .deconvolution import DeconvolutionFramework, AsariProcessor
+from .deconvolution import AsariProcessor
 from scipy import interpolate
 from .chromatograms import __hacked_lowess__
-from scipy.ndimage import uniform_filter1d
 from statsmodels.nonparametric.smoothers_lowess import lowess
 import tqdm
-
 
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
@@ -20,7 +18,6 @@ from .default_parameters import adduct_search_patterns, \
 from .mass_functions import all_mass_paired_mapping
 from .constructors import CompositeMap
 from .json_encoder import NpEncoder
-from .samples import SimpleSample
 
 try:
     import importlib.resources as pkg_resources
@@ -338,230 +335,231 @@ class ext_Experiment:
                 results = deconvolution.default_workflow(os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table']))
             self.export_gc_annotations(results, os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table']))
             self.export_gc_annotations(results, os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table']))
+            self.export_all_gc_annotations(results, os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table']))
+            self.export_all_gc_annotations(results, os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table']))
+
             self.export_log()
             self.export_readme()
         else:
             raise Exception("Invalid workflow provided, specify LC or GC workflow")
 
-    def export_gc_all_annotations(self, results, table):
+
+    def export_all_gc_annotations(self, results, table):
+        return self.export_gc_annotations(results, table, mode='all', max_ri_error=0)
+
+    def export_gc_annotations(self, results, table, mode='best', max_ri_error=None):
         """
-        Exports GC annotations, creating a separate output row for every
-        top library match found for a compound.
+        Exports GC annotations with selectable modes and retention index filtering.
+
+        Modes:
+            - 'best': Exports one row per feature, annotated with the single best
+                    library match (based on score * matched_peaks).
+            - 'all':  Exports a separate row for *every* library match found
+                    for a compound.
+
+        RI Filter:
+            - If max_ri_error (float or int) is provided, library matches will be
+            filtered. Only matches where:
+                abs(feature_RI - library_RI) <= max_ri_error
+            will be kept. Matches without a valid numeric library_RI are kept.
         """
-        # 1. Load feature table and calculate RI
-        features = pd.read_csv(table, sep="\t")
+        
+        # --- 1. Common Setup: Load features and calculate RI ---
+        try:
+            features = pd.read_csv(table, sep="\t")
+        except FileNotFoundError:
+            print(f"Error: Feature table file not found at {table}")
+            return
+            
         master_reference_sample = self.get_reference_sample_id()
-        # Assuming self.RI_models is correctly populated
+        if master_reference_sample not in self.RI_models:
+            print(f"Error: RI model for reference sample '{master_reference_sample}' not found.")
+            return
+            
+        # Calculate RI for all features
         features['RI'] = self.RI_models[master_reference_sample](features['rtime'] / 60)
-        # Extract feature data into a dict for quick lookup and manipulation
+        # Create a lookup dictionary from the feature table
         ft_dict = {x['id_number']: x for x in features.to_dict(orient='records')}
 
-        # 2. Iterate through results to build base feature annotations and handle multiple annotations
-        compound_annotation_records = []
+        # --- 2. Initialize Output Containers ---
+        all_annotation_records = []  # Used for 'all' mode
+        feature_final_annotations = {} # Used for 'best' mode
+        
+        # Check if RI filtering is active
+        ri_filter_active = isinstance(max_ri_error, (float, int))
+        if not ri_filter_active:
+            exp_max_ri_error = self.parameters['max_retention_index_error']
+            if isinstance(exp_max_ri_error, (float, int)):
+                max_ri_error = exp_max_ri_error
+                ri_filter_active = True
 
-        for _ii, (id, cpd) in enumerate(tqdm.tqdm(results.items(), desc="Processing Compounds")):
+        # --- 3. Iterate Through Compounds and Process Annotations ---
+        for _ii, (id, cpd) in enumerate(tqdm.tqdm(results.items(), desc=f"Processing Compounds (Mode: {mode})")):
             cpd_id = f"CPD_{_ii}"
             
-            # Collect all feature IDs belonging to this compound (anchor + isotopes + fragments + fragment isotopes)
-            all_features = [cpd["anchor_fragment"]["id"]]
-            for isotope in cpd["anchor_fragment"].get("isotopes", []):
-                all_features.append(isotope["id"])
-            for fragment in cpd["fragments"]:
-                all_features.append(fragment["id"])
-                for isotope in fragment.get("isotopes", []):
-                    all_features.append(isotope['id'])
+            # --- 3a. Collect all feature IDs for this compound ---
+            all_features_in_compound = []
+            if "anchor_fragment" not in cpd: continue # Skip malformed compound
             
-            # Prepare the base feature annotations (Compound_ID, Isotopologue, Fragment)
+            all_features_in_compound.append(cpd["anchor_fragment"]["id"])
+            for isotope in cpd["anchor_fragment"].get("isotopes", []):
+                all_features_in_compound.append(isotope["id"])
+            for fragment in cpd["fragments"]:
+                all_features_in_compound.append(fragment["id"])
+                for isotope in fragment.get("isotopes", []):
+                    all_features_in_compound.append(isotope['id'])
+
+            # --- 3b. Prepare base annotations (Compound_ID, Isotopologue, etc.) ---
             base_feature_annotations = {}
             anchor_mz = cpd["anchor_fragment"].get("mz", 0)
 
             # Anchor fragment
-            iso_id = "M0"
-            if not cpd["anchor_fragment"]["isotopes"]:
-                iso_id = "M0?"
+            iso_id = "M0" if cpd["anchor_fragment"].get("isotopes") else "M0?"
             base_feature_annotations[cpd["anchor_fragment"]["id"]] = {
-                "Compound_ID": cpd_id,
-                "Isotopologue": iso_id,
-                "Fragment": "quant",
+                "Compound_ID": cpd_id, "Isotopologue": iso_id, "Fragment": "quant",
             }
             for isotope in cpd["anchor_fragment"].get("isotopes", []):
                 base_feature_annotations[isotope["id"]] = {
-                    "Compound_ID": cpd_id,
-                    "Isotopologue": isotope["evidence"]["isotope_type"],
-                    "Fragment": "quant" 
+                    "Compound_ID": cpd_id, "Isotopologue": isotope["evidence"]["isotope_type"], "Fragment": "quant"
                 }
             
             # Other fragments
             for fragment in cpd["fragments"]:
                 frag_mz = fragment["mz"]
                 frag_tag = f"fragment_{round(anchor_mz - frag_mz, 3)}"
-                iso_id = "M0"
-                if not fragment["isotopes"] and not fragment.get('fragments'):
-                    iso_id = "M0?"
+                iso_id = "M0" if fragment.get("isotopes") or fragment.get('fragments') else "M0?"
                 base_feature_annotations[fragment["id"]] = {
-                    "Compound_ID": cpd_id,
-                    "Isotopologue": iso_id,
-                    "Fragment": frag_tag,
+                    "Compound_ID": cpd_id, "Isotopologue": iso_id, "Fragment": frag_tag,
                 }
                 for isotope in fragment.get("isotopes", []):
                     base_feature_annotations[isotope['id']] = {
-                        "Compound_ID": cpd_id,
-                        "Isotopologue": isotope["evidence"]["isotope_type"],
-                        "Fragment": frag_tag
+                        "Compound_ID": cpd_id, "Isotopologue": isotope["evidence"]["isotope_type"], "Fragment": frag_tag
                     }
             
-            # 3. Handle Annotations (The key change)
-            annotations_list = []
-            if "annotations" in cpd and "gc_msms_search" in cpd['annotations']:
-                annotations_list = cpd["annotations"]["gc_msms_search"].get("top_matches", [])
+            # --- 3c. Get and Filter Library Annotations ---
+            annotations_list = cpd.get("annotations", {}).get("gc_msms_search", {}).get("top_matches", [])
+            
+            # Get the compound's RI from its anchor feature
+            anchor_id = cpd["anchor_fragment"]["id"]
+            feature_ri = ft_dict.get(anchor_id, {}).get('RI')
+            
+            filtered_annotations = []
+            if ri_filter_active and feature_ri is not None:
+                for annot in annotations_list:
+                    library_ri_str = annot.get("retention_index")
+                    try:
+                        # Try to convert library RI to a float
+                        lib_ri_float = float(library_ri_str)
+                        # If successful, apply the filter
+                        if abs(feature_ri - lib_ri_float) <= max_ri_error:
+                            filtered_annotations.append(annot)
+                    except (ValueError, TypeError):
+                        # If library_RI is "not reported", None, or other non-numeric,
+                        # we cannot filter it, so we keep it.
+                        filtered_annotations.append(annot)
+            else:
+                # RI filter is not active, or feature has no RI, so keep all
+                filtered_annotations = annotations_list
 
-            # If no library matches, still create records for the features
-            if not annotations_list:
-                annotations_list = [{
-                    "name": "?", 
-                    "library": "", 
-                    "score": 0, 
-                    "matched_peaks": 0,
-                }]
+            # --- 3d. Apply Mode-Specific Logic ---
+            
+            # Define a placeholder for compounds with no (or no passing) matches
+            placeholder_annot = {
+                "name": "?", "library": "", "score": 0, "matched_peaks": 0, "retention_index": np.nan
+            }
+            
+            if mode == 'all':
+                # Use placeholders if list is empty, otherwise use filtered list
+                annots_to_process = filtered_annotations if filtered_annotations else [placeholder_annot]
+                
+                for feature_id in all_features_in_compound:
+                    if feature_id in ft_dict:
+                        feature_base_data = ft_dict[feature_id].copy()
+                        feature_base_data.update(base_feature_annotations.get(feature_id, {}))
+                        
+                        for annot in annots_to_process:
+                            annot_record = feature_base_data.copy()
+                            annot_record.update({
+                                "Annotation_Name": annot["name"],
+                                "Annotation_Source": annot["library"],
+                                "Annotation_Score": annot["score"],
+                                "Annotation_Matched_Peaks": annot["matched_peaks"],
+                                "Annotation_Library_Index": annot.get("retention_index", np.nan)
+                            })
+                            all_annotation_records.append(annot_record)
 
-            # Create a record for every feature and every annotation
-            for feature_id in all_features:
-                if feature_id in ft_dict:
-                    
-                    # Get the base data from the original feature table
-                    feature_base_data = ft_dict[feature_id].copy()
-                    
-                    # Update with the base compound/fragment data
-                    feature_base_data.update(base_feature_annotations[feature_id])
-                    
-                    # Create a row for each annotation match
-                    for annot in annotations_list:
-                        annot_record = feature_base_data.copy()
-                        annot_record.update({
+            elif mode == 'best':
+                best_score = -1
+                best_annot_data = {
+                    "Annotation_Name": "?",
+                    "Annotation_Source": "",
+                    "Annotation_Score": 0,
+                    "Annotation_Matched_Peaks": 0,
+                    "Annotation_Library_Index": np.nan
+                }
+
+                for annot in filtered_annotations:
+                    current_score = annot.get('score', 0) * annot.get('matched_peaks', 0)
+                    if current_score > best_score:
+                        best_score = current_score
+                        best_annot_data = {
                             "Annotation_Name": annot["name"],
                             "Annotation_Source": annot["library"],
                             "Annotation_Score": annot["score"],
                             "Annotation_Matched_Peaks": annot["matched_peaks"],
-                            "Annotation_Library_Index": annot.get("retention_index", "not reported")
-                        })
-                        # Add the complete row to the list
-                        compound_annotation_records.append(annot_record)
-                
-        # 4. Prepare and Export Final DataFrame
+                            "Annotation_Library_Index": annot.get("retention_index", np.nan)
+                        }
+
+                # Assign this best annotation to all features in the compound
+                for feature_id in all_features_in_compound:
+                    if feature_id in ft_dict:
+                        # Combine base info (M0, quant) + best annotation
+                        feature_data = base_feature_annotations.get(feature_id, {}).copy()
+                        feature_data.update(best_annot_data)
+                        feature_final_annotations[feature_id] = feature_data
+
+        # --- 4. Final DataFrame Creation and Export ---
         
-        # Define the desired column order: standard columns, then new annotation columns, then sample columns
-        
-        # Get standard and new columns
+        # Get base columns and sample columns from original feature table
         base_cols = features.columns.tolist()
-        # These columns should appear early in the output
-        export_order_prefix = ['RI']
-        export_order_prefix += [x for x in base_cols[:11] if x not in export_order_prefix]
+        # Assuming first 11 columns are metadata
+        meta_cols = base_cols[:11] + ['RI']
+        sample_cols = [col for col in base_cols[11:] if col not in meta_cols]
         
-        # Get sample columns (those after the initial 11 in the original feature table)
-        # This logic assumes the first 11 columns of the original table were metadata
-        sample_cols = [col for col in base_cols[11:] if col not in export_order_prefix]
-
-        # Final order construction
-        export_order = []
-        for col in export_order_prefix:
-            if col in base_cols: # Ensure the column exists in the original data
-                export_order.append(col)
-
-        export_order += [
-            "Annotation_Name",
-            "Annotation_Source",
-            "Annotation_Score",
-            "Annotation_Matched_Peaks",
-            "Annotation_Library_Index"
+        new_annot_cols = [
+            "Compound_ID", "Isotopologue", "Fragment",
+            "Annotation_Name", "Annotation_Source", "Annotation_Score",
+            "Annotation_Matched_Peaks", "Annotation_Library_Index"
         ]
-        export_order += sample_cols
-        
-        # Create the final DataFrame
-        df_out = pd.DataFrame(compound_annotation_records)
 
-        # Reorder columns and export
-        df_out = df_out.reindex(columns=[col for col in export_order if col in df_out.columns])
-        
-        output_filename = table.replace(".tsv", "_all_annotations.tsv")
-        df_out.to_csv(output_filename, sep="\t", index=False)
+        if mode == 'all':
+            df_out = pd.DataFrame(all_annotation_records)
+            # Define column order
+            export_order = meta_cols + new_annot_cols + sample_cols
+            # Reorder and filter columns
+            df_out = df_out.reindex(columns=[col for col in export_order if col in df_out.columns])
+            output_filename = table.replace(".tsv", "_all_annotations.tsv")
 
-    def export_gc_annotations(self, results, table):
-        self.export_gc_all_annotations(results, table)
-        features = pd.read_csv(table, sep="\t")
-        master_reference_sample = self.get_reference_sample_id()
-        features['RI'] = self.RI_models[master_reference_sample](features['rtime'] / 60)
-        ft_dict = {x['id_number']: x for x in features.to_dict(orient='records')}
-
-        feature_sub_annotations = {}
-        for _ii, (id, cpd) in enumerate(results.items()):
-            all_features = [cpd["anchor_fragment"]["id"]]
-            cpd_id = f"CPD_{_ii}"
-            iso_id = "M0"
-            if not cpd["fragments"] and not cpd["anchor_fragment"]["isotopes"]:
-                iso_id = "M0?"
-            anchor_mz = cpd["anchor_fragment"].get("mz", 0)
-            fragment = "Quant"
-            feature_sub_annotations[cpd["anchor_fragment"]["id"]] = {
-                "Compound_ID": cpd_id,
-                "Isotopologue": iso_id,
-                "Fragment": f"quant",
-            }
-            for isotope in cpd["anchor_fragment"].get("isotopes", []):
-                all_features.append(isotope["id"])
-                feature_sub_annotations[isotope["id"]] = {
-                    "Compound_ID": cpd_id,
-                    "Isotopologue": isotope["evidence"]["isotope_type"],
-                    "Fragment": f"quant" 
-                }
-            for fragment in cpd["fragments"]:
-                all_features.append(fragment["id"])
-                frag_mz = fragment["mz"]
-                if not fragment["isotopes"] and not fragment.get('fragments'):
-                    iso_id = "M0?"
-                feature_sub_annotations[fragment["id"]] = {
-                    "Compound_ID": cpd_id,
-                    "Isotopologue": iso_id,
-                    "Fragment": f"fragment_{round(anchor_mz - frag_mz, 3)}",
-                }
-                for isotope in fragment.get("isotopes", []):
-                    all_features.append(isotope['id'])
-                    feature_sub_annotations[isotope["id"]] = {
-                        "Compound_ID": cpd_id,
-                        "Isotopologue": isotope["evidence"]["isotope_type"],
-                        "Fragment": f"fragment_{round(anchor_mz - frag_mz, 3)}"
-                    }
+        elif mode == 'best':
+            # Update the original feature data (in ft_dict) with annotations
+            for feature_id, annotations in feature_final_annotations.items():
+                if feature_id in ft_dict:
+                    ft_dict[feature_id].update(annotations)
             
-            if "annotations" in cpd:
-                best_annotation = ("?", '', '', '', 0)
-                if "gc_msms_search" in cpd['annotations']:
-                    for annot in cpd["annotations"]["gc_msms_search"].get("top_matches", []):
-                        if annot['matched_peaks'] * annot['score'] > best_annotation[-1]:
-                            best_annotation = (
-                                annot["name"],
-                                annot["library"],
-                                annot["score"],
-                                annot["matched_peaks"]
-                            )
-                    for feature in all_features:
-                        feature_sub_annotations[feature].update({
-                            "Annotation Name": best_annotation[0],
-                            "Annotation Source": best_annotation[1],
-                            "Annotation Score": best_annotation[2],
-                            "Annotation Matched Peaks": best_annotation[3]
-                        })
-    
-        export_order = [x for x in features.columns[:11] + ['RI']]
-        samples = [x for x in features.columns[11:] if x not in export_order]
-        for x in tqdm.tqdm(feature_sub_annotations, desc="Exporting GC Feature Table"):
-            if x in ft_dict:
-                ft_dict[x].update(feature_sub_annotations[x]) 
-                for s in samples:
-                    old_val = ft_dict[x][s]
-                    del ft_dict[x][s]
-                    ft_dict[x][s] = old_val
+            df_out = pd.DataFrame(list(ft_dict.values()))
+            # Define column order
+            export_order = meta_cols + new_annot_cols + sample_cols
+            # Reorder and filter columns
+            df_out = df_out.reindex(columns=[col for col in export_order if col in df_out.columns])
+            output_filename = table.replace(".tsv", "_annotated.tsv")
 
-        pd.DataFrame(list(ft_dict.values())).to_csv(table.replace(".tsv", "_annotated.tsv"), sep="\t", index=False)
+        else:
+            print(f"Error: Invalid mode '{mode}'. Use 'best' or 'all'.")
+            return
 
+        # Export the final file
+        df_out.to_csv(output_filename, sep="\t", index=False)
+        print(f"Successfully exported annotations to: {output_filename}")
 
     def annotate(self):
         '''

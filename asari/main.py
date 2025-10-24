@@ -263,6 +263,7 @@ def _build_parser() -> argparse.Namespace:
         "--min_peaks": dict(type=int),
         "--min_peaks_common": dict(type=int),
         "--min_score_threshold": dict(type=float),
+        "--max_retention_index_error": dict(type=float)
     }
 
     for flags, kw in simple.items():

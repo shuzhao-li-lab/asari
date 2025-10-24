@@ -16,3 +16,4 @@ tqdm
 json_tricks
 plotly
 matchms
+pypdf

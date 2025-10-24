@@ -83,7 +83,8 @@ PARAMETERS = {
     'min_peaks': 3,                     # minimum number of peaks in an experimental EI-MS spectrum
     'min_peaks_common': 1,              # annotations require at least this many peaks in common
     'min_score_threshold': 0.70,        # annotations require a cosine similarity of this value or greater.
-    'similarity_metric': 'cosine',       # determines which similarity metric to use
+    'similarity_metric': 'cosine',      # determines which similarity metric to use
+    'max_retention_index_error': 100,    # allowed error in retention index measurements
 
     # default output names
     'output_feature_table': 'Feature_table.tsv',

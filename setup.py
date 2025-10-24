@@ -11,9 +11,9 @@ with open("requirements.txt", "r") as f:
 
 
 setup(
-  name='asari-metabolomics',
+  name='asari-metabolomics-dev',
   version=__version__,
-  author='Shuzhao Li',
+  author='J.Mitchell',
   author_email='shuzhao.li@gmail.com',
   description='LC-MS metabolomics data preprocessing',
   long_description=long_description,
@@ -43,7 +43,7 @@ setup(
   include_package_data=True,
   zip_safe=True,
   entry_points = {
-        'console_scripts': ['asari=asari.command_line:main', 
+        'console_scripts': ['asari_dev=asari.command_line:main', 
                             'asari_gui=asari.gui:main_gui'],
     },
 
