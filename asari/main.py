@@ -394,7 +394,7 @@ def update_params_from_CLI(parameters, args, debug_print=True):
 
     if args.workflow:
         parameters['workflow'] = args.workflow
-        assert parameters['workflow'] in {'LC', 'GC', 'LC_start'}, "Workflow must be either LC, GC, or Lipidomics."
+        assert parameters['workflow'] in {'LC', 'GC', 'DIMS', 'LC_start'}, "Workflow must be either LC, GC, DIMS, or Lipidomics."
         debug_print(to_print=f"Setting workflow to {parameters['workflow']}")
     else:
         debug_print(to_print=f"Using default workflow: {parameters['workflow']}")

@@ -175,6 +175,17 @@ class ext_Experiment:
         self.CMAP.build_composite_tracks()
         self.CMAP.global_peak_detection()
 
+    def process_all_DIMS(self):
+        '''
+        For DI-MS, no RT alignment or peak detection.
+        Only MassGrid construction then report max intensity per mass track per sample.
+        
+        '''
+        self.CMAP = CompositeMap(self)
+        self.CMAP.construct_mass_grid()
+        self.CMAP.get_DIMS_feature_table()
+        
+
     def process_all_LC_start(self):
         '''
         This is the default asari workflow.
@@ -290,6 +301,15 @@ class ext_Experiment:
                 self.annotate_GC()
             self.export_log()
             self.export_readme()
+        elif self.parameters['workflow'] == "DIMS":
+            self.CMAP.MassGrid.to_csv(
+                os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
+            if anno:
+                # add later
+                pass
+            self.export_feature_tables()
+            self.export_log()
+            # self.export_readme()
 
     def annotate_GC(self):
         pref_ft = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
