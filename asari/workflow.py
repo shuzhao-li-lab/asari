@@ -93,7 +93,8 @@ def process_project(list_input_files, parameters):
     workflow_export_mode = {
         'GC': (EE.process_all_GC, 'GC'),
         'LC': (EE.process_all_LC, 'LC'),
-        'LC_start': (EE.process_all_LC_start, 'LC')
+        'LC_start': (EE.process_all_LC_start, 'LC'),
+        'DIMS': (EE.process_all_DIMS, 'DIMS')
     }
     workflow_export_mode[parameters['workflow']][0]()
     EE.export_all(anno=parameters['anno'], mode=workflow_export_mode[parameters['workflow']][1])

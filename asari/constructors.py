@@ -890,6 +890,50 @@ class CompositeMap:
         return int(get_gaussian_peakarea_on_intensity_list(track_intensity, left_base, right_base))
 
 
+    def get_DIMS_feature_table(self):
+        '''
+        Mock DIMS feature as max intensity per mass track.
+        '''
+
+        self.FeatureList = []
+        for ii in self.MassGrid.index:
+            self.FeatureList.append({
+                'id_number': 'F'+str(ii),
+                'parent_masstrack_id': ii,
+                'mz': self.MassGrid['mz'][ii],
+                'intensity': 0,
+                'apex': 0,
+                'left_base': 0,
+                'right_base': 0,
+                'rtime': 0,
+                'rtime_left_base': 0,
+                'rtime_right_base': 0,
+                'peak_area': 0,
+                'cSelectivity': 0,
+                'goodness_fitting': 0,
+                'snr': 0,
+            })
+        
+        FeatureTable = pd.DataFrame(self.FeatureList)
+        for sample in self.experiment.all_samples:
+            ## if not self.experiment.parameters['drop_unaligned_samples'] or SM.is_rt_aligned:
+            fList = []
+            list_mass_tracks = sample.get_masstracks_and_anchors()
+            for peak in self.FeatureList:
+                track_number = self.MassGrid[sample.name][peak['parent_masstrack_id']]
+                if not pd.isna(track_number):
+                    mass_track = list_mass_tracks[int(track_number)]
+                    # left_base = None
+                    # right_base = None
+                    peak_area = max(mass_track['intensity'])
+                else:
+                    peak_area = 0
+                fList.append( peak_area )            
+            FeatureTable[sample.name] = fList
+        print("\nFeature Table: ", FeatureTable.shape)
+        self.FeatureTable = FeatureTable
+        
+    
     def generate_feature_table(self):
         '''
         Initiate and populate self.FeatureTable, each sample per column in dataframe.

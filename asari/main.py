@@ -217,7 +217,7 @@ def _apply_cli_overrides(params: dict, args, verbose: bool = True) -> dict:
 
 def _build_parser() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="asari – GC and LC‑MS metabolomics preprocessing",
+        description="asari – MS metabolomics preprocessing",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
