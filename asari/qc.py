@@ -1,15 +1,21 @@
-import numpy as np
-import pandas as pd
-import plotly.express as px
-from plotly.subplots import make_subplots
-import pandas as pd
-import pymzml
-import matplotlib.pyplot as plt
-from collections import defaultdict
-import seaborn as sns
-import plotly.graph_objs as go
 import os
 import json
+import numpy as np
+import pandas as pd
+from collections import defaultdict
+
+import pymzml
+
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import plotly.graph_objs as go
+    import plotly.express as px
+    from plotly.subplots import make_subplots
+except ImportError:
+    # raise ImportError("Missing plottling libraries.")
+    print("Missing plottling libraries.")
+
 
 def asari_qc_plot(data, 
                 outfile="qc_plot.pdf",

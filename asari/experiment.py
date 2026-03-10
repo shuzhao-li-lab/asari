@@ -2,25 +2,28 @@ import os
 import sys
 import json
 import pickle
-import functools
 import pandas as pd
-from scipy import interpolate
-from .chromatograms import __hacked_lowess__
-from scipy.ndimage import uniform_filter1d
-from statsmodels.nonparametric.smoothers_lowess import lowess
-import tqdm
 
+# from scipy import interpolate
+# import tqdm
+
+# import functools
+# from .chromatograms import __hacked_lowess__
+# from scipy.ndimage import uniform_filter1d
+# from statsmodels.nonparametric.smoothers_lowess import lowess
 
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
 from .default_parameters import adduct_search_patterns, \
     adduct_search_patterns_neg, isotope_search_patterns, extended_adducts, \
     readme_doc_str
-from .gc_annotation import EI_MS_Library
+
+# from .gc_annotation import EI_MS_Library
+
 from .mass_functions import all_mass_paired_mapping
 from .constructors import CompositeMap
-from .json_encoder import NpEncoder
-from .samples import SimpleSample
+from .utils import NpEncoder
+# from .samples import SimpleSample
 
 try:
     import importlib.resources as pkg_resources
@@ -185,24 +188,10 @@ class ext_Experiment:
         self.CMAP.construct_mass_grid()
         self.CMAP.get_DIMS_feature_table()
         
-
     def process_all_LC_start(self):
         '''
-        This is the default asari workflow.
+        Experimental, not use. 
         
-        1. Build MassGrid, using either pairwise (small study) or clustering method. 
-           Choose one reference from all samples for the largest number of landmark m/z tracks.
-        2. RT alignment via a LOWESS function, using selective landmark peaks.
-        3. Build composite elution profile (composite_mass_tracks),
-           by cumulative sum of mass tracks from all samples after RT correction.
-        4. Global peak detection is performed on each composite massTrack.
-        5. Mapping global peaks (i.e. features) back to all samples and extract sample specific peak areas.
-           This completes the FeatureTable.
-
-        Updates
-        -------
-        self.CMAP as instance of CompositeMap, and MassGrid, composite map and features within.
-        '''
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
         self.CMAP.START()
@@ -210,61 +199,18 @@ class ext_Experiment:
         #    self.CMAP.mock_rentention_alignment()
         #self.CMAP.build_composite_tracks()
         self.CMAP.global_peak_detection()
+        '''
+        raise NotImplementedError
 
-    def populate_RI_lookup(self, sample_map):
-        RI_maps = {}
-        RI_models = {}
-        reverse_RI_models = {}
-        RI_list = pd.read_csv(self.parameters['retention_index_standards'])
-        for reference_id in tqdm.tqdm(list(dict.fromkeys(list(sample_map.values())))):
-            print(reference_id)
-            RI_maps[reference_id] = {}
-            reference_instance = SimpleSample(self.sample_registry[reference_id], experiment=self)
-            prev_index, next_index = None, None
-            prev_rt, next_rt = None, None
-            RTs, indexes, scan_nos = [], [], []
-            for rt, scan_no in zip(reference_instance.list_retention_time, reference_instance.list_scan_numbers):
-                RTs.append(rt)
-                scan_nos.append(scan_no)
-                print(rt, scan_no)
-                for index, index_rt in zip(RI_list['Index'], RI_list[reference_instance.name]):
-                    index, index_rt = int(index), float(index_rt)
-                    print("\t", index, index_rt)
-                    if rt > index_rt:
-                        prev_index, prev_rt = index, index_rt
-                    elif rt <= index_rt:
-                        _, next_rt = index, index_rt
-                        break
-                if next_rt is None:
-                    next_rt = max(reference_instance.list_retention_time) * 1.1
-                    _ = max(RI_list['Index']) + 1
-                RI_value = 100 * (prev_index + ((rt - prev_rt)/(next_rt - rt)))
-                indexes.append(RI_value)
-                RI_maps[reference_id][rt] = RI_value
-            model = lowess(indexes, RTs)
-            model2 = lowess(indexes, scan_nos)
-            newx, newy = list(zip(*model))
-            interf = interpolate.interp1d(newx, newy, fill_value="extrapolate", bounds_error=False)
-            RI_models[reference_id] = interf
-            newx, newy = list(zip(*model2))
-            reverse_RI_models[reference_id] = interpolate.interp1d(newy, newx, fill_value="extrapolate", bounds_error=False)
-            
-        self.RI_models = RI_models
-        self.reverse_RI_models = reverse_RI_models
-
-    def convert_to_RI(self, sample_map):
-        if not self.RI_map:
-            self.populate_RI_lookup(sample_map)
-        for k, v in sample_map.items():
-            sam = self.sample_registry[k]
-            sam['list_retention_index'] = self.RI_models[v](sam['list_retention_time'])
-
+    # to phase out
     def process_all_GC(self):
+        '''Moving out; as processing is same as LC after v1.16
+        '''
         self.CMAP = CompositeMap(self)
         sample_run_order = self.determine_acquisition_order()
         mapping = self.associate_stds_samples(sample_run_order)
         self.mapping = mapping
-        self.populate_RI_lookup(mapping)
+        # self.populate_RI_lookup(mapping)
         #self.convert_to_RI(mapping)
         self.CMAP.construct_mass_grid()
         self.CMAP.build_composite_tracks_GC()
@@ -311,11 +257,10 @@ class ext_Experiment:
             self.export_log()
             # self.export_readme()
 
+    # to move
     def annotate_GC(self):
-        pref_ft = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
-        full_ft = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
-        EI_MS_Library.annotate_gc_feature_table_with_library(pref_ft, self.parameters['GC_Database'])
-        EI_MS_Library.annotate_gc_feature_table_with_library(full_ft, self.parameters['GC_Database'])
+        print("Rerouting GC annotation - this is a placeholder.")
+        pass
 
     def annotate(self):
         '''

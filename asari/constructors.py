@@ -24,7 +24,8 @@ from .peaks import (quick_detect_unique_elution_peak,
                     batch_deep_detect_elution_peaks, 
                     get_gaussian_peakarea_on_intensity_list)
 from .samples import SimpleSample
-from .utils import bulk_process
+
+# from .utils import bulk_process
 
 
 class MassGrid:

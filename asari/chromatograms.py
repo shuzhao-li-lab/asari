@@ -539,7 +539,7 @@ def dwt_rt_calibrate(good_landmark_peaks, selected_reference_landmark_peaks, sam
     Placeholder.
     Not implemented.
     '''
-    pass
+    raise NotImplementedError
 
 
 def remap_intensity_track(intensity_track, new, rt_cal_dict):

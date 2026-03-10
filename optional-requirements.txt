@@ -1,0 +1,7 @@
+panel>=0.13.0
+holoviews
+hvplot
+seaborn
+matplotlib
+plotly
+matchms

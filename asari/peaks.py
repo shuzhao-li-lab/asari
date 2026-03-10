@@ -272,7 +272,8 @@ def audit_mass_track(list_intensity,
     noise_level : float
         estimated noise level
     scaling_factor : float
-        a normalization factor to scale the data under preset ceiling
+        a normalization factor to scale the data under preset ceiling,
+        because very big numbers (cummulated from many samples) can break promience calculations.
     min_prominence_threshold : float
         new prominence value, overwriting with noise_level if it is
         greater than the initial min_prominence_threshold.

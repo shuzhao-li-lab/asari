@@ -7,12 +7,13 @@ numpy
 scipy
 statsmodels
 pyyaml
+tqdm
+json_tricks
+# will make below optional
 panel>=0.13.0
 holoviews
 hvplot
 seaborn
 matplotlib
-tqdm
-json_tricks
 plotly
 matchms

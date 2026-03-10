@@ -1,17 +1,19 @@
-__version__ = "1.14.99"
+__version__ = "1.16.01"
 
 from . import analyze
-from . import annotate_user_table
+from . import annotate
 from . import chromatograms
 from . import command_line
 from . import constructors
-from . import dashboard
 from . import default_parameters
 from . import experiment
-from . import json_encoder
+# from . import json_encoder
 from . import main
 from . import mass_functions
 from . import peaks
 from . import qc
 from . import samples
 from . import workflow
+
+# To make optional 
+from . import dashboard

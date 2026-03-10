@@ -16,15 +16,16 @@ from .workflow import (get_mz_list,
 from .default_parameters import PARAMETERS
 from .dashboard import read_project, dashboard
 from .analyze import estimate_min_peak_height, analyze_single_sample
-from .annotate_user_table import annotate_user_featuretable
+from .annotate import annotate_user_featuretable
 from .utils import build_boolean_dict, bulk_process
 from .qc import generate_qc_report
-from .gc_annotation import EI_MS_Library
+
+# from .gc_annotation import EI_MS_Library
 
 booleandict = build_boolean_dict()
 SUBCOMMANDS = ["analyze", "process", "xic", "extract", "annotate", "join", "viz", "list_workflows"]
 
-
+# to move out. Trying to do too much; hard to deploy
 def convert(parameters, args):
     needs_conversion = []
     for x in os.listdir(args.input):
@@ -368,6 +369,7 @@ def update_params_from_CLI(parameters, args, debug_print=True):
     else:
         debug_print(to_print=f"Using default spikeins: {parameters['spikeins']}")
 
+    # to move out. Trying to do too much; hard to deploy
     # set convert raw
     if args.convert_raw:
         parameters['convert_raw'] = booleandict[args.convert_raw]
@@ -414,6 +416,7 @@ def update_params_from_CLI(parameters, args, debug_print=True):
         parameters['GC_Database_Manifest'] = None
         debug_print(to_print=f"Using default GC_Database_Manifest.")
 
+    # to move out. Separating feature processing from annotation
     if args.GC_Database:
         parameters['GC_Database'] = args.GC_Database
         EI_MS_Library.load_library_manifest()

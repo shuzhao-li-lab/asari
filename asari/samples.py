@@ -3,8 +3,8 @@ import zipfile
 import os 
 import json_tricks as json
 
-from matchms import Spectrum
-from matchms.exporting import save_spectra
+# from matchms import Spectrum
+# from matchms.exporting import save_spectra
 
 from .mass_functions import flatten_tuplelist
 
@@ -118,6 +118,7 @@ class SimpleSample:
             'reverse_rt_cal_dict': self.reverse_rt_cal_dict,
         }
 
+    # to use own class, not dependent on matchms
     def extract_ms2(self, export_format="msp"):
         '''
         Extract MS2 data from sample data 
@@ -139,6 +140,8 @@ class SimpleSample:
                     precursor_mz = spec.precursor_mz
                 except:
                     precursor_mz = None
+
+                # to use own class, not dependent on matchms
                 spectra.append(Spectrum(mz=mzs, 
                                         intensities=intensities, 
                                         metadata={'scan_time': rtime,
@@ -149,7 +152,10 @@ class SimpleSample:
                 export_format = export_format[1:]
             self.experiment.parameters['ms2_export_format'] = export_format
             path = os.path.join(self.experiment.parameters['ms2_spectra_outdir'], "ms2_{}.{}".format(self.name, export_format))
+
+            # to use own class, not dependent on matchms
             save_spectra(spectra, path, export_style="matchms")
+
         except Exception as _:
             print(f"Error Extracting MS2 for: {self.name}")
 
