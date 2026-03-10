@@ -1,3 +1,15 @@
+v1.14.14 -> v1.14.99
+    This reverts v1.15, which has many issues. Some are design problems that are likely to be bypassed. 
+    Major performance problems existed in recent versions. These were identified and fixed: 
+    a) list_of_list_mass_tracks = bulk_process(SimpleSample.get_mass_tracks_for_sample, ...) jammed up I/O;
+    b) xdict was duplicating mass tracks in single_sample_EICs_;
+    c) audit_mass_track should not apply to each mass track in each sample, only needed for composite mass track.
+    
+    For HZV029_HILICpos data, 
+        v1.14.14    23916.72s user 3173.57s system 139% cpu 5:23:10.07 total
+        v1.13.1     1574.27s user 30.17s system 212% cpu 12:33.27 total
+        v1.14.99    1809.60s user 35.85s system 213% cpu 14:25.39 total
+
 v1.14.2 -> v1.14.3
     major new features:
         implementation of Spanning Tree Alignment of Retention Time (START)

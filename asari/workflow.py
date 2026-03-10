@@ -16,7 +16,7 @@ from mass2chem.search import find_mzdiff_pairs_from_masstracks
 
 from .experiment import ext_Experiment
 from .chromatograms import extract_massTracks_ 
-from .peaks import audit_mass_track
+# from .peaks import audit_mass_track
 from .utils import bulk_process
 from .samples import SimpleSample
 
@@ -375,22 +375,17 @@ def single_sample_EICs_(job):
                     min_intensity=parameters['min_intensity_threshold'], 
                     min_timepoints=parameters['min_timepoints'], 
                     min_peak_height=parameters['min_peak_height'])
-        if xdict['tracks']:
-            audit_fields = "baseline", "noise_level", "scaling_factor", "min_peak_height", "list_intensity"
-            audits = [dict(zip(audit_fields, audit_mass_track(t[1], 
-                                       round(0.5 * parameters['min_timepoints']), 
-                                       parameters['min_intensity_threshold'], 
-                                       parameters['min_peak_height'], 
-                                       parameters['signal_noise_ratio']))) for t in xdict['tracks']]
-            new['list_mass_tracks'] = [{'id_number': ii, 'mz': t[0], 'intensity': t[1], 'audit_results': audits[ii]} for ii, t in enumerate(xdict['tracks'])]
-            print("Extracted %s to %d mass tracks." %(os.path.basename(infile), len(xdict['tracks'])))
+        # only audit composite mass tracks that are used for elution peak detection, not here
+        new['list_mass_tracks'] = [{'id_number': ii, 'mz': t[0], 'intensity': t[1],
+                } for ii, t in enumerate(xdict['tracks'])]
+        print("Extracted %s to %d mass tracks." %(os.path.basename(infile), len(xdict['tracks'])))
 
         anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(new['list_mass_tracks'], mz_tolerance_ppm=parameters['mz_tolerance_ppm'])
         # find_mzdiff_pairs_from_masstracks is not too sensitive to massTrack format
         new.update({
             'anchor_mz_pairs': anchor_mz_pairs,
             'number_anchor_mz_pairs': len(anchor_mz_pairs),
-            'xdict': xdict,
+            # 'xdict': xdict,     # storage duplication 
             'track_mzs': [(t[0], ii) for ii, t in enumerate(xdict['tracks'])],
             'ms2_spectra': xdict['ms2_spectra'],
             'max_scan_number': max(xdict['rt_numbers']),
