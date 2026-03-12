@@ -1,3 +1,7 @@
+#
+# not using now
+#
+
 import multiprocessing as mp
 from functools import cache
 from itertools import product
@@ -18,6 +22,71 @@ except ImportError:
     # for testing only, remove before release
     from utils import download_and_unzip_to_pkg_resources
     from feature_graph import FeatureGraph
+
+
+class GC_Annotation:
+    '''
+    Do annotation here instead of during processing
+    
+    '''
+
+
+
+    def populate_RI_lookup(self, sample_map):
+        RI_maps = {}
+        RI_models = {}
+        reverse_RI_models = {}
+        RI_list = pd.read_csv(self.parameters['retention_index_standards'])
+        for reference_id in tqdm.tqdm(list(dict.fromkeys(list(sample_map.values())))):
+            print(reference_id)
+            RI_maps[reference_id] = {}
+            reference_instance = SimpleSample(self.sample_registry[reference_id], experiment=self)
+            prev_index, next_index = None, None
+            prev_rt, next_rt = None, None
+            RTs, indexes, scan_nos = [], [], []
+            for rt, scan_no in zip(reference_instance.list_retention_time, reference_instance.list_scan_numbers):
+                RTs.append(rt)
+                scan_nos.append(scan_no)
+                print(rt, scan_no)
+                for index, index_rt in zip(RI_list['Index'], RI_list[reference_instance.name]):
+                    index, index_rt = int(index), float(index_rt)
+                    print("\t", index, index_rt)
+                    if rt > index_rt:
+                        prev_index, prev_rt = index, index_rt
+                    elif rt <= index_rt:
+                        _, next_rt = index, index_rt
+                        break
+                if next_rt is None:
+                    next_rt = max(reference_instance.list_retention_time) * 1.1
+                    _ = max(RI_list['Index']) + 1
+                RI_value = 100 * (prev_index + ((rt - prev_rt)/(next_rt - rt)))
+                indexes.append(RI_value)
+                RI_maps[reference_id][rt] = RI_value
+            model = lowess(indexes, RTs)
+            model2 = lowess(indexes, scan_nos)
+            newx, newy = list(zip(*model))
+            interf = interpolate.interp1d(newx, newy, fill_value="extrapolate", bounds_error=False)
+            RI_models[reference_id] = interf
+            newx, newy = list(zip(*model2))
+            reverse_RI_models[reference_id] = interpolate.interp1d(newy, newx, fill_value="extrapolate", bounds_error=False)
+            
+        self.RI_models = RI_models
+        self.reverse_RI_models = reverse_RI_models
+
+    def convert_to_RI(self, sample_map):
+        if not self.RI_map:
+            self.populate_RI_lookup(sample_map)
+        for k, v in sample_map.items():
+            sam = self.sample_registry[k]
+            sam['list_retention_index'] = self.RI_models[v](sam['list_retention_time'])
+
+
+    def annotate_GC(self):
+        pref_ft = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
+        full_ft = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
+        EI_MS_Library.annotate_gc_feature_table_with_library(pref_ft, self.parameters['GC_Database'])
+        EI_MS_Library.annotate_gc_feature_table_with_library(full_ft, self.parameters['GC_Database'])
+
 
 class EI_MS_Library():
     def __init__(self, library_ID, multicores=None) -> None:
@@ -134,3 +203,5 @@ class EI_MS_Library():
 
 def wrapped_cosine(job):
     return job, CosineGreedy().pair(job[0], job[1])
+
+

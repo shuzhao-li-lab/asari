@@ -97,34 +97,26 @@ PROTON = 1.00727646677
 electron = 0.000549
 
 # avoid confusing adducts in initial search, e.g. H, H2O
-adduct_search_patterns = [  # initial patterns are relative to M+H+
-                            (21.9820, 'Na/H'),
+adduct_search_patterns = adduct_search_patterns_pos = [  
+                            # initial patterns are relative to M+H+
+                            (21.98194, 'Na/H'),
                             (41.026549, 'ACN'),     # Acetonitrile
-                            (35.9767, 'HCl'),
+                            (67.987424, 'NaCOOH'),
                             (37.955882, 'K/H'),
                             ]
-
-adduct_search_patterns_neg = [ (35.9767, 'HCl'), 
-                            (46.00548, 'HCOOH'),
-                            (21.9820, 'Na/H'), 
+adduct_search_patterns_neg = [  
+                            (21.98194, 'Na/H'), (67.987424, 'NaCOOH'),
+                            (82.0030, 'C2HF3'),
+                            (1.99566, 'F <-> OH'), 
                             (41.026549, 'ACN'),
                             (37.955882, 'K/H'),
                             ]
-
 isotope_search_patterns = [ (1.003355, '13C/12C', (0, 0.8)),
                             (2.00671, '13C/12C*2', (0, 0.8)),
-                            # (3.010065, '13C/12C*3', (0, 0.8)),
-                            # (4.01342, '13C/12C*4', (0, 0.8)),
-                            # (5.016775, '13C/12C*5', (0, 0.8)),
-                            # (6.02013, '13C/12C*6', (0, 0.8)),
-                            # (7.023485, '13C/12C*7', (0, 0.8)),
-                            # (8.02684, '13C/12C*8', (0, 0.8)),
-                            # (9.030195, '13C/12C*9', (0, 0.8)),
-                            # (10.03355, '13C/12C*10', (0, 0.8)),
-                            # (11.036905, '13C/12C*11', (0, 0.8)),
-                            # (12.04026, '13C/12C*12', (0, 0.8)),
+                            (3.010065, '13C/12C*3', (0, 0.8)),
+                            (1.9970, '37Cl/35Cl', (0.1, 0.8)), # 24.24%
                             ]
-
+# this can be augmented by more neutral loss etc.
 extended_adducts = [(1.0078, 'H'),
                             (-1.0078, '-H'),
                             (10.991, 'Na/H, double charged'),

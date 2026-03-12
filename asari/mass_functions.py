@@ -133,7 +133,7 @@ def mass_paired_mapping(list1, list2, std_ppm=5):
     This sorts all m/z values first, then compare their differences in sequential neighbors.
     To be considered as an unambiguous match, the m/z values from two lists 
     should have no overlap neighbors in either direction in either list other than their own pair.
-    Thus, oow-selectiviy values are not considered in matching.
+    Thus, low-selectiviy values are not considered in matching.
     This and related functions are for m/z alignment only, not used for general search. 
     See asari.tools.match_features for general search.
 

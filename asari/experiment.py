@@ -14,9 +14,11 @@ import pandas as pd
 
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
+# to move out of experiment to separate module
 from .default_parameters import adduct_search_patterns, \
     adduct_search_patterns_neg, isotope_search_patterns, extended_adducts, \
     readme_doc_str
+
 
 # from .gc_annotation import EI_MS_Library
 

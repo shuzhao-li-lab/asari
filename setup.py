@@ -15,7 +15,7 @@ setup(
   version=__version__,
   author='Shuzhao Li',
   author_email='shuzhao.li@gmail.com',
-  description='LC-MS metabolomics data preprocessing',
+  description='metabolomics data processing',
   long_description=long_description,
   long_description_content_type="text/markdown",
   url='https://github.com/shuzhao-li/asari',
@@ -47,6 +47,6 @@ setup(
                             'asari_gui=asari.gui:main_gui'],
     },
 
-  python_requires='>=3.7,<3.12',
+  python_requires='>=3.7',
   install_requires=requirements,
 )
