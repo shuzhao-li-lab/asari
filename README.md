@@ -31,13 +31,14 @@ Install
 
 Input
 =====
-Input data are centroid mzML files from LC or GC metabolomics. 
+Input data are centroid mzML files from LC, GC or DI metabolomics. 
+Example datasets can be found at https://github.com/shuzhao-li-lab/data.
 
 We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. You can also perform conversion, if your input files are Thermo raw files either by using the `convert` command or by passing `--convert_raw True` with the `process` command.  
 
 Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats and .mzXML files.
 
-MS/MS spectra are ignored by asari, but are exported in ____ format if discovered during processing for users and other tools. Our pipeline (https://pypi.org/project/pcpfm/) has annotation steps to use MS/MS data.
+MS/MS spectra are ignored in default LC-MS workflow but handled by alternative workflows.
 
 Use 
 ===
@@ -84,6 +85,10 @@ To launch a dashboard in your web browser after the project is processed into di
 Alternative to a standalone command, to run as a module via Python interpreter, one needs to point to module location, e.g.:
 
 `python3 -m asari.main process --mode pos --input mydir/projectx_dir`
+
+An example output feature table is `test/HighOnly_HILICpos_preferred_Feature_table.tsv`, which was from:
+
+`asari process -i MT202304_2phase_HILICpos -o highonly --min_peak_height 1000000 --anno F`
 
 
 Graphical Interface
