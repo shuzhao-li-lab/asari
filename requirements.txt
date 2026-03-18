@@ -3,17 +3,10 @@ mass2chem
 khipu-metabolomics>=0.7.0
 jms-metabolite-services>=0.5.7
 pymzml
+ms_entropy
 numpy
 scipy
 statsmodels
 pyyaml
 tqdm
 json_tricks
-# will make below optional
-panel>=0.13.0
-holoviews
-hvplot
-seaborn
-matplotlib
-plotly
-matchms

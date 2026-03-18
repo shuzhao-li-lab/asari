@@ -1,4 +1,4 @@
-__version__ = "1.16.01"
+__version__ = "1.16.03"
 
 from . import analyze
 from . import annotate

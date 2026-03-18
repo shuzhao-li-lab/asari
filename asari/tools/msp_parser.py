@@ -1,5 +1,5 @@
 '''
-Top part from ChatGPT
+Bottom part from ChatGPT, yet to validate. Using top SL simple function for now.
 
 Common MSP Variations
 
@@ -11,10 +11,48 @@ Common MSP Variations
 | extra metadata        | `InChIKey`, `CAS`, `Comment`, etc |
 
 '''
-
-
 import re
 
+#
+# SL simple function
+#
+
+def parse_msp_to_listdict(file, field_separator=': ', return_peaks=True):
+    '''
+    parse a msp file within reasonable size.
+    return list of dictionaries, [{key, value pairs}, ...]
+    entry['peaks'] contains list of tuples if data are imported correctly. 
+    '''
+    features = []
+    w = open(file).read().rstrip().split('\n\n')
+    for block in w:
+        d = {}
+        lines = block.splitlines()
+        data = []
+        for line in lines:
+            if field_separator in line:
+                x = line.split(field_separator)
+                d[x[0]] = x[1]
+            elif line.strip():
+                data.append(line)
+        if return_peaks:
+            try:
+                peaks = []
+                for line in data:
+                    for x in line.split(';'):
+                        entry = x.strip().split()
+                        if len(entry) == 2:
+                            peaks.append((float(entry[0]), float(entry[1])))
+                d['peaks'] = peaks  
+            except(TypeError, ValueError):
+                print("Failed to convert peaks: ", entry, "Data: ", data)
+        features.append(d)
+        
+    return features
+
+#
+# Below is ChatGPT code, yet to verify
+#
 
 def parse_peak_token(token):
     """
@@ -161,39 +199,3 @@ def parse_msp(filepath):
     return spectra
 
 
-#
-# SL simple function
-#
-
-def parse_msp_to_listdict(file, field_separator=': ', return_peaks=True):
-    '''
-    parse a msp file within reasonable size.
-    return list of dictionaries, [{key, value pairs}, ...]
-    entry['peaks'] contains list of tuples if data are imported correctly. 
-    '''
-    features = []
-    w = open(file).read().rstrip().split('\n\n')
-    for block in w:
-        d = {}
-        lines = block.splitlines()
-        data = []
-        for line in lines:
-            if field_separator in line:
-                x = line.split(field_separator)
-                d[x[0]] = x[1]
-            elif line.strip():
-                data.append(line)
-        if return_peaks:
-            try:
-                peaks = []
-                for line in data:
-                    for x in line.split(';'):
-                        entry = x.strip().split()
-                        if len(entry) == 2:
-                            peaks.append((float(entry[0]), float(entry[1])))
-                d['peaks'] = peaks  
-            except(TypeError, ValueError):
-                print("Failed to convert peaks: ", entry, "Data: ", data)
-        features.append(d)
-        
-    return features

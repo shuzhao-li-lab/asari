@@ -1,3 +1,9 @@
+v1.16.01 -> v1.16.03
+GCHRMS annotation functions are added and packaged into pypi release. 
+
+v1.14.99 -> v1.16.01
+Reorganized for v1.16, separting processing and annotation; less hard dependencies
+
 v1.14.14 -> v1.14.99
     This reverts v1.15, which has many issues. Some are design problems that are likely to be bypassed. 
     Major performance problems existed in recent versions. These were identified and fixed: 
