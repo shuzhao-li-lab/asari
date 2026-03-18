@@ -78,6 +78,72 @@ def plot_masstrack(track, color='m', start=100, end=400, yticks=[0, 5e7, 1e8]):
     plt.plot(X, Y, color=color, marker='o', markersize=4, linestyle='dashed')
     plt.yticks(yticks)
 
+# -----------------------------------------------------------------------------
+# Mirror plot 
+# -----------------------------------------------------------------------------
+
+def mirror_plot(
+    peaks, peaks2, 
+    figsize=(8,4),
+    label1="GCMS features",
+    label2="Spectrum in lib",
+    normalize=True,
+    match_tol=None
+):
+    """
+    Plot MS/MS mirror plot, modified from ChatGPT.
+
+    Parameters
+    ----------
+    peaks : array-like
+        m/z and intensity for spectrum 1 (top)
+    peaks2 : array-like
+        m/z and intensity for spectrum 2 (bottom)
+    label1, label2 : str
+        Spectrum labels
+    normalize : bool
+        Normalize intensities to max = 1
+    match_tol : float or None
+        If set, draw vertical lines connecting matched peaks within tolerance
+    """
+    mz1 = np.asarray([x[0] for x in peaks])
+    int1 = np.asarray([x[1] for x in peaks])
+    mz2 = np.asarray([x[0] for x in peaks2])
+    int2 = np.asarray([x[1] for x in peaks2])
+    if normalize:
+        if int1.max() > 0:
+            int1 = int1 / int1.max()
+        if int2.max() > 0:
+            int2 = int2 / int2.max()
+
+    fig, ax = plt.subplots(figsize=figsize)
+    # top spectrum
+    ax.vlines(mz1, 0, int1, color="tab:blue", linewidth=1)
+    # bottom spectrum (inverted)
+    ax.vlines(mz2, 0, -int2, color="tab:red", linewidth=1)
+    # optional peak matching
+    if match_tol is not None:
+        for m1, i1 in zip(mz1, int1):
+            diff = np.abs(mz2 - m1)
+            idx = np.where(diff <= match_tol)[0]
+            for j in idx:
+                ax.plot(
+                    [m1, mz2[j]],
+                    [i1, -int2[j]],
+                    color="gray",
+                    linewidth=0.5,
+                    alpha=0.5
+                )
+    ax.axhline(0, color="black", linewidth=1)
+    ax.set_xlabel("m/z")
+    ax.set_ylabel("Normalized Intensity")
+    ax.set_title("GCMS Mirror Plot")
+    ax.text(0.01, 0.95, label1, transform=ax.transAxes,
+            verticalalignment="top", color="tab:blue")
+    ax.text(0.01, 0.05, label2, transform=ax.transAxes,
+            verticalalignment="bottom", color="tab:red")
+    plt.tight_layout()
+    plt.show()
 
 # -----------------------------------------------------------------------------
 # Selectivity plots for m, c, d-selectivities
