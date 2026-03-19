@@ -127,14 +127,18 @@ def reverse_spec_searches(list_pseudo_spectra,
                           ri_window=100,
                           mz_tolerance=0.005,
                           cosine_penalty=1, 
-                          score_cutoff=0.5
+                          score_cutoff=0.5, 
+                          score_cutoff_entropy=0.4,
                           ):
     '''Search list_pseudo_spectra by standards in list_lib_entries.
     Using both everse cosine and ms_entrophy. 
     cosine_penalty=1 means traditional reverse cosine.
+    
+    score_cutoff : cutoff for reverse cosine
+    score_cutoff_entropy : cutoff for MSentropy
+    
     Returns [[score, entry, candidate_features, spec], 
             [_score, entry, candidate_features, spec, _n_matches]]
-    
     '''
     matched_cosine, matched_entropy = [], []
     for spec in list_pseudo_spectra:
@@ -147,7 +151,7 @@ def reverse_spec_searches(list_pseudo_spectra,
                 spec_peaks, entry.peaks, 
                 ms2_tolerance_in_da = mz_tolerance,
             )
-            if _score > score_cutoff:
+            if _score > score_cutoff_entropy:
                 matched_entropy.append((_score, entry, candidate_features, spec))
             # cosine_similarity
             _score, _n_matches = cosine_similarity(
@@ -246,16 +250,21 @@ def iterative_reverse_annotation(list_features,
                                  search_ri_window=50, 
                                  search_mz_tolerance=0.005, 
                                  cosine_penalty=1, 
-                                 score_cutoff=0.5, 
+                                 score_cutoff=0.5,          # for reverse cosine
+                                 score_cutoff_entropy=0.4,  # for MSentropy
                                  corr_cutoff=0.7, 
                                  export_mz_tolerance_ppm=5,
                                  iterations=3
                                  ):
     
     '''
-    list_features : list of features with RI 
-    entropy search could use offset on score_cutoff
+    list_features : list of features with RI in NamedTuples. 
+    list_lib_entries : lib/database entries in NamedTuples. 
+    feature_dataframe : dataframe of feature/sample intensities, to calculate feature correlations. 
+    iterations : the pseudo spectra are constructed by seeding with top features. 
+                Default 25% each iteration, increased to all in last iteration. 
     
+    Returns dict of cosine and entropy results, and core features.
     '''
     core_features = set()
     list_empCpds_cosine, feature_anno_list_cosine = [], []
@@ -272,7 +281,7 @@ def iterative_reverse_annotation(list_features,
         matched_entropy, matched_cosine = reverse_spec_searches(
             list_pseudo_spectra, list_lib_entries, ri_window=search_ri_window, 
             mz_tolerance=search_mz_tolerance, 
-            cosine_penalty=cosine_penalty, score_cutoff=score_cutoff
+            cosine_penalty=cosine_penalty, score_cutoff=score_cutoff, score_cutoff_entropy=score_cutoff_entropy
         )
         
         _list_empCpds_, _feature_anno_list_ = export_feature_annotation_details(
