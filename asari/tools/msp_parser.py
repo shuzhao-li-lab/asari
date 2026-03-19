@@ -51,8 +51,73 @@ def parse_msp_to_listdict(file, field_separator=': ', return_peaks=True):
     return features
 
 #
-# Below is ChatGPT code, yet to verify
+# Below is ChatGPT code, yet to validate
 #
+
+def parse_mgf(file_path):
+    spectra = []
+    current_spectrum = None
+
+    def parse_pepmass(value):
+        parts = value.strip().split()
+        if len(parts) == 1:
+            return float(parts[0]), None
+        elif len(parts) >= 2:
+            return float(parts[0]), float(parts[1])
+        return None, None
+
+    def parse_charge(value):
+        # Handles "2+", "2++", "2"
+        match = re.match(r"(\d+)", value)
+        return int(match.group(1)) if match else None
+
+    with open(file_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+
+            if not line or line.startswith("#"):
+                continue
+
+            if line.upper() == "BEGIN IONS":
+                current_spectrum = {
+                    "params": {},
+                    "mzs": [],
+                    "intensities": []
+                }
+
+            elif line.upper() == "END IONS":
+                if current_spectrum:
+                    spectra.append(current_spectrum)
+                    current_spectrum = None
+
+            elif current_spectrum is not None:
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    key = key.strip().upper()
+                    value = value.strip()
+
+                    if key == "PEPMASS":
+                        current_spectrum["params"][key] = parse_pepmass(value)
+                    elif key == "CHARGE":
+                        current_spectrum["params"][key] = parse_charge(value)
+                    else:
+                        current_spectrum["params"][key] = value
+
+                else:
+                    # peak list line: mz intensity
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        try:
+                            mz = float(parts[0])
+                            intensity = float(parts[1])
+                            current_spectrum["mzs"].append(mz)
+                            current_spectrum["intensities"].append(intensity)
+                        except ValueError:
+                            # skip malformed peak lines
+                            continue
+
+    return spectra
+
 
 def parse_peak_token(token):
     """
@@ -197,5 +262,3 @@ def parse_msp(filepath):
         spectra.append(current)
 
     return spectra
-
-
