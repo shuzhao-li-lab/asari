@@ -1,8 +1,11 @@
+v1.16.03 -> v1.16.4
+    Added MS2 functions to enable ddMS2 workflow.
+
 v1.16.01 -> v1.16.03
-GCHRMS annotation functions are added and packaged into pypi release. 
+    GCHRMS annotation functions are added and packaged into pypi release. 
 
 v1.14.99 -> v1.16.01
-Reorganized for v1.16, separting processing and annotation; less hard dependencies
+    Reorganized for v1.16, separting processing and annotation; less hard dependencies
 
 v1.14.14 -> v1.14.99
     This reverts v1.15, which has many issues. Some are design problems that are likely to be bypassed. 
