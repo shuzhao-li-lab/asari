@@ -27,8 +27,10 @@ def extract_all_spectra_form_file(infile, min_intensity=1000, MS2_peak_limit=50)
 
     '''
     ms1_spectra, ms2_spectra, others = [], [], []
+    counter = 0
     ms_expt = pymzml.run.Reader(infile)
     for spec in ms_expt:
+        counter += 1
         if spec.ms_level == 2:
             precursor_mz = spec.selected_precursors[0]['mz']
             if precursor_mz is None:
@@ -40,6 +42,7 @@ def extract_all_spectra_form_file(infile, min_intensity=1000, MS2_peak_limit=50)
                     peaks.sort(key=lambda x: x[1], reverse=True)
                     peaks = peaks[:MS2_peak_limit]
                 ms2_spectra.append({ 
+                        'id': 'sp'+str(counter),
                         'precursor_mz': precursor_mz,
                         'rtime': spec.scan_time_in_minutes() * 60,   # in seconds
                         # 'charge': spec.selected_precursors[0]['charge'],
@@ -49,12 +52,14 @@ def extract_all_spectra_form_file(infile, min_intensity=1000, MS2_peak_limit=50)
             peaks = [(mz, int(intensity)) for mz, intensity in spec.peaks('centroided')
                                if intensity >= min_intensity]
             ms1_spectra.append({
+                'id': 'sp'+str(counter),
                 'rtime': spec.scan_time_in_minutes() * 60,   # in seconds
                 'peaks': peaks
             })
         else:
             others.append({
                 'ms_level': spec.ms_level,
+                'id': 'sp'+str(counter),
                 'precursor_mz': precursor_mz,
                 'rtime': spec.scan_time_in_minutes() * 60,   # in seconds
                 'peaks': [(mz, int(intensity)) for mz, intensity in spec.peaks('centroided')
