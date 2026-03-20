@@ -115,7 +115,7 @@ def update_peak_detection_params(parameters, args=None):
             print("Problems with specified min_intensity_threshold. Back to default min_intensity_threshold.")                    
     return parameters
 
-def update_params_from_CLI(parameters, args, debug_print=True):
+def update_params_from_CLI(parameters, args, debug_print=False):
     def __debug_print(debug_print, to_print):
         if debug_print:
             print(to_print)
@@ -424,7 +424,7 @@ def update_params_from_CLI(parameters, args, debug_print=True):
     else:
         debug_print(to_print=f"Using default GC_Database: {parameters['GC_Database']}")
 
-    print(args.run)
+    # print(args.run)
     if args.run:
         parameters['run'] = args.run.rstrip()
         debug_print(to_print=f"Setting run to {parameters['run']}")
@@ -516,11 +516,7 @@ def build_parser():
             help='Path to GC database, or GCMS database name for retrieval')
     parser.add_argument('--GC_Database_Manifest', type=str,
             help='Path to GC database manifest file')
-    try:
-        args = parser.parse_args()
-    except:
-        parser.print_help()
-        raise SystemExit
+    args = parser.parse_args()
     return args
 
 def run_asari(parameters, args=None):

@@ -68,9 +68,9 @@ PARAMETERS = {
     'project_sample_number_small': 10,  # Number of samples dictates workflow, default 10
 
     # for annotation
-    'anno': True,                       # to annotate features
+    'anno': False,                       # to pre-annotate features
     'check_isotope_ratio': False,
-    'GC_Database': "MoNA_GCMS",         # path to GC database, 
+    'GC_Database': "MoNA_GCMS",         # path to GC database - not used now
     'GC_Database_Manifest': None,       # 'memory' or 'ondisk' to implement
     #computational improvements
     'compress': False,                  # if True, compress intermediate files ondisk
