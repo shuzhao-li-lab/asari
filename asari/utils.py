@@ -194,6 +194,7 @@ def get_ionization_mode_mzml(mzml_file, limit=50):
     return list(ion_modes)[0]
 
 def bulk_process(command, arguments, dask_ip=None, jobs_per_worker=False, job_multiplier=1):
+    '''
     if arguments:
         if dask_ip:
             try:
@@ -246,15 +247,17 @@ def bulk_process(command, arguments, dask_ip=None, jobs_per_worker=False, job_mu
                 # Gather results once all tasks have completed
                 return [x for x in client.gather(futures)]
         else:
-            if jobs_per_worker and jobs_per_worker != 'auto':
-                with mp.Pool(jobs_per_worker) as client:
-                    pbar = tqdm.tqdm(client.imap(command, arguments), total=len(arguments), desc="processing...")
-                    return [x for x in pbar]
-            with mp.Pool(mp.cpu_count()) as client:
-                pbar = tqdm.tqdm(client.imap(command, arguments), total=len(arguments), desc="processing...")
-                return [x for x in pbar]
+    
+    
+    
     else:
         raise Exception("No Arguments Provided")
+    '''
+        
+    n_workers = jobs_per_worker if (jobs_per_worker and jobs_per_worker != 'auto') else mp.cpu_count()
+    with mp.Pool(n_workers) as client:
+        return client.starmap(command, [(arg,) for arg in arguments])
+    
     
 def pca_ftable(tsv_path):
     import pandas as pd

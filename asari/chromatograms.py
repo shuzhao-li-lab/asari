@@ -33,6 +33,7 @@ def extract_massTracks_(infile,
     '''
     Extract mass tracks from an object of parsed LC-MS data file.
     A mass track is an EIC for full RT range, without separating the mass traces of same m/z. 
+    ms2_spectra are stored from here but not used in mass track construction. 
 
     Parameters
     ----------
@@ -70,8 +71,20 @@ def extract_massTracks_(infile,
             alldata += [(mz, ii, inten) for mz, inten in zip(spec.mz[good_positions], intensities[good_positions])]
             ii += 1
         elif spec.ms_level == 2:
-            ms2_spectra.append(spec)
-
+            precursor_mz = spec.selected_precursors[0]['mz']
+            if precursor_mz is None:
+                continue
+            peaks = [(mz, intensity) for mz, intensity in spec.peaks('centroided')
+                               if intensity >= min_intensity and mz < precursor_mz-1]    # excluding precursor ion
+            if peaks:
+                ms2_spectra.append(
+                    {
+                        'precursor_mz': precursor_mz,
+                        'rtime': spec.scan_time_in_minutes() * 60,   # in seconds
+                        # 'charge': spec.selected_precursors[0]['charge'],
+                        'peaks': peaks
+                    }
+                )
     #print("extracted %d valide data points." %len(alldata))
     mzTree = {}
     for x in alldata:

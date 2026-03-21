@@ -380,13 +380,15 @@ def single_sample_EICs_(job):
                 } for ii, t in enumerate(xdict['tracks'])]
         print("Extracted %s to %d mass tracks." %(os.path.basename(infile), len(xdict['tracks'])))
 
-        anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(new['list_mass_tracks'], mz_tolerance_ppm=parameters['mz_tolerance_ppm'])
+        anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(new['list_mass_tracks'], 
+                                                            mz_tolerance_ppm=parameters['mz_tolerance_ppm'])
         # find_mzdiff_pairs_from_masstracks is not too sensitive to massTrack format
         new.update({
             'anchor_mz_pairs': anchor_mz_pairs,
             'number_anchor_mz_pairs': len(anchor_mz_pairs),
             # 'xdict': xdict,     # storage duplication 
             'track_mzs': [(t[0], ii) for ii, t in enumerate(xdict['tracks'])],
+            # ms2_spectra not serializable - cann't pickle
             'ms2_spectra': xdict['ms2_spectra'],
             'max_scan_number': max(xdict['rt_numbers']),
             'acquisition_time': xdict['acquisition_time']
@@ -426,8 +428,8 @@ def single_sample_EICs_(job):
                             new['acquisition_time'], 
                             new if parameters['database_mode'] == 'memory' else {}, 
                             parameters['compress'])} 
-    except Exception as _:
-        print("Failed to extract: %s." %os.path.basename(infile))
+    except Exception as e:
+        print("Failed to extract %s: %s" % (os.path.basename(infile), e))
         return {sample_id: ('failed', # status:mzml_parsing
                             'failed', # status:eic
                             None, # outfile
@@ -442,6 +444,8 @@ def single_sample_EICs_(job):
                             parameters['compress'] # compress
                             )}
 
+    
+    
 # -----------------------------------------------------------------------------
 # main workflow for `xic`
 # -----------------------------------------------------------------------------

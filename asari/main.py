@@ -337,6 +337,7 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     else:
         debug_print(to_print=f"Using default drop_unaligned_samples: {parameters['drop_unaligned_samples']}")
 
+    # not recommended
     # set reuse intermediates
     if args.reuse_intermediates:
         assert os.path.isdir(args.reuse_intermediates), "Reuse intermediates must be a valid directory."
@@ -345,6 +346,7 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     else:
         debug_print(to_print=f"Using default reuse_intermediates: {parameters['reuse_intermediates']}")
 
+    # not recommended
     # set storage format
     if args.storage_format:
         assert args.storage_format in {'pickle', 'json'}, "Storage format must be either pickle or json."
@@ -394,6 +396,8 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     else:
         debug_print(to_print=f"Using default vizualization_max_samples: {parameters['vizualization_max_samples']}")
 
+    # to rewire
+    #
     if args.workflow:
         parameters['workflow'] = args.workflow
         assert parameters['workflow'] in {'LC', 'GC', 'DIMS', 'LC_start'}, "Workflow must be either LC, GC, DIMS, or Lipidomics."
@@ -401,6 +405,7 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     else:
         debug_print(to_print=f"Using default workflow: {parameters['workflow']}")
 
+    # to verify
     # set retention index standards
     if args.retention_index_standards:
         assert os.path.isfile(args.retention_index_standards), "Retention index standards must be a valid file."
@@ -409,6 +414,7 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     else:
         debug_print(to_print=f"Using default retention_index_standards: {parameters['retention_index_standards']}")
 
+    # not recommended
     if args.GC_Database_Manifest:
         parameters['GC_Database_Manifest'] = args.GC_Database_Manifest
         debug_print(to_print=f"Setting GC_Database_Manifest to {parameters['GC_Database_Manifest']}")
@@ -512,10 +518,13 @@ def build_parser():
             help='Workflow to use, LC by default')
     parser.add_argument('--retention_index_standards', type=str,
             help='Path to retention index standards, needed for GC workflow')
+    
+    # 
     parser.add_argument('--GC_Database', type=str, 
             help='Path to GC database, or GCMS database name for retrieval')
     parser.add_argument('--GC_Database_Manifest', type=str,
             help='Path to GC database manifest file')
+    
     args = parser.parse_args()
     return args
 

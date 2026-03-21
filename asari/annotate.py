@@ -92,7 +92,7 @@ def append_kovats_index(list_features, ri_model):
                     )   # asari rtime is in seconds, convert to minutes
     return list_features
 
-def group_pseudospectra_from_features(list_features, rtime_window_in_seconds=1, throttle=0.25):
+def group_pseudospectra_from_features(list_features, rtime_window_in_seconds=1, bin_fraction=0.2):
     '''
     Group GC features into pseudo spectra by rtime bins. 
     Starting with features of highest peaks. 
@@ -101,7 +101,7 @@ def group_pseudospectra_from_features(list_features, rtime_window_in_seconds=1, 
     returns list of PseudoSpectrum instances.
     '''
     list_pseudo_spectra, features_counted_for = [], set()
-    N = int(len(list_features) * throttle)
+    N = int(len(list_features) * bin_fraction)
     for feature in list_features[:N]:
         if feature['id_number'] not in features_counted_for:
             features_in_range = [f for f in list_features if abs(f['rtime'] - feature['rtime']) < rtime_window_in_seconds]
@@ -117,8 +117,8 @@ def group_pseudospectra_from_features(list_features, rtime_window_in_seconds=1, 
             features_counted_for.update([f['id_number'] for f in features_in_range])
             list_pseudo_spectra.append(pseudo_)
             
-    print("From %d features, %d pseudo spectra were constructed, of which %d have 3 or more peaks." %(
-        len(list_features), len(list_pseudo_spectra), len([x for x in list_pseudo_spectra if x.num_features>=3])
+    print("From %d features, %d pseudo spectra were constructed, of which %d have 100 or more peaks." %(
+        len(list_features), len(list_pseudo_spectra), len([x for x in list_pseudo_spectra if x.num_features>=100])
     ))
     return list_pseudo_spectra
 
@@ -254,6 +254,7 @@ def iterative_reverse_annotation(list_features,
                                  score_cutoff_entropy=0.4,  # for MSentropy
                                  corr_cutoff=0.7, 
                                  export_mz_tolerance_ppm=5,
+                                 bin_fraction=0.2,
                                  iterations=3
                                  ):
     
@@ -271,12 +272,11 @@ def iterative_reverse_annotation(list_features,
     list_empCpds_entropy, feature_anno_list_entropy = [], []
     for step in range(1, iterations+1):
         print("Iteration step ", step)
-        _fraction_ = 0.25
         if step == iterations:
-            _fraction_ = 1
+            bin_fraction = 1
         list_pseudo_spectra = group_pseudospectra_from_features(
             [feat for feat in list_features if feat['id'] not in core_features], 
-            rtime_window_in_seconds=binning_rtime_window_in_seconds, throttle=_fraction_)
+            rtime_window_in_seconds=binning_rtime_window_in_seconds, bin_fraction=bin_fraction)
 
         matched_entropy, matched_cosine = reverse_spec_searches(
             list_pseudo_spectra, list_lib_entries, ri_window=search_ri_window, 
