@@ -2,7 +2,8 @@ import os
 import sys
 import json
 import pickle
-import pandas as pd
+
+import pandas as pd  # to phase out, used only in GC 
 
 # from scipy import interpolate
 # import tqdm
@@ -14,7 +15,9 @@ import pandas as pd
 
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
-# to move out of experiment to separate module
+#
+# to move out of experiment to separate annotation module
+#
 from .default_parameters import adduct_search_patterns, \
     adduct_search_patterns_neg, isotope_search_patterns, extended_adducts, \
     readme_doc_str
@@ -122,6 +125,9 @@ class ext_Experiment:
         except:
             return sorted(sample_order_by_timestamp, key=lambda x: x[0])
     
+    #
+    # to phase out, used only in GC 
+    #
     def associate_stds_samples(self, sample_run_order):
         association = {}
         current_non_RI_samples = []
@@ -129,6 +135,7 @@ class ext_Experiment:
         for sample_id, runtime in sample_run_order:
             sample_name = self.sample_registry[sample_id]['name']
             RI_list = pd.read_csv(self.parameters['retention_index_standards'])
+            
             if sample_name in RI_list.columns:
                 last_reference = sample_id
                 for non_RI_sample in current_non_RI_samples:
@@ -218,6 +225,8 @@ class ext_Experiment:
         self.CMAP.build_composite_tracks_GC()
         self.CMAP.global_peak_detection()
 
+
+
     def export_all(self, anno=True, mode="LC"):
         '''
         Export all files.
@@ -237,7 +246,9 @@ class ext_Experiment:
                     peak['id'] = str(peak['id_number'])
                 self.export_CMAP_pickle()
                 self.annotate()
-                self.generate_qc_plot_pdf()
+                
+                # self.generate_qc_plot_pdf()
+                
             self.export_feature_tables()
             self.export_log()
             self.export_readme()
@@ -326,6 +337,9 @@ class ext_Experiment:
 
     def generate_qc_plot_pdf(self, outfile="qc_plot.pdf"):
         '''
+        
+        Moving out to tool, not keeping in core package. 
+        
         Generates a PDF figure of a combined plot feature quality metrics.
         Used only when --anno True (default).
         Skip if matplotlib is missing.
@@ -394,6 +408,16 @@ class ext_Experiment:
         ----------
         src: str, optional, default: hmdb4
             not used but can, in the future, dictate which database is used to generate annotations
+            
+        
+        
+        
+        
+        To move annotation out of core package.
+        
+        
+        
+        
         '''
         self.KCD = knownCompoundDatabase()
         self.KCD.mass_indexed_compounds = pickle.load( 

@@ -1,3 +1,10 @@
+'''
+This was JMM's prototype.
+Desktop GUI or web GUI should be a separate package. 
+The asari core package should remain cloud-friendly, with minimal dependency on deployment. 
+Even matplotlib is optional. 
+'''
+
 import tkinter as tk
 from tkinter import scrolledtext, messagebox, filedialog
 import threading

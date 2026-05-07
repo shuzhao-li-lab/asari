@@ -76,7 +76,7 @@ def get_file_masstrack_stats(infile, parameters, return_sample=False):
 
         Assuming ionization mode is neg.
 
-        Maxium retention time (sec): 299.818228
+        Maximum retention time (sec): 299.818228
         m/z range: (min 80.011578, median 358.010062, max 997.616794)
 
         Found 14063 mass tracks.
@@ -154,7 +154,7 @@ def get_file_masstrack_stats(infile, parameters, return_sample=False):
 
     print("Total number of MS2 spectra: %d" %L2)
 
-    print("Maxium retention time (sec): %f" %max(new['list_retention_time']))
+    print("Maximum retention time (sec): %f" %max(new['list_retention_time']))
     print("m/z range: (min %f, median %f, max %f)\n" %(np.min(all_mz), np.median(all_mz), np.max(all_mz)))
 
     print("Found %d mass tracks." %ii)

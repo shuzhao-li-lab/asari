@@ -14,13 +14,13 @@ from .workflow import (get_mz_list,
                        read_project_dir, 
                        create_export_folders)
 from .default_parameters import PARAMETERS
-from .dashboard import read_project, dashboard
+
 from .analyze import estimate_min_peak_height, analyze_single_sample
 from .annotate import annotate_user_featuretable
 from .utils import build_boolean_dict, bulk_process
-from .qc import generate_qc_report
 
-# from .gc_annotation import EI_MS_Library
+# from .qc import generate_qc_report
+
 
 booleandict = build_boolean_dict()
 SUBCOMMANDS = ["analyze", "process", "xic", "extract", "annotate", "join", "viz", "list_workflows"]
@@ -63,16 +63,20 @@ def join(parameters, args):
     print("NOT IMPLEMENTED")
 
 def viz(parameters, args):
-    datadir = args.input
-    project_desc, cmap, epd, Ftable, Ptable = read_project(datadir)
-    if args.table_for_viz == 'full':
-        dashboard(project_desc, cmap, epd, Ftable)
-    elif args.table_for_viz == 'preferred':
-        dashboard(project_desc, cmap, epd, Ptable)
-    else:
-        print(f"Table for viz not recognized! Using Full table.")
-        dashboard(project_desc, cmap, epd, Ftable)
-
+    try:    
+        from .dashboard import read_project, dashboard
+        datadir = args.input
+        project_desc, cmap, epd, Ftable, Ptable = read_project(datadir)
+        if args.table_for_viz == 'full':
+            dashboard(project_desc, cmap, epd, Ftable)
+        elif args.table_for_viz == 'preferred':
+            dashboard(project_desc, cmap, epd, Ptable)
+        else:
+            print(f"Table for viz not recognized! Using Full table.")
+            dashboard(project_desc, cmap, epd, Ftable)
+    except ImportError:
+        print("Error loading Dashboard, likely missing libraries.")
+    
 def qc_report(parameters, args):
     list_input_files = read_project_dir(args.input)
     create_export_folders(parameters)
@@ -297,6 +301,9 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     else:
         debug_print(to_print=f"Using default peak_area: {parameters['peak_area']}")
 
+
+
+
     # set keep intermediates
     if args.keep_intermediates:
         parameters['keep_intermediates'] = booleandict[args.keep_intermediates]
@@ -321,6 +328,7 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     else:
         debug_print(to_print=f"Using default debug_rtime_align: {parameters['debug_rtime_align']}")
 
+
     # set compress
     if args.compress:
         parameters['compress'] = booleandict[args.compress]
@@ -336,6 +344,9 @@ def update_params_from_CLI(parameters, args, debug_print=False):
         debug_print(to_print=f"Setting drop_unaligned_samples to {parameters['drop_unaligned_samples']}")
     else:
         debug_print(to_print=f"Using default drop_unaligned_samples: {parameters['drop_unaligned_samples']}")
+
+
+
 
     # not recommended
     # set reuse intermediates
@@ -413,6 +424,9 @@ def update_params_from_CLI(parameters, args, debug_print=False):
         debug_print(to_print=f"Setting retention_index_standards to {parameters['retention_index_standards']}")
     else:
         debug_print(to_print=f"Using default retention_index_standards: {parameters['retention_index_standards']}")
+
+
+
 
     # not recommended
     if args.GC_Database_Manifest:
@@ -543,8 +557,10 @@ def run_asari(parameters, args=None):
         process(parameters)
     elif parameters['run'] == 'convert':
         convert(parameters, args)
-    elif parameters['run']== "qc_report":
+        
+    elif parameters['run'] == 'qc_report':
         qc_report(parameters, args)
+
     elif parameters['run'] == 'analyze':
         # analyze a single sample file to get descriptions
         analyze(parameters, args)
@@ -560,8 +576,8 @@ def run_asari(parameters, args=None):
     elif parameters['run'] == 'join':
         # input a list of directories, each a result of asari process
         join(parameters, args)
-    elif parameters['run'] == 'qc_report':
-        qc_report(parameters, args)
+    
+        
     elif parameters['run'] == 'viz':
         # launch data dashboard
         viz(parameters, args)
@@ -570,6 +586,9 @@ def run_asari(parameters, args=None):
         print("\t1. LC - default option")
         print("\t2. GC, pass `--workflow GC` to enable")
         print("\t3. Lipidomics LC, pass `--workflow Lipidomics` NOT IMPLEMENTED")
+        
+        
+        
     else:
         print("Expecting one of the subcommands: analyze, process, xic, annotate, join, viz, list_workflows.")
 

@@ -3,8 +3,12 @@ Misc plot functions.
 '''
 
 import numpy as np
-from matplotlib import pyplot as plt
 import pymzml
+
+try:
+    from matplotlib import pyplot as plt
+except ImportError:
+    print("Missing plottling libraries.")
 
 # -----------------------------------------------------------------------------
 # Plot mass tracks and raw data points
@@ -81,18 +85,20 @@ def plot_masstrack(track, color='m', start=100, end=400, yticks=[0, 5e7, 1e8]):
 # -----------------------------------------------------------------------------
 # Mirror plot 
 # -----------------------------------------------------------------------------
-
 def mirror_plot(
     peaks, peaks2, 
     figsize=(8,4),
     label1="GCMS features",
     label2="Spectrum in lib",
     normalize=True,
-    match_tol=None
+    match_tol=None, 
+    title="GCMS Mirror Plot",
+    outfile="this_mirror_plot.pdf"
 ):
     """
-    Plot MS/MS mirror plot, modified from ChatGPT.
-
+    Plot mirror plot for either MS/MS or GC-MS. 
+    With help from Brooklynn McNeil and ChatGPT. 
+    
     Parameters
     ----------
     peaks : array-like
@@ -104,7 +110,8 @@ def mirror_plot(
     normalize : bool
         Normalize intensities to max = 1
     match_tol : float or None
-        If set, draw vertical lines connecting matched peaks within tolerance
+        If set, draw vertical lines connecting matched peaks within tolerance. 
+    title : figure title
     """
     mz1 = np.asarray([x[0] for x in peaks])
     int1 = np.asarray([x[1] for x in peaks])
@@ -137,13 +144,16 @@ def mirror_plot(
     ax.axhline(0, color="black", linewidth=1)
     ax.set_xlabel("m/z")
     ax.set_ylabel("Normalized Intensity")
-    ax.set_title("GCMS Mirror Plot")
+    ax.set_title(title)
     ax.text(0.01, 0.95, label1, transform=ax.transAxes,
             verticalalignment="top", color="tab:blue")
     ax.text(0.01, 0.05, label2, transform=ax.transAxes,
             verticalalignment="bottom", color="tab:red")
     plt.tight_layout()
-    plt.show()
+    if outfile:
+        plt.savefig(outfile)
+    else:
+        plt.show()
 
 # -----------------------------------------------------------------------------
 # Selectivity plots for m, c, d-selectivities

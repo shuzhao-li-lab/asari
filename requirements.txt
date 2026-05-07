@@ -5,6 +5,7 @@ jms-metabolite-services>=0.5.7
 pymzml
 ms_entropy
 numpy
+numba
 scipy
 statsmodels
 pyyaml
