@@ -7,7 +7,6 @@ from . import command_line
 from . import constructors
 from . import default_parameters
 from . import experiment
-# from . import json_encoder
 from . import main
 from . import mass_functions
 from . import peaks

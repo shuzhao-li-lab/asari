@@ -1,5 +1,7 @@
-
-
+v1.16.5 -> v1.16.6
+    Cleaned up workflows and reorganized project. 
+    Added full GC-HRMS workflow in `annotate`. 
+    added plot_scan_seq.py, etc.
 
 v1.16.4 -> v1.16.5
     Bug fix on saving ms2_spectra to pickle. 

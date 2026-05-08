@@ -5,9 +5,13 @@ To test and solidify.
 GC-HRMS annotation functions are added here.
 This does not change default --anno for LC-MS data processing; but we will unify in next version.
 
+Example use:
+asari annotate -i /Users/lish/li.proj/IndiPHARM/LookAhead/GCMS/lookahead_gcms_asari13_asari_project_311234834/export/full_Feature_table.tsv -o /Users/lish/li.proj/IndiPHARM/LookAhead/GCMS/ -j v16 --kovats /Users/lish/li.proj/asari_project/GCHRMS/KovatsIndex_alkanestandards_cuimc.tsv --db /Users/lish/li.proj/asari_project/GCHRMS/Resources/GCHRMS_Database_251217.msp --denovo F --workflow GC
+
 '''
 import os
 import json
+import time
 
 from khipu.extended import peaklist_to_khipu_list 
 #, export_empCpd_khipu_list
@@ -19,6 +23,31 @@ from .utils import NpEncoder
 
 from .gcms import *
 
+def annotate_project(infile, parameters):
+    time_stamp = [str(x) for x in time.localtime()[1:6]]
+    subdir = 'annotation_' + ''.join(time_stamp)
+    outdir = os.path.join(parameters['outdir'], subdir)
+    os.mkdir(outdir)
+    
+    if parameters['workflow'] == "LC":
+        annotate_user_featuretable(
+            infile, 
+            parameters, 
+            
+        )
+    elif parameters['workflow'] == "GC":
+        annotate_gcms_full(
+            infile=infile,
+            outdir=outdir,
+            KovatsIndex=parameters['kovats'],
+            database_file=parameters['db'],
+            project_name_handle=parameters['project_name'],
+            denovo=parameters['denovo'],
+            # more paras
+        )
+        
+    with open(os.path.join(outdir, 'project.json'), 'w', encoding='utf-8') as f:
+        json.dump(parameters, f, cls=NpEncoder, ensure_ascii=False, indent=2)
 
 #
 # main GC-HRMS function
@@ -27,7 +56,7 @@ def annotate_gcms_full(
     infile,
     outdir,
     KovatsIndex,
-    database_json,
+    database_file,
     project_name_handle='result',
     low_peak_filter_factor=100,
     ms2_tolerance_in_ppm=5, 
@@ -71,8 +100,8 @@ def annotate_gcms_full(
     list_features.sort(key=lambda x: x['peak_area'], reverse=True)
     dict_features = {f['id']: f for f in list_features}
     
-    # parse_msp_to_listdict(GCHRMS_Database, field_separator=': ', return_peaks=True)
-    list_lib_entries = reformat_gcms_lib( json.load(open(database_json)), 
+    # load GCHRMS Database in MSP or JSON format
+    list_lib_entries = reformat_gcms_lib( load_gcms_dbfile(database_file), 
                                      filter_factor=low_peak_filter_factor)
     dict_lib_entries = {e.inchikey: e for e in list_lib_entries}
         

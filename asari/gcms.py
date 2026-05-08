@@ -8,12 +8,12 @@ import ms_entropy as ME
 from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial.distance import pdist
 
-from asari.mass_functions import complete_mass_paired_mapping
-from asari.tools.file_io import read_features_from_asari_table
-from asari.tools.cosine import cosine_similarity
-from asari.tools import match_features 
-from asari.tools.msp_parser import parse_msp_to_listdict
-from asari.tools.plot import mirror_plot
+from .mass_functions import complete_mass_paired_mapping
+from .tools.file_io import read_features_from_asari_table
+from .tools.cosine import cosine_similarity
+from .tools import match_features 
+from .tools.msp_parser import MSP_dict, parse_msp_to_listdict, msp_standarize
+from .tools.plot import mirror_plot
 
 
 class PseudoSpectrum(NamedTuple):
@@ -69,6 +69,15 @@ def filter_features_by_low_intensity_factor(features, base_peak_intensity, filte
     '''
     lower = base_peak_intensity/filter_factor
     return [x for x in features if x['peak_area'] > lower]
+
+def load_gcms_dbfile(infile):
+    if infile.endswith('.msp') or infile.endswith('.MSP'):
+        return msp_standarize(parse_msp_to_listdict(infile), MSP_dict)
+    elif infile.endswith('.json') or infile.endswith('.JSON'):
+        return json.load(open(infile))
+    else:
+        print("Databse only supports MSP or JSON formats.")
+        return None
 
 def reformat_gcms_lib(list_cpd_standards, 
                       peaks_key='peaks', rt_key='RETENTIONTIME', 

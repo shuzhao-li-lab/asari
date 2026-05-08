@@ -16,20 +16,22 @@ PARAMETERS = {
     'reuse_intermediates': None,        # if provided as a path, reuse intermediates  with same basename as input mzML files to skip extraction.
     'database_mode': 'ondisk',          # `auto` determined on sample number 
                                         # 'ondisk', 'memory' (run in memory, only small studies), 
-
     'multicores': 4,                    # number of cores allowed in parallel processing
-    'target': None,                     # target mz values for extraction     
-    'single_file_qc_reports': False,    # if True, generate QC reports for each file, needs spikeins provided or defaults are used.
-    'spikeins': None,
-    'convert_raw': False,               # if True, convert raw files to mzML, requires mono installed
-    'dask_ip': None,                    # IP address for dask distributed computing, to implement
+    
+    # Not using now 
+    # 'target': None,                     # target mz values for extraction     
+    # 'single_file_qc_reports': False,    # if True, generate QC reports for each file, needs spikeins provided or defaults are used.
+    # 'spikeins': None,
+    # 'convert_raw': False,               # if True, convert raw files to mzML, requires mono installed
+    # 'dask_ip': None,                    # IP address for dask distributed computing, to implement
+    # 'retention_index_standards': None,  # path to retention index standards, needed for 'GC' workflow
+    
     # mass parameters
     'mode': 'pos',                      # ionization mode
     'mass_range': (50, 2000),
     'mz_tolerance_ppm': 5,              # ppm, high selectivity meaning no overlap neighbors to confuse; 
                                         # Low selectivity regions will be still inspected to determine the true number of features
     'correction_tolerance_ppm': 1,      # ppm cutoff for deciding to run mass calibration, for correcting mass accuracy in MS1
-
 
     # chromatogram and peak parameters
     'min_timepoints': 6,                # minimal number of data points in elution profile. scipy find_peaks treat `width` as FWHM, thus half of this value.
@@ -44,8 +46,7 @@ PARAMETERS = {
 
     # experimental design related parameters
     'sample_metadata': None,            # path to sample metadata file, can be used in future to guide alignment and annotation
-    'workflow': 'LC',                   # 'LC', 'GC' ... to implement more
-    'retention_index_standards': None,  # path to retention index standards, needed for 'GC' workflow
+    'workflow': 'LC',                   # 'LC', 'GC', 'DIMS', ... 
 
     # autoheight parameters
     'min_min_peak_height': 1,           # in autoheight mode, this sets a lower bound on the minimum peak height it can return
@@ -70,9 +71,9 @@ PARAMETERS = {
     # for annotation
     'anno': False,                       # to pre-annotate features
     'check_isotope_ratio': False,
-    'GC_Database': "MoNA_GCMS",         # path to GC database - not used now
-    'GC_Database_Manifest': None,       # 'memory' or 'ondisk' to implement
-    #computational improvements
+    # 'GC_Database': "MoNA_GCMS",         # path to GC database - not used now
+    # 'GC_Database_Manifest': None,       # 'memory' or 'ondisk' to implement
+    # computational options
     'compress': False,                  # if True, compress intermediate files ondisk
     'storage_format': 'pickle',         # 'pickle' or 'json', json is safer but bigger
 
@@ -151,6 +152,6 @@ and in tab delimited text (`Feature_annotation.tsv`).
 
 The processing parameters and history are in `project.json`.
 
-Please refer to https://github.com/shuzhao-li/asari for details, 
+Please refer to https://github.com/shuzhao-li-lab/asari for details, 
 report bugs or request features.
 """

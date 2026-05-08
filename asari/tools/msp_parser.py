@@ -16,6 +16,16 @@ import re
 #
 # SL simple function
 #
+MSP_dict = { # can add more here for controlled volcabulary
+    'MW': 'ExactMass',
+}
+
+def msp_standarize(LL, MSP_dict):
+    for e in LL:
+        for k,v in MSP_dict.items():
+            if k in e and v not in e:
+                e[v] = e[k]
+    return LL
 
 def parse_msp_to_listdict(file, field_separator=': ', return_peaks=True):
     '''
@@ -32,6 +42,9 @@ def parse_msp_to_listdict(file, field_separator=': ', return_peaks=True):
         for line in lines:
             if field_separator in line:
                 x = line.split(field_separator)
+                #
+                # x[0] may not be unique - to refine later
+                #
                 d[x[0]] = x[1]
             elif line.strip():
                 data.append(line)

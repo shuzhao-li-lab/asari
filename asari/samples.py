@@ -181,7 +181,7 @@ class SimpleSample:
         '''
         Retrieve sample data from local pickle file.
         '''
-        print("Loading intermediate: ", data_location)
+        # print("Loading intermediate: ", data_location)
         sample_data = None
         if zipfile.is_zipfile(data_location):
             with zipfile.ZipFile(data_location, 'r') as z:

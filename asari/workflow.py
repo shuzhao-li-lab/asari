@@ -41,17 +41,16 @@ def workflow_setup(list_input_files, parameters):
     if shared_dict:
         for sid, sam in sample_registry.items():
             # todo - this is a bit of a mess, should be a simpler return or something?
-            sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'], sam['max_scan_number'], sam['list_scan_numbers'], sam['list_retention_time'], sam['track_mzs'], sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'], sam['sample_data'], sam['sparsified'], sam['acquisition_time'] = shared_dict[sid]
+            sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'], sam['max_scan_number'], \
+                sam['list_scan_numbers'], sam['list_retention_time'], sam['track_mzs'], \
+                    sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'], sam['sample_data'], \
+                        sam['sparsified'], sam['acquisition_time'] = shared_dict[sid]
             sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
         EE = ext_Experiment(sample_registry, parameters)
     else:
         raise Exception("No data was processed, check the input files.")
     EE = ext_Experiment(sample_registry, parameters)
     return EE
-
-def workflow_cleanup(EE, list_input_files, parameters):
-    if not parameters['keep_intermediates'] and parameters['database_mode'] != 'memory':
-        remove_intermediate_pickles(parameters)
 
 def process_project(list_input_files, parameters):
     '''
@@ -89,16 +88,17 @@ def process_project(list_input_files, parameters):
     The pickle folder is removed after the processing by default.
     '''
     EE = workflow_setup(list_input_files, parameters)
-    workflow_export_mode = {
-        'GC': (EE.process_all_GC, 'GC'),
-        'LC': (EE.process_all_LC, 'LC'),
-        'LC_start': (EE.process_all_LC_start, 'LC'),
-        'DIMS': (EE.process_all_DIMS, 'DIMS')
-    }
     print(f'Processing Experiment Using {parameters["workflow"]} Workflow...')
-    workflow_export_mode[parameters['workflow']][0]()
-    EE.export_all(anno=parameters['anno'], mode=workflow_export_mode[parameters['workflow']][1])
-    workflow_cleanup(EE, list_input_files, parameters)
+    if parameters['workflow'] in ["LC", "GC"]:
+        EE.process_all_LC()    # processing is same for LC and GC
+    elif parameters['workflow'] == "DIMS":
+        EE.process_all_DIMS()
+        # to add LC-MS/MS
+    else:
+        print("Workflow not supported. Error 100.")
+    EE.export_all(anno=parameters['anno']) 
+    if parameters['database_mode'] != 'memory':
+        remove_intermediate_pickles(parameters)
 
 def read_project_dir(directory, file_pattern='.mzML'):
     '''
@@ -173,6 +173,7 @@ def create_export_folders(parameters, time_stamp=None):
     time_stamp: str
         a time_stamp string to prevent overwriting existing projects
     '''
+    # what's the point of this?
     if parameters['project_name'] in parameters['outdir']:
         print("Export folders already exist, will not overwrite.")
         return None
@@ -182,21 +183,14 @@ def create_export_folders(parameters, time_stamp=None):
     else:
         parameters['outdir'] = '_'.join([parameters['outdir'], parameters['project_name'], time_stamp])
 
-
     os.makedirs(parameters['outdir'])
     # add additional subdirectories here.
-    for subdir in ['export', 'qaqc_reports', 'ms2_spectra']:
+    for subdir in ['export']:      #, 'qaqc_reports', 'ms2_spectra']:
         try:
             os.mkdir(os.path.join(parameters['outdir'], subdir))
         except FileExistsError:
             print(f"Warning, {subdir} subdirectory already exists")
         parameters[f'{subdir}_outdir'] = os.path.join(parameters['outdir'], subdir)
-
-
-    if parameters['reuse_intermediates']:
-        parameters['tmp_pickle_dir'] = os.path.abspath(parameters['reuse_intermediates'])
-        assert os.path.exists(os.path.abspath(parameters['reuse_intermediates'])), "The reuse_intermediates directory does not exist."
-    else:
         parameters['tmp_pickle_dir'] = os.path.join(parameters['outdir'], 'pickle')
         try:
             os.mkdir(parameters['tmp_pickle_dir'])

@@ -225,20 +225,18 @@ class ext_Experiment:
         self.CMAP.build_composite_tracks_GC()
         self.CMAP.global_peak_detection()
 
-
-
-    def export_all(self, anno=True, mode="LC"):
+    def export_all(self, anno=False):
         '''
         Export all files.
         Annotation of features to empirical compounds is done here.
 
         Parameters
         ----------
-        anno: bool, optional, default: True
+        anno: bool, optional, default: False
             if true, generate annotation files, export CMAP pickle and do QC plot;
             else skip annotating.
         '''
-        if self.parameters['workflow'] == "LC":
+        if self.parameters['workflow'] in ["LC", "GC"]:
             self.CMAP.MassGrid.to_csv(
                 os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
             if anno:
@@ -252,14 +250,7 @@ class ext_Experiment:
             self.export_feature_tables()
             self.export_log()
             self.export_readme()
-        elif self.parameters['workflow'] == "GC":
-            self.export_feature_tables()
-            self.CMAP.MassGrid.to_csv(
-                os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']))
-            if self.parameters['anno']:
-                self.annotate_GC()
-            self.export_log()
-            self.export_readme()
+            
         elif self.parameters['workflow'] == "DIMS":
             self.CMAP.MassGrid.to_csv(
                 os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
@@ -270,10 +261,6 @@ class ext_Experiment:
             self.export_log()
             # self.export_readme()
 
-    # to move
-    def annotate_GC(self):
-        print("Rerouting GC annotation - this is a placeholder.")
-        pass
 
     def annotate(self):
         '''

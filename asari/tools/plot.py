@@ -3,10 +3,12 @@ Misc plot functions.
 '''
 
 import numpy as np
+import pandas as pd
 import pymzml
 
 try:
     from matplotlib import pyplot as plt
+    
 except ImportError:
     print("Missing plottling libraries.")
 
@@ -194,6 +196,79 @@ def plot_cSelectivity(mass_track, list_ranges=[(0, 800), (100, 150)],
     if save_pdf:
         plt.savefig(outfile + ".pdf")
 
+
+# -----------------------------------------------------------------------------
+# Misc QC functions
+# -----------------------------------------------------------------------------
+   
+def pca_ftable(tsv_path):
+    import pandas as pd
+    from sklearn.decomposition import PCA
+    from sklearn.preprocessing import StandardScaler
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import numpy as np
+
+    # Load the feature table
+    ftable = pd.read_csv(tsv_path, sep='\t')
+    pca = PCA(n_components=2)
+    results = pca.fit_transform(StandardScaler().fit_transform(ftable.iloc[:, 11:].T))
+    for i, (x, y) in enumerate(results):
+        plt.scatter(x, y, label=ftable.columns[11:][i])
+    plt.xlabel("PC1")
+    plt.ylabel("PC2")
+    plt.legend()
+
+
+def plot_correlations(feature_table_path):
+    ft = pd.read_csv(feature_table_path, sep='\t')
+    ft["sum_intensity_max"] = np.log2(ft.iloc[:, 11:]+1).max(axis=1)
+    ft["sum_intensity_mean"] = np.log2(ft.iloc[:, 11:]+1).mean(axis=1)
+    ft["sum_intensity_median"] = np.log2(ft.iloc[:, 11:]+1).median(axis=1)
+    ft["sum_intensity_min"] = np.log2(ft.iloc[:, 11:]+1).min(axis=1)
+    ft["peak_area"] = np.log2(ft["peak_area"]+1)
+
+    fig, axs = plt.subplots(2, 2, figsize=(15, 10))
+
+    # Max
+    print("max")
+    axs[0, 0].scatter(ft["sum_intensity_max"], ft["peak_area"])
+    sns.regplot(x=ft["sum_intensity_max"], y=ft["peak_area"], scatter=False, color='blue', robust=True, ax=axs[0, 0])
+    r2_value_max = round(np.corrcoef(ft['sum_intensity_max'], ft['peak_area'])[0, 1]**2, 2)
+    axs[0, 0].set_title(f"max vs peak_area (R2 = {r2_value_max})")
+    axs[0, 0].set_xlabel("max")
+    axs[0, 0].set_ylabel("peak_area")
+
+    # Mean
+    print("mean")
+    axs[0, 1].scatter(ft["sum_intensity_mean"], ft["peak_area"])
+    sns.regplot(x=ft["sum_intensity_mean"], y=ft["peak_area"], scatter=False, color='blue', robust=True, ax=axs[0, 1])
+    r2_value_mean = round(np.corrcoef(ft['sum_intensity_mean'], ft['peak_area'])[0, 1]**2, 2)
+    axs[0, 1].set_title(f"mean vs peak_area (R2 = {r2_value_mean})")
+    axs[0, 1].set_xlabel("mean")
+    axs[0, 1].set_ylabel("peak_area")
+
+    # Median
+    print("median")
+    axs[1, 0].scatter(ft["sum_intensity_median"], ft["peak_area"])
+    sns.regplot(x=ft["sum_intensity_median"], y=ft["peak_area"], scatter=False, color='blue', robust=True, ax=axs[1, 0])
+    r2_value_median = round(np.corrcoef(ft['sum_intensity_median'], ft['peak_area'])[0, 1]**2, 2)
+    axs[1, 0].set_title(f"median vs peak_area (R2 = {r2_value_median})")
+    axs[1, 0].set_xlabel("median")
+    axs[1, 0].set_ylabel("peak_area")
+
+    # Min
+    print("min")
+    axs[1, 1].scatter(ft["sum_intensity_min"], ft["peak_area"])
+    sns.regplot(x=ft["sum_intensity_min"], y=ft["peak_area"], scatter=False, color='blue', robust=True, ax=axs[1, 1])
+    r2_value_min = round(np.corrcoef(ft['sum_intensity_min'], ft['peak_area'])[0, 1]**2, 2)
+    axs[1, 1].set_title(f"min vs peak_area (R2 = {r2_value_min})")
+    axs[1, 1].set_xlabel("min")
+    axs[1, 1].set_ylabel("peak_area")
+
+    # Adjust layout
+    plt.tight_layout()
+    plt.show()
 
 # -----------------------------------------------------------------------------
 # in progress. Do not use.
