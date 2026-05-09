@@ -55,7 +55,6 @@ class SimpleSample:
         self.anchor_mz_pairs = registry['anchor_mz_pairs']
         self.rt_numbers = registry['list_scan_numbers']
         self.list_retention_time = registry['list_retention_time']
-        self.compressed = self.experiment.parameters['compress']
 
         if self.database_mode == 'memory':
             self.list_mass_tracks = registry['sample_data']['list_mass_tracks']
@@ -117,6 +116,12 @@ class SimpleSample:
             'rt_landmarks': self.rt_landmarks,
             'reverse_rt_cal_dict': self.reverse_rt_cal_dict,
         }
+
+
+
+
+
+
 
     # to use own class, not dependent on matchms
     def extract_ms2(self, export_format="msp"):

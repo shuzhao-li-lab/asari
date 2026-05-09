@@ -3,7 +3,7 @@ import sys
 import json
 import pickle
 
-import pandas as pd  # to phase out, used only in GC 
+# import pandas as pd  # to phase out, used only in GC 
 
 # from scipy import interpolate
 # import tqdm
@@ -125,28 +125,6 @@ class ext_Experiment:
         except:
             return sorted(sample_order_by_timestamp, key=lambda x: x[0])
     
-    #
-    # to phase out, used only in GC 
-    #
-    def associate_stds_samples(self, sample_run_order):
-        association = {}
-        current_non_RI_samples = []
-        last_reference = None
-        for sample_id, runtime in sample_run_order:
-            sample_name = self.sample_registry[sample_id]['name']
-            RI_list = pd.read_csv(self.parameters['retention_index_standards'])
-            
-            if sample_name in RI_list.columns:
-                last_reference = sample_id
-                for non_RI_sample in current_non_RI_samples:
-                    association[non_RI_sample] = sample_id
-                current_non_RI_samples = []
-            else:
-                current_non_RI_samples.append(sample_id)
-        for non_RI_sample in current_non_RI_samples:
-            association[non_RI_sample] = last_reference
-        return association
-    
     def get_max_scan_number(self, sample_registry):
         '''
         Return max scan number among samples, or None if no valid sample.
@@ -165,7 +143,7 @@ class ext_Experiment:
 
     def process_all_LC(self):
         '''
-        This is the default asari workflow.
+        This is the default asari workflow for LC-MS and GC-MS procssing; annotation is separate after processing.
         
         1. Build MassGrid, using either pairwise (small study) or clustering method. 
            Choose one reference from all samples for the largest number of landmark m/z tracks.
@@ -196,34 +174,7 @@ class ext_Experiment:
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
         self.CMAP.get_DIMS_feature_table()
-        
-    def process_all_LC_start(self):
-        '''
-        Experimental, not use. 
-        
-        self.CMAP = CompositeMap(self)
-        self.CMAP.construct_mass_grid()
-        self.CMAP.START()
-        #if not self.parameters['rt_align_on']:
-        #    self.CMAP.mock_rentention_alignment()
-        #self.CMAP.build_composite_tracks()
-        self.CMAP.global_peak_detection()
-        '''
-        raise NotImplementedError
 
-    # to phase out
-    def process_all_GC(self):
-        '''Moving out; as processing is same as LC after v1.16
-        '''
-        self.CMAP = CompositeMap(self)
-        sample_run_order = self.determine_acquisition_order()
-        mapping = self.associate_stds_samples(sample_run_order)
-        self.mapping = mapping
-        # self.populate_RI_lookup(mapping)
-        #self.convert_to_RI(mapping)
-        self.CMAP.construct_mass_grid()
-        self.CMAP.build_composite_tracks_GC()
-        self.CMAP.global_peak_detection()
 
     def export_all(self, anno=False):
         '''
@@ -235,6 +186,9 @@ class ext_Experiment:
         anno: bool, optional, default: False
             if true, generate annotation files, export CMAP pickle and do QC plot;
             else skip annotating.
+            
+        To move out anno
+        
         '''
         if self.parameters['workflow'] in ["LC", "GC"]:
             self.CMAP.MassGrid.to_csv(
@@ -396,14 +350,9 @@ class ext_Experiment:
         src: str, optional, default: hmdb4
             not used but can, in the future, dictate which database is used to generate annotations
             
-        
-        
-        
-        
+                
         To move annotation out of core package.
-        
-        
-        
+                
         
         '''
         self.KCD = knownCompoundDatabase()
@@ -526,6 +475,10 @@ class ext_Experiment:
         ----------
         dict_empCpds : dict
             dictionary of empirical compounds, using interim_id as key, as seen in JMS.
+            
+        To move annotation out of core package.
+        
+        
         '''
         self.selected_unique_features = {}
         for interim_id, V in dict_empCpds.items():
@@ -599,21 +552,6 @@ class ext_Experiment:
         filtered_FeatureTable.to_csv(outfile, index=False, sep="\t")
         print("\nFeature table (%d x %d) was written to %s." %(
                                 filtered_FeatureTable.shape[0], number_of_samples, outfile))
-
-        # extract targeted m/z features
-        if 'target' in self.parameters and self.parameters['target']:  
-            matched_list, _, target_unmapped = all_mass_paired_mapping(
-                filtered_FeatureTable['mz'].to_list(), self.parameters['target'], self.parameters['mz_tolerance_ppm']
-            )
-            print("\nIn targeted extraction, %d target mz values are not found in this dataset: " %len(target_unmapped))
-            print('    ', [self.parameters['target'][ii] for ii in target_unmapped])
-            matched_targets = [self.parameters['target'][ii[1]] for ii in matched_list]
-            targeted_table = filtered_FeatureTable.iloc[[x[0] for x in matched_list], :]
-            targeted_table.insert(0, "query_target", matched_targets)
-            outfile = os.path.join(self.parameters['outdir'], 'targeted_extraction__'+self.parameters['output_feature_table'])
-            targeted_table.to_csv(outfile, index=False, sep="\t")
-            print("Targeted extraction Feature table (%d x %d) was written to %s.\n" %(
-                                targeted_table.shape[0], number_of_samples, outfile))
 
         outfile = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
         # Some features can have all 0s, filtered here

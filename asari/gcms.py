@@ -3,17 +3,15 @@ from typing import NamedTuple
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
-import ms_entropy as ME
 
 from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial.distance import pdist
 
+import ms_entropy as ME
 from .mass_functions import complete_mass_paired_mapping
-from .tools.file_io import read_features_from_asari_table
 from .tools.cosine import cosine_similarity
 from .tools import match_features 
 from .tools.msp_parser import MSP_dict, parse_msp_to_listdict, msp_standarize
-from .tools.plot import mirror_plot
 
 
 class PseudoSpectrum(NamedTuple):

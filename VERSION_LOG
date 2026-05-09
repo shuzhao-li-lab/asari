@@ -1,6 +1,6 @@
 v1.16.5 -> v1.16.6
     Cleaned up workflows and reorganized project. 
-    Added full GC-HRMS workflow in `annotate`. 
+    Added full GC-HRMS workflow and LC annotation in `annotate`. 
     added plot_scan_seq.py, etc.
 
 v1.16.4 -> v1.16.5

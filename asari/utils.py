@@ -49,7 +49,17 @@ class NpEncoder(json.JSONEncoder):
             return obj.tolist()
         return super(NpEncoder, self).default(obj)
 
-
+def bulk_process(command, arguments, jobs_per_worker=False):
+    '''
+    Multiprocessing for pooling tasks. 
+    
+    Not considering distributed computing (e.g. dask) because it's easier to parallelize projects than computing. 
+    '''
+    n_workers = jobs_per_worker if (jobs_per_worker and jobs_per_worker != 'auto') else mp.cpu_count()
+    with mp.Pool(n_workers) as client:
+        return client.starmap(command, [(arg,) for arg in arguments])
+    
+    
 def download_and_unzip_to_pkg_resources(url, package, subdir="data"):
     """Downloads a ZIP archive from a URL and extracts it into a package's resource directory."""
     print("HERE")
@@ -138,12 +148,3 @@ def get_ionization_mode_mzml(mzml_file, limit=50):
             if i > limit:
                 break
     return list(ion_modes)[0]
-
-def bulk_process(command, arguments, dask_ip=None, jobs_per_worker=False, job_multiplier=1):
-    '''
-    Multiprocessing. Not using dask now. 
-    '''
-    n_workers = jobs_per_worker if (jobs_per_worker and jobs_per_worker != 'auto') else mp.cpu_count()
-    with mp.Pool(n_workers) as client:
-        return client.starmap(command, [(arg,) for arg in arguments])
-    

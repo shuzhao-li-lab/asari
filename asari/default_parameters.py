@@ -49,10 +49,9 @@ PARAMETERS = {
     'workflow': 'LC',                   # 'LC', 'GC', 'DIMS', ... 
 
     # autoheight parameters
-    'min_min_peak_height': 1,           # in autoheight mode, this sets a lower bound on the minimum peak height it can return
-                                        #    notice, that this value is 1 by default, which means that the minimum peak height is not limited by default
-    'dynamic_range': 1000,              # maximal intensity of a peak over the minimal intensity of a peak
-    'num_files_to_check': None,           # number of files to check for autoheight estimation, if None, all files are checked
+    'min_min_peak_height': 10,           # in autoheight mode, this sets a lower bound on the minimum peak height it can return
+    'dynamic_range': 1000,              # factor divided by min_peak_height, controlling min_peak_height to be set
+    'num_files_to_check': 20,           # number of files to check for autoheight estimation, if None, all files are checked
 
     # retention time alignment
     'reference': None,
@@ -68,14 +67,25 @@ PARAMETERS = {
     'num_lowess_iterations': 3,         # number of lowess iterations to perform for RT calibration, higher values take longer but less sensitive to outliers
     'project_sample_number_small': 10,  # Number of samples dictates workflow, default 10
 
-    # for annotation
+    # for GC annotation
+    'ms2_tolerance_in_ppm': 5,           # ppm tolerance, for matching MS2 spectra to database
+    'ms2_tolerance_in_da': 0.005,        # da tolerance, for matching MS2 spectra to database
+    'ri_tolerance': 50,                  # retention index tolerance in matching features
+    'score_cutoff_cosine': 0.5,          # cutoff for cosine similarity score for MS2 matching 
+    'score_cutoff_entropy': 0.4,         # cutoff for entropy similarity score for MS2 matching
+    'corr_cutoff': 0.7,                  # cutoff for correlation between feature intensity to base peak intensity across samples
+    'max_ri_delta': 100,                 # maximal retention index delta between candidate annotations
+    'do_mirror_plot': True,              # whether to generate mirror plot for  annotation results 
+    'max_core_features': 20000,          # to limit the number of features to annotate, as low-intensity features are of less interest
+    'denovo': False,                     # toggle to run de novo construction of empirical compounds (deconvolution)
+
+    # for LC annotation, to update
     'anno': False,                       # to pre-annotate features
     'check_isotope_ratio': False,
-    # 'GC_Database': "MoNA_GCMS",         # path to GC database - not used now
-    # 'GC_Database_Manifest': None,       # 'memory' or 'ondisk' to implement
-    # computational options
-    'compress': False,                  # if True, compress intermediate files ondisk
-    'storage_format': 'pickle',         # 'pickle' or 'json', json is safer but bigger
+    'khipu_rtime_tolerance': 2,          # in seconds, for khipu annotation grouping of features into empirical compounds, to update
+    
+    # 
+    'compress': False,       # not use compress option. "join" solves the problem by splitting job  
 
     # default output names
     'output_feature_table': 'Feature_table.tsv',

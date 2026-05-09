@@ -280,7 +280,7 @@ def batch_EIC_from_samples_(sample_registry, parameters):
     sample_data = {}
     for sample_datum in bulk_process(single_sample_EICs_, 
                                      make_iter_parameters(sample_registry, parameters), 
-                                     dask_ip=parameters['dask_ip'], 
+                                     # dask_ip=parameters['dask_ip'], 
                                      jobs_per_worker=parameters['multicores']):
         sample_data.update(sample_datum)
     return sample_data
@@ -339,25 +339,7 @@ def single_sample_EICs_(job):
     #todo, maybe job should be a dict or something, else, we can just pass the parameters right?
 
     sample_id, infile, outfile, parameters = job
-    try:
-        if parameters['reuse_intermediates']:
-            for file in os.listdir(parameters['reuse_intermediates']):
-                if os.path.basename(file).split(".")[0] == os.path.basename(outfile).split(".")[0]:
-                    print("Reusing Intermediate: %s." %file)
-                    new = SimpleSample.load_intermediate(os.path.join(parameters['reuse_intermediates'], file))
-                    return {sample_id: ('passed', 
-                                        'passed', 
-                                        os.path.join(parameters['reuse_intermediates'], file),
-                                        new['max_scan_number'], 
-                                        new['xdict']['rt_numbers'], 
-                                        new['xdict']['rt_times'],
-                                        new['track_mzs'],
-                                        new['number_anchor_mz_pairs'], 
-                                        new['anchor_mz_pairs'],  
-                                        new['acquisition_time'],
-                                        {}, 
-                                        zipfile.is_zipfile(file))} 
-                
+    try:                
         new = {
             'sample_id': sample_id, 
             'input_file': infile, 
@@ -388,28 +370,15 @@ def single_sample_EICs_(job):
             'acquisition_time': xdict['acquisition_time']
         })
 
-        #todo - clean this up
+        # removed ''compress'' option. "join" solves the problem by splitting job   
         data_filepath = outfile
         if parameters['database_mode'] == 'ondisk':
-            if not parameters['compress']:
-                if parameters['storage_format'] == 'pickle':
-                    data_filepath = outfile
-                    with open(outfile, 'wb') as f:
-                        pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
-                elif parameters['storage_format'] == 'json':
-                    data_filepath = outfile.replace(".pickle", ".json")
-                    with open(outfile.replace(".pickle", ".json"), 'w') as f:
-                        json.dump(new, f)
-            else:
-                data_filepath = outfile.replace(".pickle", ".zip")
-                with zipfile.ZipFile(data_filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                    if parameters['storage_format'] == 'pickle':
-                        with zipf.open(os.path.basename(outfile), 'w') as f:
-                            pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
-                    elif parameters['storage_format'] == 'json':
-                        with zipf.open(os.path.basename(outfile).replace(".pickle", ".json"), 'w') as f:
-                            f.write(json.dumps(new).encode('utf-8'))
-            print(f"\tExtracted to {data_filepath}, {round(os.path.getsize(data_filepath)/1024/1024, 2)} MiB.")
+            # if not parameters['compress']:
+            # if parameters['storage_format'] == 'pickle':
+            data_filepath = outfile
+            with open(outfile, 'wb') as f:
+                pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
+
         return {sample_id: ('passed', 
                             'passed', 
                             data_filepath,

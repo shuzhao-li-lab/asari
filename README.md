@@ -1,125 +1,102 @@
-Asari
-=====
+# Asari
+
 [![Documentation Status](https://readthedocs.org/projects/asari/badge/?version=latest)](https://asari.readthedocs.io/en/latest/?badge=latest)
 [![DOI](https://img.shields.io/badge/DOI-doi.org%2F10.1038%2Fs41467--023--39889--1-blue)](https://doi.org/10.1038/s41467-023-39889-1)
 
-Trackable and scalable Python program for high-resolution LC ([Li et al. Nature Communications 14.1 (2023): 4113](https://www.nature.com/articles/s41467-023-39889-1)) and GC (publication to come) metabolomics datasets:
+Trackable and scalable Python program for high-resolution metabolomics data processing. 
 
 - Taking advantage of high mass resolution to prioritize mass separation and alignment
 - Peak detection on a composite map instead of repeated on individual samples
 - Statistics guided peak dection, based on local maxima and prominence, selective use of smoothing
-- Reproducible, track and backtrack between features and EICs
+- Reproducible, track and backtrack between features and mass tracks (EICs)
 - Tracking peak quality, selectiviy metrics on m/z, chromatography and annotation databases
 - Scalable, performance conscious, disciplined use of memory and CPU 
 - Transparent, JSON centric data structures, easy to chain other tools
 
-A web server (https://asari.app) and [full pipeline](https://pypi.org/project/pcpfm/) are available now.
+LC-MS application was described in Li et al. Nature Communications 14.1 (2023): 4113](https://www.nature.com/articles/s41467-023-39889-1). GC-MS workflow was added to version 1.16.6.
 
+A web server (https://asari.app) and [full pipeline](https://pypi.org/project/pcpfm/) are available now.
 A set of tutorials are hosted at https://github.com/shuzhao-li-lab/asari_pcpfm_tutorials/.
 
-Install
-=======
+## Install
+
 - From PyPi repository: `pip3 install asari-metabolomics`. Add `--upgrade` to update to new versions.
-
 - Or clone from source code: https://github.com/shuzhao-li/asari . One can run it as a Python module by calling Python interpreter. GitHub repo is often ahead of PyPi versions.
-
 - Requires Python 3.8+. Installation time ~ 5 seconds if common libraries already exist.
-
-- Python>=3.12 is currently incompatible with GC workflow because of limitations with installing numba and matchms in Python3.13. 
-
+- The core package is designed to be compact and cloud friendly. The visualization and other dependencies are additional, specified in `optional-requirements.txt`.
 - One can use the web version (https://asari.app) without local installation.
 
-Input
-=====
-Input data are centroid mzML files from LC, GC or DI metabolomics. 
+If installed from pip and the system path includes asari, one can run `asari` as a command in a terminal. 
+Alternatively, one can run it as a module via Python interpreter, e.g.:
+`python3 -m asari.main process -i mydir`
+
+
+## Input
+### Data processing
+Input data are centroid mzML files from LC, GC or DI-MS metabolomics. 
 Example datasets can be found at https://github.com/shuzhao-li-lab/data.
 
-We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. You can also perform conversion, if your input files are Thermo raw files either by using the `convert` command or by passing `--convert_raw True` with the `process` command.  
-
-Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats and .mzXML files.
+We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats and .mzXML files.
 
 MS/MS spectra are ignored in default LC-MS workflow but handled by alternative workflows.
 
-Use 
-===
-If installed from pip, one can run `asari` as a command in a terminal, followed by a subcommand for specific tasks.
+### Raw data inspection and quality control
+Asari function `analyze` returns a summary on a single mzML file.
 
-For help information:
+The `tools.plot_scan_seq` module gives scan level visualization of a single mzML file.  
 
-`asari -h`
+Various tools will be added over time. Single-file QC works on a single mzML file; most QC functions work on the processed full feature table.
+
+### Annotation
+The design of asari is to spearate annotation from feature extraction. 
+
+Pre-annation, i.e., grouping ions to empirical compounds, is done using [Khipu](https://github.com/shuzhao-li-lab/khipu). 
+
+Annotation typically involves compound libraries and databases. Please refer to specific workflows. 
+
+### Pipelines
+An example pipeline is [PCPFM](https://pypi.org/project/pcpfm/), which includes data processing, annotation, QC and data wrangling. Thermo raw files conversion is included in PCPFM. 
+
+Different workflows can be put together using different modules. We will continue releasing examples as notebooks. 
+
+## Use 
+
+The `asari` as a command can run in a terminal, followed by a subcommand for specific tasks.
+For help information: `asari -h`
+
+### Main usages
 
 To process all mzML files under directory mydir/projectx_dir:
 
 `asari process --mode pos --input mydir/projectx_dir`
 
-To get statistical description on a single file (useful to understand data and parameters):
+To annotate GC-MS feature table using a custom database and alkane standards:
 
-`asari analyze --input mydir/projectx_dir/file_to_analyze.mzML`
+`asari annotate -i project_311234834/export/full_Feature_table.tsv 
+-o project_311234834 -j gc_annotation_311234834 
+--kovats /Users/lish/li.proj/asari_project/GCHRMS/KovatsIndex_alkanestandards_cuimc.tsv 
+--db /Users/lish/li.proj/asari_project/GCHRMS/Resources/GCHRMS_Database_251217.msp 
+--denovo F --workflow GC
+`
 
-To get annotation on a tab delimited feature table:
+To pre-annotate LC-MS feature table then match to a database (default HMDB for now):
 
-`asari annotate --mode pos --ppm 10 --input mydir/projectx_dir/feature_table_file.tsv`
+`asari annotate -i /Users/lish/li.play/test16_v16_599432/preferred_Feature_table.tsv -o /Users/lish/li.play/test16_v16_599432/ -j LCMSanno --workflow LC --mode pos`
 
-To do automatic esitmation of min peak height, add this argument:
-
-`--autoheight True`
-
-To output additional extraction table on a targeted list of m/z values from target_mzs.txt:
-
-`asari extract --input mydir/projectx_dir --target target_mzs.txt`
-
-This is useful to add QC check during data processing, e.g. the target_mzs.txt file can be spike-in controls.
-
-Alternatively, you can do:
-
-`asari qc_report --input mydir/projectx_dir/ --spikeins target_trios.csv`
-
-Or add this to the process command to generate the reports during processing:
-
-`--single_file_qc_reports true --spikeins target_trios.csv`
+### Various tools
 
 To launch a dashboard in your web browser after the project is processed into directory process_result_dir:
 
 `asari viz --input process_result_dir`
 
-Alternative to a standalone command, to run as a module via Python interpreter, one needs to point to module location, e.g.:
+To get statistical description on a single file (useful to understand data and parameters):
 
-`python3 -m asari.main process --mode pos --input mydir/projectx_dir`
+`asari analyze --input mydir/projectx_dir/file_to_analyze.mzML`
 
-An example output feature table is `test/HighOnly_HILICpos_preferred_Feature_table.tsv`, which was from:
+Please check documentation and demo notebooks for additional uses. 
 
-`asari process -i MT202304_2phase_HILICpos -o highonly --min_peak_height 1000000 --anno F`
+## Output
 
-
-Graphical Interface
-===================
-
-A prototype graphic interface is provided on install. You can start the GUI by running in a terminal:
-
-`asari_gui`
-
-Ask your IT support for creating a desktop icon if desired. 
-
-
-Workflow Selection - GC / LC / Other
-=============================
-
-Asari processes both GC and LC data via different workflows. 
-
-Worfkows can be provided by passing `--worfklow <workflow_name>` to asari. 
-
-Some workflows require additional parameters. To list possible worfklows:
-
-`asari list_workflows`
-
-We have three workflows currently:
-
-LC - default workflow for Asari
-GC - GC worfklow for Asari, uses retention index for normalization.
-LC_START - alternative LC workflow with spanning tree alignment
-
-Output
-======
 A typical run on disk may generatae a directory like this
 
     rsvstudy_asari_project_427105156
@@ -144,6 +121,9 @@ That is, if a feature is only present in one sample, it will be reported,
 as we think this is important for applications like exposome and personalized medicine. 
 The filtering decisions are left to end users.
 
+An example output feature table is `test/HighOnly_HILICpos_preferred_Feature_table.tsv`, which was generated by:
+    `asari process -i MT202304_2phase_HILICpos -o highonly --min_peak_height 1000000 --anno F`
+
 The `pickle` folder keeps intermediate files during processing.
 They are removed after the processing by default, to save disk space.
 
@@ -154,17 +134,16 @@ which may be safer than using pickle at the expense of additional disk space. `-
 will store the files in individual zip files saving disk space. Enabling compression can be 
 intensive on the CPU/memory subsystem of your machine, use with care. 
 
-Dashboard
-=========
+
+## Dashboard
+
 After data are processed, users can use `asari viz --input process_result_dir` to launch a dashboard to inspect data, where 'process_result_dir' refers to the result folder. The dashboard uses these files under the result folder: 'project.json', 'export/cmap.pickle', 'export/epd.pickle' and 'export/full_Feature_table.tsv'. Thus, one can move around the folder, but modification of these files is not a good idea. Please note that pickle files are for internal use, and one should not trust pickle files from other people.
  
 ![viz_screen_shot](docs/source/_static/viz_screen_shot20220518.png)
 
-Parameters
-==========
+## Parameters
 
-For the LC workflows, only one parameter in asari requires real attention, i.e., m/z precision is set at 5 ppm by default. 
-Most modern instruments are fine with 5 ppm, but one may want to change if needed.
+In most cases, only `mode` and `mz_tolerance_ppm` require attention. The latter is set at 5 ppm by default. Most modern instruments are fine with 5 ppm, but one may want to change if needed.
 
 Default ionization mode is `pos`. Change to `neg` if needed, by specifying `--mode neg` in command line.
 
@@ -174,11 +153,8 @@ A template YAML file can be found at `test/parameters.yaml`.
 When the above methods overlap, command line arguments take priority.
 That is, commandline overwrites `xyz.yaml`, which overwrites default asari parameters in `default_parameters.py`. 
 
-The GC workflow requires, in addition to passing `--workflow GC` to the process command, also an appropirately formatted `--retention_index_standards`
-file which is in .csv. Examples are provided in the db folder. You can also specify which database to use by passing `--GC_Database <path_to_msp>` or `--GC_Databse <database_name>` where `<database_name>` is one of the supported libraries in `/db/gcms_libraries.json`. By default, MoNA GC-MS is used. 
+## Algorithms
 
-Algorithms
-==========
 Basic data concepts follow https://github.com/shuzhao-li/metDataModel, organized as
 
     ├── Experiment
@@ -216,8 +192,9 @@ Step-by-step algorithms are explained in doc/README.md.
 
 This package uses `mass2chem`, `khipu` and `JMS` for mass search and annotation functions.
 
-Performance
-===========
+
+## Performance
+
 Asari is designed to run > 1000 samples on a laptop computer. The performance is achieved via
 - Implementation of basic functions using discrete mathematics and avoiding continuous curves.
 - Main intensity values of each sample are not kept in memory.
@@ -237,19 +214,15 @@ analysis. If you have 4 batches of samples, and are presented with a 5th, the in
 This is storage intensive, however, with compression enabled, it is tractable. Remember, disk space is relatively cheap compared
 to your time. Future improvement will implement a more reusable format without the same parameter assumption. 
 
-Platforms, Anaconda and Docker
-==============================
+
+## Platforms, Anaconda and Docker
+
 **Desktop vs Cloud**
 
-Python itself is used on Windows, Mac and Linux. Users may encouter problems related to Python not to asari, in which cases your best option is to find your local IT friend. We are a small team of scientists. There is no plan to build a complete desktop graphic application, but we do a lot of cloud computing and a basic GUI is provided in the tools directory. If you don't like command lines (many people don't), please feel free to try out the web server (https://asari.app). The free server has a quota. Please contact us if you find yourself in need of substantial cloud resources.
+Python itself is used on Windows, Mac and Linux. Users may encouter problems related to Python not to asari, in which cases your best option is to find your local IT friend. 
+Asari is designed to be cloud friendly. There is no plan to build a complete desktop graphic application. 
 
-**Dask Clusters**
-
-Starting in V1.14, the framework exists to parallelize asari across multiple systems in a distributed manner via Dask.  Asari is largely I/O bound even on single machines, so architecture of the cluster is key to performance. Consider using a fast interconnect such as >10Gbe ethernet or infiniband. All nodes must mount an NFS share for storing experiment data (like local Asari but the target is a network share). Consider using an NVMe based array with ZFS for this purpose to enable real performance gains from the distributed version.
-
-To enable, run as module and pass `dask_ip=<DASK_SCHEDULER>` in the parameters, port 8786 is assumed. 
-
-Note, you probably DO NOT NEED THIS for your experimental data, this is for processing repository scale data. As of V1.14, support is experimental, use at your own risk. To enable dask, find the corresponding field in utils.py and enable it, then reinstall from source.
+If you don't like command lines (many people don't), please feel free to try out the web server (https://asari.app). The free server has a quota. Please contact us if you find yourself in need of substantial cloud resources.
 
 **Anaconda and conda, virtual environments**
 
@@ -292,8 +265,9 @@ In the container, ThermoRawFileParser is under `/usr/local/thermo/`.
 # asari process --mode neg --input tmp --output test99
 ```
 
-Discussion and Future Plans
-===========================
+
+## Discussion and Future Plans
+
 **Known limitations**
 - The current version was mostly developed for Orbitrap data, less tested on TOF.
 - Default elution peak detection is based on local maxima using statistically guided parameters. For highly complex local EIC, additional algorithm may be needed.
@@ -302,7 +276,6 @@ Discussion and Future Plans
 - Implementation of `join` function to facilitate better parallelization. The goal is to have 'native' level of matching features when large datasets are split and processed separately. This can be equivalent function of matching different datasets.
 - To improve TOF support. This maybe related to better construction of mass tracks when the m/z space gets too crowded.
 - Automated handling of sample clusters, since different sample types may be included in an experiment.
-- To add GC-MS support (mostly RT optimization, deconvolution and library search).
 
 **How accurate are my m/z values?**
 
@@ -312,8 +285,16 @@ As discussed in the manuscript, ppm is not perfect in modeling mass resolution a
 
 We thank reviewer #1 for valuable discussions on this topic.
 
-Asari suite and Related projects
-================================
+
+## Extensions
+
+The core package is designed to be compact. We encourage building extensions on top of asari. Various workflows have been built for different applications and we will continue to release them (e.g. as notebooks). 
+
+Many derived applications are possible. E.g. a prototype desktop graphic interface is included in the source code and someone can develop it into a full project. 
+
+
+## Asari suite and Related projects
+
 The asari suite includes 
 - asari (Source code: https://github.com/shuzhao-li/asari, Package Repository: https://pypi.org/project/asari-metabolomics/)
 - metDataModel: data models for metabolomics (https://github.com/shuzhao-li-lab/metDataModel)

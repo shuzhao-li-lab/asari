@@ -1085,7 +1085,7 @@ class CompositeMap:
                     peak_area = 0
                 fList.append( peak_area )            
             FeatureTable[sample.name] = fList
-        print("\nFeature Table: ", FeatureTable.shape)
+        # print("\nFeature Table: ", FeatureTable.shape)
         self.FeatureTable = FeatureTable
         
     
@@ -1104,7 +1104,7 @@ class CompositeMap:
         for SM in self.experiment.all_samples:
             if not self.experiment.parameters['drop_unaligned_samples'] or SM.is_rt_aligned:
                 FeatureTable[SM.name] = self.extract_features_per_sample(SM, peak_area_function)
-        print("\nFeature Table: ", FeatureTable.shape)
+        # print("\nFeature Table: ", FeatureTable.shape)
         self.FeatureTable = FeatureTable
 
 

@@ -300,6 +300,9 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     if args.denovo:
         parameters['denovo'] = booleandict[args.denovo]
         debug_print(to_print=f"Setting denovo to: {parameters['denovo']}")
+    if args.denovo_limit:
+        parameters['max_core_features'] = args.denovo_limit
+        debug_print(to_print=f"Setting max_core_features to: {parameters['max_core_features']}")
 
     # set table for viz
     if args.table_for_viz:
@@ -391,8 +394,6 @@ def build_parser():
             help='perform default annotation after processing data')
     parser.add_argument('--debug_rtime_align', 
             help='Toggle on debug mode for retention alignment: output align figures and reference features.')
-    parser.add_argument('--compress', 
-            help='Compress mass tracks to reduce disk usage, default is False')
     parser.add_argument('--drop_unaligned_samples', 
             help='Drop samples that fail RT alignment from composite map., recommend true for data mining')
 
@@ -402,7 +403,9 @@ def build_parser():
             help='input database file in MSP or JSON.')
     parser.add_argument('--denovo',
             help='de novo construction of empCpds (deconvolution) on GC data')
-
+    parser.add_argument('--denovo_limit', type=int,
+            help='Feature numbers to consider in de novo construction of empCpds (deconvolution) on GC data')
+    
     parser.add_argument('--table_for_viz', type=str,
             help='Table to use for visualization, preferred or full')
     parser.add_argument('--vizualization_max_samples', type=int,
