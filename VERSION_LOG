@@ -1,3 +1,6 @@
+v1.16.6 -> v1.17.0
+    Updated GC annotation algorithm and output formats. 
+
 v1.16.5 -> v1.16.6
     Cleaned up workflows and reorganized project. 
     Added full GC-HRMS workflow and LC annotation in `annotate`. 

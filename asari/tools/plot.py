@@ -94,6 +94,7 @@ def mirror_plot(
     label2="Spectrum in lib",
     normalize=True,
     match_tol=None, 
+    colors=["blue", "tab:red", "black"],
     title="GCMS Mirror Plot",
     outfile="this_mirror_plot.pdf"
 ):
@@ -113,6 +114,7 @@ def mirror_plot(
         Normalize intensities to max = 1
     match_tol : float or None
         If set, draw vertical lines connecting matched peaks within tolerance. 
+    colors : colors for top, bottom and peak matching.
     title : figure title
     """
     mz1 = np.asarray([x[0] for x in peaks])
@@ -127,9 +129,9 @@ def mirror_plot(
 
     fig, ax = plt.subplots(figsize=figsize)
     # top spectrum
-    ax.vlines(mz1, 0, int1, color="blue", linewidth=1)
+    ax.vlines(mz1, 0, int1, color=colors[0], linewidth=1)
     # bottom spectrum (inverted)
-    ax.vlines(mz2, 0, -int2, color="tab:red", linewidth=1)
+    ax.vlines(mz2, 0, -int2, color=colors[1], linewidth=1)
     # optional peak matching
     if match_tol is not None:
         for m1, i1 in zip(mz1, int1):
@@ -139,18 +141,18 @@ def mirror_plot(
                 ax.plot(
                     [m1, mz2[j]],
                     [i1, -int2[j]],
-                    color="yellow",
-                    linewidth=0.5,
-                    alpha=0.5
+                    color=colors[2],
+                    linewidth=0.3,
+                    # alpha=0.5
                 )
     ax.axhline(0, color="black", linewidth=1)
     ax.set_xlabel("m/z")
     ax.set_ylabel("Normalized Intensity")
     ax.set_title(title)
     ax.text(0.01, 0.95, label1, transform=ax.transAxes,
-            verticalalignment="top", color="blue")
+            verticalalignment="top", color=colors[0])
     ax.text(0.01, 0.05, label2, transform=ax.transAxes,
-            verticalalignment="bottom", color="tab:red")
+            verticalalignment="bottom", color=colors[1])
     plt.tight_layout()
     if outfile:
         plt.savefig(outfile)

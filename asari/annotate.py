@@ -78,14 +78,11 @@ def annotate_gcms_full(
     project_name_handle='result',
     low_peak_filter_factor=100,
     ms2_tolerance_in_ppm=5,     # not used now
-    
     ms2_tolerance_in_da=0.005, 
-    
     ri_tolerance=50,
     cosine_penalty=1,           # don't change
     score_cutoff_cosine=0.5, 
     score_cutoff_entropy=0.4,
-    
     corr_cutoff=0.6, 
     min_ri_delta=1,
     max_ri_delta=100, 
@@ -123,22 +120,21 @@ def annotate_gcms_full(
         mz_tolerance_da=ms2_tolerance_in_da, ri_tolerance=ri_tolerance,
         cosine_penalty = cosine_penalty, corr_cutoff=corr_cutoff
     )
-    
     list_empCpds, feature_anno_list = curate_batch_lib_search_result(
         matched_results, 
         mz_tolerance_da=ms2_tolerance_in_da,
         score_cutoff_cosine=score_cutoff_cosine, 
         score_cutoff_entropy=score_cutoff_entropy,
     )
-    
     write_tsv_feature_anno(feature_anno_list, dict_features, dict_lib_entries, 
                         os.path.join(outdir, "Features_" + project_name_handle + '.tsv'))
     write_tsv_empCpd_anno(list_empCpds, dict_features, dict_lib_entries, 
                         os.path.join(outdir, "empCpds_" + project_name_handle + '.tsv'))
-    print(f"Exported tsv results for {len(list_empCpds)} annotated empCpds and {len(feature_anno_list)} features.")
+    print("\nDone targeted annotation.")
+    print(f"Exported tsv results for {len(list_empCpds)} annotated empCpds and {len(set([f['feature'] for f in feature_anno_list]))} unique features.\n")
     
     if do_mirror_plot:
-        print("Exporting PDF mirror plots..")
+        print("Exporting PDF mirror plots..\n")
         path_mirrorplots = os.path.join(outdir, "mirrorplots/")
         os.makedirs(path_mirrorplots, exist_ok=True)
         for tt in list_empCpds:
@@ -149,13 +145,17 @@ def annotate_gcms_full(
                         # tt['peaks_in_lib'],   # filtered by unit mz match
                         dict_lib_entries[tt['lib_entry_id']].peaks,     # peaks from original lib, not filtered by unit mz match, to show the full spectrum.
                         match_tol=ms2_tolerance_in_da,
+                        colors=["blue", "tab:red", "black"],
                         title=_title + _score, 
                         outfile=os.path.join(path_mirrorplots, sanitize_filename(_title)+'.pdf'))
     
-    # Export list_empCpds JSON
+    # Export list_empCpds JSON and MSP
+    list_empCpds = serialize_annotated_empCpds(list_empCpds)
     json_output_file = os.path.join(outdir, project_name_handle+'_annotated_pseudospectra.json')
     with open(json_output_file, 'w', encoding='utf-8') as O:
-        json.dump(serialize_annotated_empCpds(list_empCpds), O, indent=2, ensure_ascii=False)
+        json.dump(list_empCpds, O, indent=2, ensure_ascii=False)
+    json_pseudospectra_to_msp(list_empCpds, json_output_file.replace('.json', '.msp'))
+    print(project_name_handle + "_annotated_pseudospectra was written to JSON and MSP formats.\n")
 
     # Deconvolution de novo
     if denovo:
@@ -171,11 +171,11 @@ def annotate_gcms_full(
             max_core_features=max_core_features 
         )
         json_output_file = os.path.join(outdir, project_name_handle+'_denovo_pseudospectra.json')
+        list_pseudospectra = [port_pseudospectrum_to_json(x, normalize_intensity=True) for x in list_pseudospectra]
         with open(json_output_file, 'w', encoding='utf-8') as O:
-            json.dump(
-                [port_pseudospectrum_to_json(x) for x in list_pseudospectra], O, indent=2, ensure_ascii=False
-                )
-        print(f"Exported {len(list_pseudospectra)} de novo empCpds to {json_output_file}.")
+            json.dump(list_pseudospectra, O, indent=2, ensure_ascii=False)
+        json_pseudospectra_to_msp(list_pseudospectra, json_output_file.replace('.json', '.msp'))
+        print(f"Exported {len(list_pseudospectra)} de novo pseudospectra to JSON and MSP formats.\n")
 
 
 #
