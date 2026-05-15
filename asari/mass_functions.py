@@ -307,8 +307,9 @@ def all_mass_paired_mapping(list1, list2, std_ppm=5):
     '''
     mz_centurion_tree = build_centurion_tree_mzlist(list1)
     mapped = []
-    for ii in range(len(list2)):
-        result = _find_all_mzmatches_centurion_indexed_list(list2[ii], mz_centurion_tree, limit_ppm=std_ppm)
+    for ii, mz in enumerate(list2):
+    # for ii in range(len(list2)):
+        result = _find_all_mzmatches_centurion_indexed_list(mz, mz_centurion_tree, limit_ppm=std_ppm)
         mapped += [(x[1], ii) for x in result]
 
     # Now deal with singletons

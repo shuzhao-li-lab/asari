@@ -266,6 +266,9 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     else:
         debug_print(to_print=f"Using default peak_area: {parameters['peak_area']}")
 
+
+    # to del anno arg
+    
     # set anno
     if args.anno:
         parameters['anno'] = booleandict[args.anno]

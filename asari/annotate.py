@@ -17,6 +17,7 @@ import json
 import time
 import pickle
 import importlib.resources as pkg_resources
+from pathvalidate import sanitize_filename
 
 from . import db
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
@@ -31,9 +32,10 @@ from .gcms import *
 
 def annotate_project(infile, parameters):
     time_stamp = [str(x) for x in time.localtime()[1:6]]
-    subdir = 'annotation_' + ''.join(time_stamp)
+    subdir = '_'.join(['annotation', parameters['project_name'], ''.join(time_stamp)])
     outdir = os.path.join(parameters['outdir'], subdir)
     os.mkdir(outdir)
+    print(f"Annotation directory: {outdir}.\n\n")
     
     if parameters['workflow'] == "LC":
         ANN = LCMS_Annotation(parameters)
@@ -50,9 +52,11 @@ def annotate_project(infile, parameters):
             denovo=parameters['denovo'],
             ms2_tolerance_in_ppm=parameters['ms2_tolerance_in_ppm'], 
             ms2_tolerance_in_da=parameters['ms2_tolerance_in_da'], 
+            
             ri_tolerance=parameters['ri_tolerance'],  
             score_cutoff_cosine=parameters['score_cutoff_cosine'], 
             score_cutoff_entropy=parameters['score_cutoff_entropy'],
+            
             corr_cutoff=parameters['corr_cutoff'], 
             max_ri_delta=parameters['max_ri_delta'], 
             do_mirror_plot=parameters['do_mirror_plot'],
@@ -65,6 +69,7 @@ def annotate_project(infile, parameters):
 #
 # main GC-HRMS function
 #
+
 def annotate_gcms_full(
     infile,
     outdir,
@@ -72,13 +77,16 @@ def annotate_gcms_full(
     database_file,
     project_name_handle='result',
     low_peak_filter_factor=100,
-    ms2_tolerance_in_ppm=5, 
+    ms2_tolerance_in_ppm=5,     # not used now
+    
     ms2_tolerance_in_da=0.005, 
+    
     ri_tolerance=50,
-    cosine_penalty=1, 
+    cosine_penalty=1,           # don't change
     score_cutoff_cosine=0.5, 
     score_cutoff_entropy=0.4,
-    corr_cutoff=0.7, 
+    
+    corr_cutoff=0.6, 
     min_ri_delta=1,
     max_ri_delta=100, 
     hcl_distance_cut = 1,
@@ -86,24 +94,11 @@ def annotate_gcms_full(
     feature_distance_filter=None,
     do_mirror_plot=True,
     max_core_features=20000,
-    denovo=False
+    denovo=False 
     ):
-    '''
-    Full workflow of annotating GC-HRMS. 
-    - Step 1a. Match base peak first; 
-    - Step 1b. construct pseudospectra around base match.
-    - Step 2a. Get top N features to do RI-coupled HCL, cut high to get seed clusters (de novo).
-    - Step 2b. Add additional features to de novo clusters.
-    - Step 2c. Iterate 2a and 2b until max features are accounted for.
+    '''Workflow using batch_lib_search_score. 
     
-    infile : input feature table, in asari format.
-    KovatsIndex : .tsv file to map Kovats Index to retention time. 
-        A regression function is derived to convert RT to RI for all features.
-        This is not optional here. But users can use the notebook version to accommodate their own data formats.
-    
-    database_json : GCHRMS database converted to JSON, as MSP input may not be consistent. 
-    
-    ri_tolerance can be more stringent than max_ri_delta, which is used in penalty function.
+    low_peak_filter_factor : to exclude peaks in a spectrum if low_peak_filter_factor*peak < base_peak.
     
     '''
     # infile in asari format
@@ -115,52 +110,57 @@ def annotate_gcms_full(
     
     # load GCHRMS Database in MSP or JSON format
     list_lib_entries = reformat_gcms_lib( load_gcms_dbfile(database_file), 
-                                     filter_factor=low_peak_filter_factor)
-    dict_lib_entries = {e.inchikey: e for e in list_lib_entries}
-        
+                                     filter_factor=low_peak_filter_factor
+                                     )
+    dict_lib_entries = {e.id: e for e in list_lib_entries}
+    print(f"Imported {len(list_lib_entries)} compound library entries.")
+    
     feature_dataframe = pd.read_csv(infile, sep="\t", index_col=0)
     feature_dataframe = feature_dataframe.iloc[:, 10:]
     
-    matched_results = batch_lib_search_by_basepeaks(
-        list_lib_entries, list_features, feature_dataframe, 
-            ms2_tolerance_in_ppm=ms2_tolerance_in_ppm, 
-            ms2_tolerance_in_da=ms2_tolerance_in_da, 
-            ri_tolerance=ri_tolerance,
-            cosine_penalty = cosine_penalty,
-            min_ri_delta=min_ri_delta,
-            max_ri_delta=max_ri_delta,
-            low_peak_filter_factor=low_peak_filter_factor,
-            feature_distance_filter=feature_distance_filter
+    matched_results = batch_lib_search_score(
+        list_lib_entries, list_features, dict_features, feature_dataframe,
+        mz_tolerance_da=ms2_tolerance_in_da, ri_tolerance=ri_tolerance,
+        cosine_penalty = cosine_penalty, corr_cutoff=corr_cutoff
     )
-    list_empCpds, feature_anno_list = export_feature_annotation_bybasepeaksearch(
+    
+    list_empCpds, feature_anno_list = curate_batch_lib_search_result(
         matched_results, 
-        feature_dataframe,
+        mz_tolerance_da=ms2_tolerance_in_da,
         score_cutoff_cosine=score_cutoff_cosine, 
         score_cutoff_entropy=score_cutoff_entropy,
-        corr_cutoff=corr_cutoff, 
     )
+    
     write_tsv_feature_anno(feature_anno_list, dict_features, dict_lib_entries, 
                         os.path.join(outdir, "Features_" + project_name_handle + '.tsv'))
     write_tsv_empCpd_anno(list_empCpds, dict_features, dict_lib_entries, 
                         os.path.join(outdir, "empCpds_" + project_name_handle + '.tsv'))
-    print("Exported tsv results for annotated empCpds and features.")
+    print(f"Exported tsv results for {len(list_empCpds)} annotated empCpds and {len(feature_anno_list)} features.")
     
     if do_mirror_plot:
-        print("Exportoing PDF mirror plots..")
+        print("Exporting PDF mirror plots..")
         path_mirrorplots = os.path.join(outdir, "mirrorplots/")
         os.makedirs(path_mirrorplots, exist_ok=True)
         for tt in list_empCpds:
             # print(tt['name'] )
-            _score = f" (cosine score: {tt['cosine_score']:.2f})"
+            _score = f"\n(cosine score: {tt['cosine_score']:.2f}, entropy score: {tt['entropy_score']:.2f})"
             _title = tt['id'] + '__' + tt['name']   
-            mirror_plot(tt['peaks_as_features'], tt['peaks_in_lib'], 
+            mirror_plot(tt['peaks_as_features'], 
+                        # tt['peaks_in_lib'],   # filtered by unit mz match
+                        dict_lib_entries[tt['lib_entry_id']].peaks,     # peaks from original lib, not filtered by unit mz match, to show the full spectrum.
+                        match_tol=ms2_tolerance_in_da,
                         title=_title + _score, 
-                        outfile=os.path.join(path_mirrorplots, _title+'.pdf'))
+                        outfile=os.path.join(path_mirrorplots, sanitize_filename(_title)+'.pdf'))
     
+    # Export list_empCpds JSON
+    json_output_file = os.path.join(outdir, project_name_handle+'_annotated_pseudospectra.json')
+    with open(json_output_file, 'w', encoding='utf-8') as O:
+        json.dump(serialize_annotated_empCpds(list_empCpds), O, indent=2, ensure_ascii=False)
+
     # Deconvolution de novo
     if denovo:
         print("De novo construction of pseudospectra (deconvolution)...")
-        core_features = set([f['feature'] for f in feature_anno_list if f['is_core']])
+        core_features = set([f['feature'] for f in feature_anno_list])
         list_pseudospectra, core_features = iterative_build_pseudospectra_by_hcl(
             list_features, feature_dataframe, 
             init_core_features=core_features, 
@@ -170,10 +170,10 @@ def annotate_gcms_full(
             correlation_cut = corr_cutoff,
             max_core_features=max_core_features 
         )
-        json_output_file = os.path.join(outdir, project_name_handle+'_list_pseudospectra.json')
-        with open(json_output_file, 'w') as O:
+        json_output_file = os.path.join(outdir, project_name_handle+'_denovo_pseudospectra.json')
+        with open(json_output_file, 'w', encoding='utf-8') as O:
             json.dump(
-                [port_pseudospectrum_to_json(x) for x in list_pseudospectra], O, indent=2
+                [port_pseudospectrum_to_json(x) for x in list_pseudospectra], O, indent=2, ensure_ascii=False
                 )
         print(f"Exported {len(list_pseudospectra)} de novo empCpds to {json_output_file}.")
 

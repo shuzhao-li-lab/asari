@@ -9,7 +9,7 @@ Annotation is facilitated by jms-metabolite-services, mass2chem.
 import time
 import os
 import pickle
-import zipfile
+# import zipfile
 
 import json_tricks as json 
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
@@ -18,7 +18,8 @@ from .experiment import ext_Experiment
 from .chromatograms import extract_massTracks_ 
 # from .peaks import audit_mass_track
 from .utils import bulk_process
-from .samples import SimpleSample
+
+# from .samples import SimpleSample
 
 # -----------------------------------------------------------------------------
 # main workflow for `process`
@@ -89,14 +90,21 @@ def process_project(list_input_files, parameters):
     '''
     EE = workflow_setup(list_input_files, parameters)
     print(f'Processing Experiment Using {parameters["workflow"]} Workflow...')
+    
     if parameters['workflow'] in ["LC", "GC"]:
         EE.process_all_LC()    # processing is same for LC and GC
     elif parameters['workflow'] == "DIMS":
         EE.process_all_DIMS()
+        
+    elif parameters['workflow'] == "LCMSMS":
         # to add LC-MS/MS
+        EE.process_all_LCMSMS()
+        
     else:
         print("Workflow not supported. Error 100.")
+        
     EE.export_all(anno=parameters['anno']) 
+    
     if parameters['database_mode'] != 'memory':
         remove_intermediate_pickles(parameters)
 

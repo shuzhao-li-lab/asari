@@ -127,7 +127,7 @@ def mirror_plot(
 
     fig, ax = plt.subplots(figsize=figsize)
     # top spectrum
-    ax.vlines(mz1, 0, int1, color="tab:blue", linewidth=1)
+    ax.vlines(mz1, 0, int1, color="blue", linewidth=1)
     # bottom spectrum (inverted)
     ax.vlines(mz2, 0, -int2, color="tab:red", linewidth=1)
     # optional peak matching
@@ -139,7 +139,7 @@ def mirror_plot(
                 ax.plot(
                     [m1, mz2[j]],
                     [i1, -int2[j]],
-                    color="gray",
+                    color="yellow",
                     linewidth=0.5,
                     alpha=0.5
                 )
@@ -148,7 +148,7 @@ def mirror_plot(
     ax.set_ylabel("Normalized Intensity")
     ax.set_title(title)
     ax.text(0.01, 0.95, label1, transform=ax.transAxes,
-            verticalalignment="top", color="tab:blue")
+            verticalalignment="top", color="blue")
     ax.text(0.01, 0.05, label2, transform=ax.transAxes,
             verticalalignment="bottom", color="tab:red")
     plt.tight_layout()

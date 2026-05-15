@@ -68,12 +68,12 @@ PARAMETERS = {
     'project_sample_number_small': 10,  # Number of samples dictates workflow, default 10
 
     # for GC annotation
-    'ms2_tolerance_in_ppm': 5,           # ppm tolerance, for matching MS2 spectra to database
+    'ms2_tolerance_in_ppm': 10,           # ppm tolerance, for matching MS2 spectra to database
     'ms2_tolerance_in_da': 0.005,        # da tolerance, for matching MS2 spectra to database
-    'ri_tolerance': 50,                  # retention index tolerance in matching features
-    'score_cutoff_cosine': 0.5,          # cutoff for cosine similarity score for MS2 matching 
+    'ri_tolerance': 30,                  # retention index tolerance in matching features
+    'score_cutoff_cosine': 0.4,          # cutoff for cosine similarity score for MS2 matching 
     'score_cutoff_entropy': 0.4,         # cutoff for entropy similarity score for MS2 matching
-    'corr_cutoff': 0.7,                  # cutoff for correlation between feature intensity to base peak intensity across samples
+    'corr_cutoff': 0.6,                  # cutoff for correlation between feature intensity to base peak intensity across samples
     'max_ri_delta': 100,                 # maximal retention index delta between candidate annotations
     'do_mirror_plot': True,              # whether to generate mirror plot for  annotation results 
     'max_core_features': 20000,          # to limit the number of features to annotate, as low-intensity features are of less interest

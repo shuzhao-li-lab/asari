@@ -175,6 +175,15 @@ class ext_Experiment:
         self.CMAP.construct_mass_grid()
         self.CMAP.get_DIMS_feature_table()
 
+    def process_all_LCMSMS(self):
+        '''
+        To add LC-MS/MS processing, which will include MS2 spectra association and annotation.
+        This is a placeholder for now, to be added in the future.
+        '''
+        pass
+    
+    
+
 
     def export_all(self, anno=False):
         '''
@@ -215,6 +224,9 @@ class ext_Experiment:
             self.export_log()
             # self.export_readme()
 
+    #
+    # To remove annotation out of core package, the following functions go to annotate.py
+    #
 
     def annotate(self):
         '''
@@ -338,6 +350,7 @@ class ext_Experiment:
         outfile = os.path.join(self.parameters['outdir'], 'export', 'cmap.pickle')
         with open(outfile, 'wb') as f:
             pickle.dump(_export, f, pickle.HIGHEST_PROTOCOL)
+
 
     def load_annotation_db(self, src='hmdb4'):
         '''

@@ -11,3 +11,4 @@ statsmodels
 pyyaml
 tqdm
 json_tricks
+pathvalidate
