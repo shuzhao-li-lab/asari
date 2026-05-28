@@ -9,17 +9,14 @@ Annotation is facilitated by jms-metabolite-services, mass2chem.
 import time
 import os
 import pickle
-# import zipfile
 
 import json_tricks as json 
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
 
 from .experiment import ext_Experiment
 from .chromatograms import extract_massTracks_ 
-# from .peaks import audit_mass_track
 from .utils import bulk_process
 
-# from .samples import SimpleSample
 
 # -----------------------------------------------------------------------------
 # main workflow for `process`
@@ -93,6 +90,7 @@ def process_project(list_input_files, parameters):
     
     if parameters['workflow'] in ["LC", "GC"]:
         EE.process_all_LC()    # processing is same for LC and GC
+        
     elif parameters['workflow'] == "DIMS":
         EE.process_all_DIMS()
         
@@ -372,7 +370,7 @@ def single_sample_EICs_(job):
             'number_anchor_mz_pairs': len(anchor_mz_pairs),
             # 'xdict': xdict,     # storage duplication 
             'track_mzs': [(t[0], ii) for ii, t in enumerate(xdict['tracks'])],
-            # ms2_spectra not serializable - cann't pickle
+            # ms2_spectra not to use np.array here, not serializable
             'ms2_spectra': xdict['ms2_spectra'],
             'max_scan_number': max(xdict['rt_numbers']),
             'acquisition_time': xdict['acquisition_time']
@@ -381,8 +379,6 @@ def single_sample_EICs_(job):
         # removed ''compress'' option. "join" solves the problem by splitting job   
         data_filepath = outfile
         if parameters['database_mode'] == 'ondisk':
-            # if not parameters['compress']:
-            # if parameters['storage_format'] == 'pickle':
             data_filepath = outfile
             with open(outfile, 'wb') as f:
                 pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)

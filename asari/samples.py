@@ -1,10 +1,6 @@
 import pickle
 import zipfile
-import os 
 import json_tricks as json
-
-# from matchms import Spectrum
-# from matchms.exporting import save_spectra
 
 from .mass_functions import flatten_tuplelist
 
@@ -117,53 +113,6 @@ class SimpleSample:
             'reverse_rt_cal_dict': self.reverse_rt_cal_dict,
         }
 
-
-
-
-
-
-
-    # to use own class, not dependent on matchms
-    def extract_ms2(self, export_format="msp"):
-        '''
-        Extract MS2 data from sample data 
-        '''
-        try:
-            if self.database_mode == 'memory':
-                ms2_data = self.__registry['sample_data']['ms2_spectra']
-            else:
-                ms2_data = self._get_sample_data()['ms2_spectra']
-            spectra = []
-            for spec in ms2_data:
-                mzs = []
-                intensities = []    
-                rtime = spec.scan_time_in_minutes()*60
-                for mz, intensity in zip(spec.mz, spec.intensity):
-                    mzs.append(mz)
-                    intensities.append(intensity)
-                try:
-                    precursor_mz = spec.precursor_mz
-                except:
-                    precursor_mz = None
-
-                # to use own class, not dependent on matchms
-                spectra.append(Spectrum(mz=mzs, 
-                                        intensities=intensities, 
-                                        metadata={'scan_time': rtime,
-                                                'origin': self.name,
-                                                'precursor_mz': precursor_mz,
-                                                }))
-            if export_format[0] == ".":
-                export_format = export_format[1:]
-            self.experiment.parameters['ms2_export_format'] = export_format
-            path = os.path.join(self.experiment.parameters['ms2_spectra_outdir'], "ms2_{}.{}".format(self.name, export_format))
-
-            # to use own class, not dependent on matchms
-            save_spectra(spectra, path, export_style="matchms")
-
-        except Exception as _:
-            print(f"Error Extracting MS2 for: {self.name}")
-
     def _get_sample_data(self):
         '''
         Wrapper of _retrieve_from_disk function.
@@ -185,6 +134,7 @@ class SimpleSample:
     def load_intermediate(data_location):
         '''
         Retrieve sample data from local pickle file.
+        zip and json formats are experimental, not used now. 
         '''
         # print("Loading intermediate: ", data_location)
         sample_data = None

@@ -3,32 +3,15 @@ import sys
 import json
 import pickle
 
-# import pandas as pd  # to phase out, used only in GC 
-
-# from scipy import interpolate
-# import tqdm
-
-# import functools
-# from .chromatograms import __hacked_lowess__
-# from scipy.ndimage import uniform_filter1d
-# from statsmodels.nonparametric.smoothers_lowess import lowess
-
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
-#
 # to move out of experiment to separate annotation module
-#
 from .default_parameters import adduct_search_patterns, \
     adduct_search_patterns_neg, isotope_search_patterns, extended_adducts, \
     readme_doc_str
 
-
-# from .gc_annotation import EI_MS_Library
-
-from .mass_functions import all_mass_paired_mapping
 from .constructors import CompositeMap
 from .utils import NpEncoder
-# from .samples import SimpleSample
 
 try:
     import importlib.resources as pkg_resources
@@ -178,8 +161,21 @@ class ext_Experiment:
     def process_all_LCMSMS(self):
         '''
         To add LC-MS/MS processing, which will include MS2 spectra association and annotation.
+        
+        The LC-MS/MS workflow constructs massGrid and CMAP as LC-MS processing, 
+        then assign all MS/MS spectra to mass tracks. 
+        The MS/MS spectra per mass track are clustered based on RT and similarity, 
+        and integrated with MS1 data to retrieve MS1 peak height. 
+        
+        The MS1 data may be sparse in LC-MS/MS, limiting elution peak detection and resolution of close isomers.
+        Therefore, MS1 peak height not area is used; the number of features is defined by MS/MS clustering not elution peaks.
+        
+        
         This is a placeholder for now, to be added in the future.
         '''
+        
+        
+        
         pass
     
     

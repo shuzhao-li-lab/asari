@@ -1,7 +1,4 @@
-# for reused code that doesn't fit into a specific class
-# this should be importable in other code in related tools. This should be cleaner than
-# having a dedicated util file in each tool and honeslty, if you have the other tools 
-# installed, you probalby have asari too. 
+# utility code that doesn't fit into a specific class
 
 import multiprocessing as mp
 import os

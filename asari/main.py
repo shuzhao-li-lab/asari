@@ -7,12 +7,7 @@ from functools import partial
 import yaml
 
 from .__init__ import __version__
-from .workflow import (# get_mz_list, 
-                       process_project, 
-                       process_xics, 
-                       read_project_dir, 
-                       # create_export_folders
-                       )
+from .workflow import (process_project, read_project_dir) # get_mz_list, process_xics, create_export_folders
 from .default_parameters import PARAMETERS
 
 from .analyze import estimate_min_peak_height, analyze_single_sample
@@ -265,7 +260,6 @@ def update_params_from_CLI(parameters, args, debug_print=False):
         debug_print(to_print=f"Setting peak_area to {parameters['peak_area']}")
     else:
         debug_print(to_print=f"Using default peak_area: {parameters['peak_area']}")
-
 
     # to del anno arg
     

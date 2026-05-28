@@ -64,13 +64,13 @@ def extract_massTracks_(infile,
     except:
         timestamp = None
     for spec in ms_expt:
-        if spec.ms_level == 1:                         # MS Level 1 only
+        if spec.ms_level == 1:                         # MS Level 1 
             rt_times.append(spec.scan_time_in_minutes()*60)
             intensities = spec.i.astype(int)
             good_positions = intensities > min_intensity
             alldata += [(mz, ii, inten) for mz, inten in zip(spec.mz[good_positions], intensities[good_positions])]
             ii += 1
-        elif spec.ms_level == 2:
+        elif spec.ms_level == 2:                        # MS Level 2
             precursor_mz = spec.selected_precursors[0]['mz']
             if precursor_mz is None:
                 continue

@@ -393,7 +393,13 @@ def iterative_build_pseudospectra_by_penalizeddistance(
         core_features.union(set(_tmp))
         
     return list_pseudospectra, core_features
-        
+
+def calculate_molecular_ion(exact_mass, mz_shift=-0.000549):
+    '''Assuming M[+] as molecular ion in EI GC-MS.
+    Change mz_shift to 1.00728 for M+H[+]
+    '''
+    return exact_mass + mz_shift
+
 def have_basepeak_molecularion(base_mz, mole_mz, _peaks, mz_tolerance_da=0.005):
     has_basepeak, has_molecularion = False, False
     if abs(_peaks[:, 0] - base_mz).min() < mz_tolerance_da:
@@ -402,6 +408,21 @@ def have_basepeak_molecularion(base_mz, mole_mz, _peaks, mz_tolerance_da=0.005):
         has_molecularion = True
     return has_basepeak, has_molecularion
 
+def has_basepeak(base_mz, _peaks, mz_tolerance_da=0.005):
+    if abs(_peaks[:, 0] - base_mz).min() < mz_tolerance_da:
+        return True
+    else:
+        return False
+
+def has_molecular_ion(exact_mass, _peaks, mz_tolerance_da=0.005):
+    if exact_mass:
+        mole_mz = calculate_molecular_ion(exact_mass, mz_shift=-0.000549)
+        if abs(_peaks[:, 0] - mole_mz).min() < mz_tolerance_da:
+            return True
+        else:
+            return False
+    else:
+        return 'NA'
 
 #
 # Workflows 
@@ -487,10 +508,10 @@ def curate_batch_lib_search_result(
             matched_features = MM['candidate_feature_ids']
             peaks_as_features = MM['pseudo_spec']
             peaks_in_lib = MM['lib_entry'].peaks
-            has_basepeak, has_molecularion = have_basepeak_molecularion(
-                MM['lib_entry'].base_peak[0], peaks_in_lib[:,0].max(), peaks_as_features, 
-                mz_tolerance_da
-            )
+            _has_basepeak = has_basepeak(MM['lib_entry'].base_peak[0],
+                peaks_as_features, mz_tolerance_da)
+            _has_molecular_ion = has_molecular_ion(MM['lib_entry'].exact_mass,
+                peaks_as_features, mz_tolerance_da)
             # record empCpd
             list_empCpds.append({
                 'id': epd_id,
@@ -504,8 +525,8 @@ def curate_batch_lib_search_result(
                 'quant_ion': MM['quant_feature'],
                 'peaks_as_features': peaks_as_features,
                 'peaks_in_lib': peaks_in_lib,
-                'has_basepeak': has_basepeak,
-                'has_molecularion': has_molecularion
+                'has_basepeak': _has_basepeak,
+                'has_molecularion': _has_molecular_ion
             })
             # record features
             for feature in matched_features:
