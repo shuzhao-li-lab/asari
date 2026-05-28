@@ -445,8 +445,7 @@ def batch_lib_search_score(
             # cosine_similarity
             cosine_score, num_matched_peaks = cosine_similarity(
                 _peaks, cpd.peaks, 
-                tolerance=mz_tolerance_da, 
-                sqrt_transform=True, penalty=cosine_penalty
+                mz_tolerance=mz_tolerance_da, 
             )
             Results.append({
                 'lib_entry': cpd,
@@ -812,8 +811,7 @@ def batch_lib_search_by_basepeaks(
                 # cosine_similarity
                 cosine_score, num_matched_peaks = cosine_similarity(
                     spec_peaks, entry.peaks, 
-                    tolerance=ms2_tolerance_in_da, 
-                    sqrt_transform=True, penalty=cosine_penalty
+                    mz_tolerance=ms2_tolerance_in_da, 
                 )
                 Results.append({
                     'lib_entry': entry,
@@ -959,7 +957,7 @@ def reverse_spec_searches(list_pseudo_spectra,
             # cosine_similarity
             _score, _n_matches = cosine_similarity(
                 spec_peaks, entry.peaks, 
-                tolerance=mz_tolerance, sqrt_transform=True, penalty=cosine_penalty
+                mz_tolerance=mz_tolerance, 
             )
             if _score > score_cutoff:
                 matched_cosine.append((_score, entry, candidate_features, spec, _n_matches))
