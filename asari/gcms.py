@@ -207,7 +207,6 @@ def serialize_annotated_empCpds(list_empCpds):
         x['peaks_as_features'] = x['peaks_as_features'].tolist()
     return list_empCpds
 
-
 def ri_penalty_function(abs_ri_delta, min_delta=1, max_delta=100):
     '''Penalty by RI distance, using a 1-side sigmoid function
     '''
@@ -257,7 +256,6 @@ def find_all_matches_centurion_indexed_list(query_mz, mz_centurion_tree, limit_p
                 
     return results
 
-
 def get_matched_features_per_cpd(cpd, mz_centurion_tree,
                     mz_tolerance_da, ri_tolerance
                     ):
@@ -284,7 +282,6 @@ def distill_correlated_features(matched_feature_ids, feature_dataframe, corr_cut
     quant_feature = features_intensity_corr.sum(axis=0).idxmax()
     selected = [feat for feat in matched_feature_ids if features_intensity_corr.loc[quant_feature, feat] > corr_cutoff]
     return quant_feature, selected
-
 
 def get_seeded_pseudospectrum(
     seed_tag, 
@@ -315,13 +312,8 @@ def get_seeded_pseudospectrum(
     
     if low_peak_filter_factor:
         selected_features = filter_features_by_low_intensity_factor( 
-            # filter_features_by_low_intensity_factor
-            # filter_peaks_by_intensity_factor
-            
             selected_features, seed_feature['peak_area'], low_peak_filter_factor
-            
             )  
-        
     if feature_distance_filter:
         selected_features = filter_peaks_by_penalized_distance(
             selected_features, seed_feature, feature_dataframe, min_ri_delta, max_ri_delta, feature_distance_filter
@@ -435,7 +427,7 @@ def batch_lib_search_score(
     feature_dataframe,
     mz_tolerance_da=0.005, 
     ri_tolerance=30,
-    cosine_penalty=1,
+    cosine_penalty=1,   # not used
     corr_cutoff=0.6, 
     ):
     '''Match all features from an experiment to compound library of spectra.
@@ -456,7 +448,11 @@ def batch_lib_search_score(
             quant_feature, _matched_feature_ids = distill_correlated_features(
                 _matched_feature_ids, feature_dataframe, corr_cutoff
             )
-            _peaks = np.array([[dict_features[feat]['mz'], dict_features[feat]['peak_area']] 
+            # select single sample 
+            best_sample = feature_dataframe.loc[quant_feature, :].idxmax()
+            _peaks = np.array([[dict_features[feat]['mz'], 
+                                feature_dataframe.loc[feat, best_sample]]
+                                # dict_features[feat]['peak_area']] # if using composite peak area
                             for feat in _matched_feature_ids])
             # calculate_entropy_similarity
             entropy_score = ME.calculate_entropy_similarity(
@@ -471,6 +467,7 @@ def batch_lib_search_score(
             Results.append({
                 'lib_entry': cpd,
                 'quant_feature': quant_feature,
+                'sample': best_sample,
                 'quant_feature_RI': dict_features[quant_feature]['RI'],
                 'candidate_feature_ids': _matched_feature_ids,
                 'entropy_score': entropy_score,
@@ -523,6 +520,7 @@ def curate_batch_lib_search_result(
                 'inchikey': MM['lib_entry'].inchikey, 
                 'features': matched_features, 
                 'quant_ion': MM['quant_feature'],
+                'sample': MM['sample'],
                 'peaks_as_features': peaks_as_features,
                 'peaks_in_lib': peaks_in_lib,
                 'has_basepeak': _has_basepeak,

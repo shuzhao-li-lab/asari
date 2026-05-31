@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import pickle
+import importlib.resources as pkg_resources  # Python 3.11+, importlib_resources for older versions
 
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
@@ -12,12 +13,6 @@ from .default_parameters import adduct_search_patterns, \
 
 from .constructors import CompositeMap
 from .utils import NpEncoder
-
-try:
-    import importlib.resources as pkg_resources
-except ImportError:
-    import importlib_resources as pkg_resources
-
 from . import db
 
 if not sys.warnoptions:

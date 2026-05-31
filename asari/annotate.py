@@ -6,7 +6,12 @@ GC-HRMS annotation functions are added here.
 This does not change default --anno for LC-MS data processing; but we will unify in next version.
 
 Example use for GC-HRMS annotation:
-asari annotate -i /Users/lish/li.proj/IndiPHARM/LookAhead/GCMS/lookahead_gcms_asari13_asari_project_311234834/export/full_Feature_table.tsv -o /Users/lish/li.proj/IndiPHARM/LookAhead/GCMS/ -j v16 --kovats /Users/lish/li.proj/asari_project/GCHRMS/KovatsIndex_alkanestandards_cuimc.tsv --db /Users/lish/li.proj/asari_project/GCHRMS/Resources/GCHRMS_Database_251217.msp --denovo F --workflow GC
+asari annotate -i /Users/lish/li.proj/IndiPHARM/LookAhead/GCMS/lookahead_gcms_asari13_asari_project_311234834/export/full_Feature_table.tsv \
+    -o /Users/lish/li.proj/IndiPHARM/LookAhead/GCMS/ \
+        -j v16 \
+            --kovats /Users/lish/li.proj/asari_project/GCHRMS/KovatsIndex_alkanestandards_cuimc.tsv \
+            --db /Users/lish/li.proj/asari_project/GCHRMS/Resources/GCHRMS_Database_251217.msp \
+                --denovo F --workflow GC
 
 LC: 
 asari annotate -i /Users/lish/li.play/test16_v16_599432/preferred_Feature_table.tsv -o /Users/lish/li.play/test16_v16_599432/ -j v16lc --workflow LC --mode pos
