@@ -4,4 +4,4 @@ hvplot
 seaborn
 matplotlib
 plotly
-matchms
+#matchms
