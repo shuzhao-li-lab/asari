@@ -67,6 +67,11 @@ def annotate_project(infile, parameters):
             do_mirror_plot=parameters['do_mirror_plot'],
             max_core_features=parameters['max_core_features'],
         )
+
+    elif parameters['workflow'] == "LCMSMS":
+        annotate_lcmsms(
+
+        )
         
     with open(os.path.join(outdir, 'project.json'), 'w', encoding='utf-8') as f:
         json.dump(parameters, f, cls=NpEncoder, ensure_ascii=False, indent=2)
@@ -181,6 +186,30 @@ def annotate_gcms_full(
             json.dump(list_pseudospectra, O, indent=2, ensure_ascii=False)
         json_pseudospectra_to_msp(list_pseudospectra, json_output_file.replace('.json', '.msp'))
         print(f"Exported {len(list_pseudospectra)} de novo pseudospectra to JSON and MSP formats.\n")
+
+
+#
+# -----------------------------------------------------------------------------
+#
+
+def annotate_lcmsms(
+        
+
+    ):
+    '''
+    LC-MS/MS annotation
+
+    cluster MS/MS spectra;
+    get MS1 peak height for MS/MS;
+    DB search for MS/MS;
+
+    compile annotation per empCpd
+    
+    '''
+
+    pass
+
+
 
 
 #

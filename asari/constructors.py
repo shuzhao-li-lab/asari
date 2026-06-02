@@ -25,6 +25,9 @@ from .peaks import (quick_detect_unique_elution_peak,
                     get_gaussian_peakarea_on_intensity_list)
 from .samples import SimpleSample
 
+from .tools.ms2 import rt_cluster_msms
+from .tools.cosine import cosine_similarity
+
 
 class MassGrid:
     '''
@@ -409,7 +412,9 @@ class CompositeMap:
 
     def build_composite_tracks(self):
         '''
-        Perform RT calibration then make composite tracks.
+        Perform RT calibration then make composite tracks. 
+        MS2 data are retrieved and attched composite to mass tracks here, 
+        otherwise requiring loading data likely from disk.
 
         Updates
         -------
@@ -439,9 +444,10 @@ class CompositeMap:
         mzDict = dict(self.MassGrid['mz'])
         mzlist = list(self.MassGrid.index)                          # this gets indices as keys, per mass track
         basetrack = np.zeros(self.rt_length, dtype=np.int64)        # self.rt_length defines max rt number
-        _comp_dict = {}
+        _comp_dict, _comp_ms2 = {}, {}
         for k in mzlist: 
             _comp_dict[k] = basetrack.copy()
+            _comp_ms2[k] = []
 
         # add to export mz and rtime of good reference landmarks
         if self.experiment.parameters['debug_rtime_align']:
@@ -474,16 +480,34 @@ class CompositeMap:
                 for k in mzlist:
                     ref_index = self.MassGrid[SM.name][k]
                     if not pd.isna(ref_index): # ref_index can be NA 
+                        _this_track = list_mass_tracks[int(ref_index)]
                         _comp_dict[k] += remap_intensity_track( 
-                            list_mass_tracks[int(ref_index)]['intensity'],  
+                            _this_track['intensity'],  
                             basetrack.copy(), SM.rt_cal_dict 
                             )
+                        for spec in _this_track['ms2_spectra']:
+                            spec['sample'] = SM.name
+                        _comp_ms2[k] += _this_track['ms2_spectra']
 
         result = {}
         for k,v in _comp_dict.items():
-            result[k] = { 'id_number': k, 'mz': mzDict[k], 'intensity': v }
+            result[k] = { 'id_number': k, 'mz': mzDict[k], 
+                         'intensity': v,                # MS1 intensity vector
+                         'ms2_spectra': _comp_ms2[k],   # MS2 spectra list
+                          }
 
         self.composite_mass_tracks = result
+
+    def cluster_ms2_spectra(self, mz_tolerance=0.01):
+        '''
+        Cluster all MS/MS spectra on each mass track, 
+        replace track['ms2_spectra'] by cluster results (extended representative spectrum).
+
+        mz_tolerance : m/z tolerance used in MS/MS similarity calculation. 
+        '''
+        for ii, track in self.composite_mass_tracks.items():
+            track['ms2_spectra'] = rt_cluster_msms(track['ms2_spectra'], cosine_similarity, mz_tolerance)
+
 
     def calibrate_sample_RT_by_standards(self, sample):
         '''

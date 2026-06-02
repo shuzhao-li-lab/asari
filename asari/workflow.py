@@ -13,6 +13,7 @@ import pickle
 import json_tricks as json 
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
 
+from .mass_functions import all_mass_paired_mapping
 from .experiment import ext_Experiment
 from .chromatograms import extract_massTracks_ 
 from .utils import bulk_process
@@ -39,10 +40,12 @@ def workflow_setup(list_input_files, parameters):
     if shared_dict:
         for sid, sam in sample_registry.items():
             # todo - this is a bit of a mess, should be a simpler return or something?
+            # sam['sample_data'] is used only in momory mode
             sam['status:mzml_parsing'], sam['status:eic'], sam['data_location'], sam['max_scan_number'], \
                 sam['list_scan_numbers'], sam['list_retention_time'], sam['track_mzs'], \
-                    sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'], sam['sample_data'], \
-                        sam['sparsified'], sam['acquisition_time'] = shared_dict[sid]
+                    sam['number_anchor_mz_pairs'], sam['anchor_mz_pairs'], sam['acquisition_time'], \
+                        sam['sample_data'], \
+                            sam['sparsified']  = shared_dict[sid]
             sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
         EE = ext_Experiment(sample_registry, parameters)
     else:
@@ -54,7 +57,7 @@ def process_project(list_input_files, parameters):
     '''
     This defines the main work flow in processing a list of LC-MS files, 
     creates the output folder with a time stamp, and uses sample registry to coordinate parallel processing.
-    The whole project data are tracked in experiment.ext_Experiment class.
+    The project data are tracked in experiment.ext_Experiment class.
 
     Parameters
     ----------
@@ -86,6 +89,7 @@ def process_project(list_input_files, parameters):
     The pickle folder is removed after the processing by default.
     '''
     EE = workflow_setup(list_input_files, parameters)
+    # mass track extraction per file is done in workflow_setup
     print(f'Processing Experiment Using {parameters["workflow"]} Workflow...')
     
     if parameters['workflow'] in ["LC", "GC"]:
@@ -95,7 +99,6 @@ def process_project(list_input_files, parameters):
         EE.process_all_DIMS()
         
     elif parameters['workflow'] == "LCMSMS":
-        # to add LC-MS/MS
         EE.process_all_LCMSMS()
         
     else:
@@ -358,9 +361,27 @@ def single_sample_EICs_(job):
                     min_timepoints=parameters['min_timepoints'], 
                     min_peak_height=parameters['min_peak_height'])
         # only audit composite mass tracks that are used for elution peak detection, not here
-        new['list_mass_tracks'] = [{'id_number': ii, 'mz': t[0], 'intensity': t[1],
+        
+        track_mzs = [(t[0], ii) for ii, t in enumerate(xdict['tracks'])]    # (mz, id_number)
+        # append MS/MS data to tracks by precursor_mz
+        mz_mapped, list1_unmapped, list2_unmapped = all_mass_paired_mapping(
+            [x[0] for x in track_mzs], 
+            [spec['precursor_mz'] for spec in xdict['ms2_spectra']],
+            std_ppm=parameters['mz_tolerance_ppm']
+            )
+        mz_mapped_dict = {}
+        for (ii, jj) in mz_mapped:
+            if ii in mz_mapped_dict:
+                mz_mapped_dict[ii].append(xdict['ms2_spectra'][jj])
+            else:
+                mz_mapped_dict[ii] = [xdict['ms2_spectra'][jj]]
+        
+        new['list_mass_tracks'] = [{'id_number': ii, 'mz': t[0], 'intensity': t[1], 
+                                    'ms2_spectra': mz_mapped_dict.get(ii, [])
                 } for ii, t in enumerate(xdict['tracks'])]
-        print("Extracted %s to %d mass tracks." %(os.path.basename(infile), len(xdict['tracks'])))
+        
+        print("Extracted %s to %d mass tracks (%d MS2 spectra)." %(
+            os.path.basename(infile), len(xdict['tracks']), len(xdict['ms2_spectra'])))
 
         anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(new['list_mass_tracks'], 
                                                             mz_tolerance_ppm=parameters['mz_tolerance_ppm'])
@@ -369,9 +390,7 @@ def single_sample_EICs_(job):
             'anchor_mz_pairs': anchor_mz_pairs,
             'number_anchor_mz_pairs': len(anchor_mz_pairs),
             # 'xdict': xdict,     # storage duplication 
-            'track_mzs': [(t[0], ii) for ii, t in enumerate(xdict['tracks'])],
-            # ms2_spectra not to use np.array here, not serializable
-            'ms2_spectra': xdict['ms2_spectra'],
+            'track_mzs': track_mzs,
             'max_scan_number': max(xdict['rt_numbers']),
             'acquisition_time': xdict['acquisition_time']
         })
@@ -407,7 +426,7 @@ def single_sample_EICs_(job):
                             None, # number_anchor_mz_pairs
                             None, # anchor_mz_pairs
                             None, # acquisition_time
-                            None, # sample_data
+                            None, # sample_data in memory
                             parameters['compress'] # compress
                             )}
 

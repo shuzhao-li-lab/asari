@@ -42,7 +42,7 @@ def extract_massTracks_(infile,
     mz_tolerance_ppm : float, optional, default: 5
         m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
     min_intensity : float, optional, default: 100
-        minimal intentsity value, needed because some instruments keep 0s 
+        minimal intentsity value in MS1 and MS2 spectra, needed because some instruments keep 0s 
     min_timepoints : int, optional, default: 5
         minimal consecutive scans to be considered real signal.
     min_peak_height : float, optional, default: 1000
@@ -76,7 +76,7 @@ def extract_massTracks_(infile,
                 continue
             peaks = [(mz, intensity) for mz, intensity in spec.peaks('centroided')
                                if intensity >= min_intensity and mz < precursor_mz-1]    # excluding precursor ion
-            if peaks:
+            if peaks:  # ms2_spectra not to use np.array, which is not serializable for intem storage
                 ms2_spectra.append(
                     {
                         'precursor_mz': precursor_mz,

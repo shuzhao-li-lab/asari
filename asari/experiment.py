@@ -165,15 +165,21 @@ class ext_Experiment:
         The MS1 data may be sparse in LC-MS/MS, limiting elution peak detection and resolution of close isomers.
         Therefore, MS1 peak height not area is used; the number of features is defined by MS/MS clustering not elution peaks.
         
-        
-        This is a placeholder for now, to be added in the future.
         '''
-        
-        
-        
-        pass
-    
-    
+
+        self.CMAP = CompositeMap(self)
+        self.CMAP.construct_mass_grid()
+        if not self.parameters['rt_align_on']:
+            self.CMAP.mock_rentention_alignment()
+        # this includes MS2 in mass tracks
+        self.CMAP.build_composite_tracks()
+        # cluster and clean up MS2
+        self.CMAP.cluster_ms2_spectra()
+        # MS1 peaks - to do - relax peak sampling requirement
+        self.CMAP.global_peak_detection()
+
+        self.link_ms1_ms2()
+
 
 
     def export_all(self, anno=False):
@@ -214,6 +220,28 @@ class ext_Experiment:
             self.export_feature_tables()
             self.export_log()
             # self.export_readme()
+
+        elif self.parameters['workflow'] == "LCMSMS":
+            #
+            # to-do update feature_table formats; export JSON of MS2
+            #
+            # annotation separate, akin to GC
+            #
+            self.CMAP.MassGrid.to_csv(
+                os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
+            if anno:
+                for peak in self.CMAP.FeatureList:
+                    peak['id'] = str(peak['id_number'])
+                self.export_CMAP_pickle()
+
+
+
+                self.annotate()
+
+            self.export_feature_tables()
+
+            self.export_log()
+            self.export_readme()
 
     #
     # To remove annotation out of core package, the following functions go to annotate.py
@@ -355,7 +383,9 @@ class ext_Experiment:
             not used but can, in the future, dictate which database is used to generate annotations
             
                 
-        To move annotation out of core package.
+        To move annotation out of core package. 
+        
+        as for GC and LCMSMS
                 
         
         '''

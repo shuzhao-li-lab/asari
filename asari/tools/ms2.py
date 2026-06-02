@@ -1,5 +1,5 @@
 '''
-Various functions for different workflows.
+Various functions for different workflows, within main Asari process or standalone.
 - extracting MS2 spectra from mzML files  
 - matching MS2 to separate MS1 table
 - ddMS2 de novo processing
@@ -144,6 +144,21 @@ def export_table_ms1match_results(resultDict, cpdDict, outfile):
     with open(outfile, 'w') as O:
         O.write(s)
     
+#
+# ----------------------
+# 
+
+def rt_cluster_msms(list_ms2_spectra, similarity_function, mz_tolerance=0.01):
+    '''
+    Cluster MS/MS spectra based on similarity and RT proximity. 
+
+    returns cluster results (extended representative spectrum)
+    '''
+
+
+
+    
+    pass
 
 
 #

@@ -320,13 +320,12 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     #
     if args.workflow:
         parameters['workflow'] = args.workflow
-        # , 'LC_start'; to add LC-MS/MS
-        assert parameters['workflow'] in {'LC', 'GC', 'DIMS'}, "Workflow must be either LC, GC or DIMS."
+        assert parameters['workflow'] in {'LC', 'GC', 'DIMS', 'LCMSMS'}, "Workflow must be either LC, GC, LCMSMS or DIMS."
         debug_print(to_print=f"Setting workflow to {parameters['workflow']}")
     else:
         debug_print(to_print=f"Using default workflow: {parameters['workflow']}")
 
-    # print(args.run)
+    # 
     if args.run:
         parameters['run'] = args.run.rstrip()
         debug_print(to_print=f"Setting run to {parameters['run']}")
