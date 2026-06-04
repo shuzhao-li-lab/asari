@@ -14,6 +14,7 @@ from .default_parameters import adduct_search_patterns, \
 from .constructors import CompositeMap
 from .utils import NpEncoder
 from . import db
+from .tools.ms2 import json_ms2_to_msp
 
 if not sys.warnoptions:
     import warnings
@@ -250,6 +251,8 @@ class ext_Experiment:
 
             with open(json_outfile, 'w', encoding='utf-8') as f:
                 json.dump(_list_ms2_spectra, f, cls=NpEncoder, ensure_ascii=False, indent=2)
+
+            json_ms2_to_msp(_list_ms2_spectra, os.path.join(self.parameters['outdir'], 'export', 'ms2_spectra.msp'))
 
             self.export_log()
             self.export_readme()

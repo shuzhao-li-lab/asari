@@ -199,8 +199,8 @@ def annotate_lcmsms(
     '''
     LC-MS/MS annotation
 
-    cluster MS/MS spectra;
-    get MS1 peak height for MS/MS;
+    Have MS/MS clusters;
+    
     DB search for MS/MS;
 
     compile annotation per empCpd

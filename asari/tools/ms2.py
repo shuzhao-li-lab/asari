@@ -237,6 +237,49 @@ def rt_cluster_msms(
     return clustered_results
 
 
+def json_ms2_to_msp(records, outfile='test.msp'):
+    """Convert a JSON list of MS/MS spectra to MSP format.
+
+    Each entry in the JSON list becomes one MSP record. The m/z values are written with
+    4 decimal places and intensities as integers, matching the convention used for
+    high-resolution GC-MS data.
+    records = json.load(open(infile))
+
+    Parameters
+    ----------
+    infile : str
+        Path to the input JSON file (list of pseudospectrum dicts with keys
+        ``id``, ``rtime``, ``RI``, ``peaks``, ``annotation``, etc.).
+    outfile : str, optional
+        Path for the output MSP file.  Defaults to ``infile`` with ``.json``
+        replaced by ``.msp``.
+
+    Returns
+    -------
+    str
+        Path of the written MSP file.
+    """
+    lines = []
+    for entry in records:
+        peaks = entry.get('peaks', [])
+        if not peaks:
+            peaks = entry.get('peaks_as_features', [])
+        lines.append(f"ID: {entry.get('id', '')}")
+        lines.append(f"PRECURSORMZ: {entry.get('precursor_mz', '')}")
+        lines.append(f"cluster_size: {entry.get('cluster_size', '')}")
+        lines.append(f"parent_masstrack_id: {entry.get('parent_masstrack_id', '')}")
+        lines.append(f"RETENTIONTIME: {entry.get('rtime', '')}")
+        lines.append(f"Num Peaks: {len(peaks)}")
+        for mz, intensity in peaks:
+            lines.append(f"{mz:.4f} {intensity:.4f}")
+        lines.append("")   # blank line between records
+        
+    with open(outfile, 'w') as fh:
+        fh.write('\n'.join(lines))
+
+
+
+
 #
 # ----------------------
 # 

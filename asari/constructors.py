@@ -509,6 +509,7 @@ class CompositeMap:
 
         mz_tolerance : m/z tolerance used in MS/MS similarity calculation. 
         '''
+        print("\nClustering MS/MS spectra per mass track ...\n")
         for ii, track in self.composite_mass_tracks.items():
             track['ms2_spectra'] = rt_cluster_msms(
                 track['ms2_spectra'], similarity_function, rt_gap, mz_tolerance, distance_threshold
