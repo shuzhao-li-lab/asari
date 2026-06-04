@@ -155,18 +155,20 @@ class ext_Experiment:
 
     def process_all_LCMSMS(self):
         '''
-        To add LC-MS/MS processing, which will include MS2 spectra association and annotation.
-        
         The LC-MS/MS workflow constructs massGrid and CMAP as LC-MS processing, 
         then assign all MS/MS spectra to mass tracks. 
-        The MS/MS spectra per mass track are clustered based on RT and similarity, 
-        and integrated with MS1 data to retrieve MS1 peak height. 
+        The MS/MS spectra per mass track are clustered based on RT and similarity. 
         
         The MS1 data may be sparse in LC-MS/MS, limiting elution peak detection and resolution of close isomers.
-        Therefore, MS1 peak height not area is used; the number of features is defined by MS/MS clustering not elution peaks.
+        Since MS/MS collection is not consistent cross samples,  
+        full integrated with MS1 data in the same experiment is not always feasible. 
+        Even if we use MS1 peak height not area, MS1 and MS/MS features are not consistently measured cross samples.
+        Therefore, quantitative information cross samples is only usable for a subset of MS1 features. 
         
+        The MS1 feature table and MS/MS clusters are reported separately, sharing masstrack IDs.
+        The MS/MS clusters are searched against spectral libraries seprately and result can be used to annotate 
+        the MS1 feature table here or different acquisitions. 
         '''
-
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
         if not self.parameters['rt_align_on']:
@@ -174,12 +176,14 @@ class ext_Experiment:
         # this includes MS2 in mass tracks
         self.CMAP.build_composite_tracks()
         # cluster and clean up MS2
-        self.CMAP.cluster_ms2_spectra()
-        # MS1 peaks - to do - relax peak sampling requirement
+        self.CMAP.cluster_ms2_spectra(
+            # similarity_function=self.parameters.get('ms2_similarity_function', cosine_similarity),
+            rt_gap=self.parameters.get('ms2_rt_gap', 5),
+            mz_tolerance=self.parameters.get('ms2_mz_tolerance', 0.01),
+            distance_threshold=self.parameters.get('ms2_distance_threshold', 0.8)
+        )
+        # MS1 peaks 
         self.CMAP.global_peak_detection()
-
-        self.link_ms1_ms2()
-
 
 
     def export_all(self, anno=False):
@@ -223,22 +227,29 @@ class ext_Experiment:
 
         elif self.parameters['workflow'] == "LCMSMS":
             #
-            # to-do update feature_table formats; export JSON of MS2
-            #
             # annotation separate, akin to GC
             #
             self.CMAP.MassGrid.to_csv(
                 os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
-            if anno:
-                for peak in self.CMAP.FeatureList:
-                    peak['id'] = str(peak['id_number'])
-                self.export_CMAP_pickle()
-
-
-
-                self.annotate()
 
             self.export_feature_tables()
+            # write out MS2 spectra
+            json_outfile = os.path.join(self.parameters['outdir'], 'export', 'ms2_spectra.json')
+            _list_ms2_spectra = []
+            for mt in self.CMAP.composite_mass_tracks.values():
+                # after clustering, the ms2_spectra in each mass track are the cluster representatives
+                ii = 0
+                for spec in mt['ms2_spectra']:
+                    spec['parent_masstrack_id'] = mt['id_number']
+                    spec['id'] = f"track_{mt['mz']:.4f}_clus{ii}"
+                    spec['precursor_mz'] = round(spec['precursor_mz'], 4)
+                    spec['rtime'] = round(spec['rtime'], 2)
+                    spec['peaks'] = [[round(mz, 4), intensity] for mz, intensity in spec['peaks']]
+                    _list_ms2_spectra.append(spec)
+                    ii += 1
+
+            with open(json_outfile, 'w', encoding='utf-8') as f:
+                json.dump(_list_ms2_spectra, f, cls=NpEncoder, ensure_ascii=False, indent=2)
 
             self.export_log()
             self.export_readme()

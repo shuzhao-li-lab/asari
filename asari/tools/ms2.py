@@ -14,7 +14,10 @@ import os
 import json
 import numpy as np
 import pymzml
+from scipy.spatial.distance import squareform
+from scipy.cluster.hierarchy import linkage, fcluster
 from asari.mass_functions import complete_mass_paired_mapping
+from .cosine import cosine_similarity
 from .file_io import read_features_from_asari_table
 
 
@@ -148,24 +151,97 @@ def export_table_ms1match_results(resultDict, cpdDict, outfile):
 # ----------------------
 # 
 
-def rt_cluster_msms(list_ms2_spectra, similarity_function, mz_tolerance=0.01):
+def cluster_msms_spectra(list_ms2_spectra, similarity_function, mz_tolerance=0.05, distance_threshold=0.8):
+    """
+    Cluster MS/MS spectra using cosine similarity as the distance metric.
+
+    Builds a pairwise cosine-distance matrix (distance = 1 - cosine_score),
+    then applies agglomerative hierarchical clustering (average linkage).
+
+    Parameters
+    ----------
+    list_ms2_spectra : list of dicts
+        Each dict must have a 'peaks' key with a list of (mz, intensity) tuples.
+    mz_tolerance : float
+        m/z tolerance passed to cosine_similarity.
+    distance_threshold : float
+        Linkage cut threshold; 0 means identical spectra, 1 means no similarity.
+
+    Returns
+    -------
+    labels : list of int
+        Zero-indexed cluster label for each input spectrum.
+    representatives : list of dict
+        One representative spectrum per cluster (highest total peak intensity).
+    """
+    n = len(list_ms2_spectra)
+    if n == 0:
+        return [], []
+    if n == 1:
+        return [0], list_ms2_spectra[:]
+
+    dist_matrix = np.zeros((n, n))
+    for i in range(n):
+        for j in range(i + 1, n):
+            score, _ = similarity_function(
+                list_ms2_spectra[i]['peaks'], list_ms2_spectra[j]['peaks'], mz_tolerance
+            )
+            dist_matrix[i, j] = dist_matrix[j, i] = 1.0 - score
+
+    Z = linkage(squareform(dist_matrix), method='average')
+    raw_labels = fcluster(Z, distance_threshold, criterion='distance') - 1  # 0-indexed
+
+    representatives = []
+    for c in range(max(raw_labels) + 1):
+        members = [list_ms2_spectra[i] for i in range(n) if raw_labels[i] == c]
+        rep = max(members, key=lambda x: sum(p[1] for p in x['peaks']))  # highest total peak intensity
+        rep['cluster_size'] = len(members)  # optional: add cluster size info
+        representatives.append(rep)
+
+    return raw_labels.tolist(), representatives
+
+
+def rt_cluster_msms(
+        list_ms2_spectra, similarity_function, rt_gap=5, mz_tolerance=0.05, distance_threshold=0.8
+        ):
     '''
-    Cluster MS/MS spectra based on similarity and RT proximity. 
+    Cluster MS/MS spectra first by RT proximity, then by cosine similarity within each RT group.
 
-    returns cluster results (extended representative spectrum)
+    list_ms2_spectra : [{precursor_mz: float, rtime: float, peaks: [(), ...]}, ...]
+    rt_gap : spectra more than this many seconds apart start a new RT group.
+    mz_tolerance : m/z tolerance for cosine_similarity.
+    distance_threshold : cosine-distance cut for within-group clustering.
+
+    Returns list of representative spectra (one per cosine cluster).
     '''
+    if not list_ms2_spectra:
+        return []
 
+    list_ms2_spectra.sort(key=lambda x: x['rtime'])
+    rt_groups = []
+    current_group = [list_ms2_spectra[0]]
+    for i in range(1, len(list_ms2_spectra)):
+        if list_ms2_spectra[i]['rtime'] - list_ms2_spectra[i - 1]['rtime'] <= rt_gap:
+            current_group.append(list_ms2_spectra[i])
+        else:
+            rt_groups.append(current_group)
+            current_group = [list_ms2_spectra[i]]
+    rt_groups.append(current_group)
 
+    clustered_results = []
+    for group in rt_groups:
+        _, reps = cluster_msms_spectra(group, similarity_function, mz_tolerance=mz_tolerance,
+                                       distance_threshold=distance_threshold)
+        clustered_results.extend(reps)
 
-    
-    pass
+    return clustered_results
 
 
 #
 # ----------------------
 # 
 
-def extract_ms2_form_file(infile, min_intensity=1000):
+def extract_ms2_from_file(infile, min_intensity=1000):
     '''
     Extract ms2 spectra from mzML file, clean up and return as a list of spectra.
 
@@ -302,7 +378,7 @@ def match_ms2files_to_features(ms1_fulltable, list_ms2_files,
     master_dict = {}
     for ms2_file in list_ms2_files:
         print("Processing MS2 file: %s" %ms2_file)
-        ms2_spectra = extract_ms2_form_file(ms2_file)
+        ms2_spectra = extract_ms2_from_file(ms2_file)
         print("  Extracted %d MS2 spectra" %len(ms2_spectra))
         matched = get_matched_ms2_ms1(LCMS_features, ms2_spectra, rt_tol=rt_tol, ppm_tol=ppm_tol)
         print("  Found %d features with matched MS2 spectra" %len(matched))

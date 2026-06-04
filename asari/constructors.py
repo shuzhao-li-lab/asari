@@ -498,7 +498,11 @@ class CompositeMap:
 
         self.composite_mass_tracks = result
 
-    def cluster_ms2_spectra(self, mz_tolerance=0.01):
+    def cluster_ms2_spectra(self, 
+                            similarity_function=cosine_similarity, 
+                            rt_gap=5, 
+                            mz_tolerance=0.01, 
+                            distance_threshold=0.8):
         '''
         Cluster all MS/MS spectra on each mass track, 
         replace track['ms2_spectra'] by cluster results (extended representative spectrum).
@@ -506,7 +510,9 @@ class CompositeMap:
         mz_tolerance : m/z tolerance used in MS/MS similarity calculation. 
         '''
         for ii, track in self.composite_mass_tracks.items():
-            track['ms2_spectra'] = rt_cluster_msms(track['ms2_spectra'], cosine_similarity, mz_tolerance)
+            track['ms2_spectra'] = rt_cluster_msms(
+                track['ms2_spectra'], similarity_function, rt_gap, mz_tolerance, distance_threshold
+                )
 
 
     def calibrate_sample_RT_by_standards(self, sample):

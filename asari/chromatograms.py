@@ -74,7 +74,7 @@ def extract_massTracks_(infile,
             precursor_mz = spec.selected_precursors[0]['mz']
             if precursor_mz is None:
                 continue
-            peaks = [(mz, intensity) for mz, intensity in spec.peaks('centroided')
+            peaks = [(mz, int(intensity)) for mz, intensity in spec.peaks('centroided')
                                if intensity >= min_intensity and mz < precursor_mz-1]    # excluding precursor ion
             if peaks:  # ms2_spectra not to use np.array, which is not serializable for intem storage
                 ms2_spectra.append(
