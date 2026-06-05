@@ -1,6 +1,5 @@
 '''
 Functions for subcommand `annotate`
-To test and solidify.
 
 GC-HRMS annotation functions are added here.
 This does not change default --anno for LC-MS data processing; but we will unify in next version.
@@ -15,6 +14,10 @@ asari annotate -i /Users/lish/li.proj/IndiPHARM/LookAhead/GCMS/lookahead_gcms_as
 
 LC: 
 asari annotate -i /Users/lish/li.play/test16_v16_599432/preferred_Feature_table.tsv -o /Users/lish/li.play/test16_v16_599432/ -j v16lc --workflow LC --mode pos
+
+LC-MS/MS
+annotate --db /Users/lish/li.proj/Resources/MSMS-Public_experimentspectra-pos-VS19.pkl -i /Users/lish/li.play/miao_u2c_IDX028_asari_project_6512215/export/ms2_spectra.json -o /Users/lish/li.play/miao_u2c_IDX02/ --workflow LCMSMS
+
 '''
 
 import os
@@ -33,6 +36,7 @@ from .default_parameters import (extended_adducts, adduct_search_patterns_pos,
 from .utils import NpEncoder
 from .tools.file_io import read_features_from_asari_table
 from .tools.plot import mirror_plot
+from .tools.entropy_search import clean_list_ms2spectra
 from .gcms import *
 
 def annotate_project(infile, parameters):
@@ -70,6 +74,12 @@ def annotate_project(infile, parameters):
 
     elif parameters['workflow'] == "LCMSMS":
         annotate_lcmsms(
+            infile=infile,
+            outdir=outdir,
+            database_file=parameters['db'],
+            project_name_handle=parameters['project_name'],
+            # ms2_tolerance_in_ppm=parameters['ms2_tolerance_in_ppm'], 
+            ms2_tolerance_in_da=parameters['ms2_tolerance_in_da'], 
 
         )
         
@@ -193,8 +203,12 @@ def annotate_gcms_full(
 #
 
 def annotate_lcmsms(
-        
-
+        infile,
+        outdir,
+        database_file,
+        project_name_handle='result',
+        # ms2_tolerance_in_ppm=5,     # not used now
+        ms2_tolerance_in_da=0.01,
     ):
     '''
     LC-MS/MS annotation
@@ -206,8 +220,55 @@ def annotate_lcmsms(
     compile annotation per empCpd
     
     '''
+    params = {'mz_tol_ms1': 0.01,
+        'mz_tol_ms2': 0.01,
+        'ms2_sim_tol': 0.2,     # intentionally low, to filter later. ENTROPY_FILTER = 0.2
+        'precursor_mz_offset': 1.6,
+        }
+    
+    entropy_search = pickle.load(open(database_file, 'rb'))
+    print(f"Loaded database of {len(entropy_search.precursor_mz_array)} spectra.")
+    ms2_spectra = json.load(open(infile))
+    cleaned_spectra = clean_list_ms2spectra(ms2_spectra, entropy_search, params)
+    print(f"Loadded {len(cleaned_spectra)} cleaned experimental spectra.\n")
+    
+    results = []
+    for (precursor_mz, peaks, rtime, spid) in cleaned_spectra:
+        similarity, matched_num = entropy_search.identity_search(precursor_mz=precursor_mz, 
+                                                                peaks=peaks,
+                                                                ms1_tolerance_in_da=params['mz_tol_ms1'],
+                                                                ms2_tolerance_in_da=params['mz_tol_ms2'],
+                                                                output_matched_peak_number=True)
+        if np.max(similarity) > params['ms2_sim_tol']:
+            # get best entropy match
+            best_idx = np.argmax(similarity)
+            entropy_matched_entry = entropy_search[best_idx]
+            entropy_score = similarity[best_idx]
+            number_matched_peaks = matched_num[best_idx]
+            # get cosine score
+            cosine_matched_entry = entropy_search[best_idx]
+            cosine_score, _ = cosine_similarity(peaks, entropy_matched_entry['peaks'], 
+                                            mz_tolerance=params['mz_tol_ms2'])
+            
+            db_entry = entropy_matched_entry
+            if not isinstance(db_entry['peaks'], list):
+                db_entry['peaks'] = db_entry['peaks'].tolist()
 
-    pass
+            results.append({
+                'spid': spid,
+                'precursor_mz': precursor_mz,
+                'rtime': rtime,
+                'peaks': peaks.tolist(),
+                'entropy_matched_entry': db_entry,
+                'entropy_score': float(entropy_score),
+                'cosine_score': float(cosine_score),
+                'number_matched_peaks': int(number_matched_peaks),
+            })
+    
+    json_output_file = os.path.join(outdir, project_name_handle+'_MS2_annotation.json')
+    with open(json_output_file, 'w', encoding='utf-8') as O:
+        json.dump(results, O, indent=2, ensure_ascii=False)
+    print(f"MS/MS annotation results ({len(results)}) were written to {json_output_file}.\n\n")
 
 
 
