@@ -4,7 +4,7 @@ Classes of MassGrid and CompositeMap.
 
 import os
 import csv
-# from functools import lru_cache
+from functools import partial
 
 import pandas as pd
 import numpy as np
@@ -25,8 +25,18 @@ from .peaks import (quick_detect_unique_elution_peak,
                     get_gaussian_peakarea_on_intensity_list)
 from .samples import SimpleSample
 
+from .utils import bulk_process
 from .tools.ms2 import rt_cluster_msms
 from .tools.cosine import cosine_similarity
+
+
+def _cluster_track_ms2_worker(item, similarity_function, rt_gap, mz_tolerance, distance_threshold):
+    key, track = item
+    if track.get('ms2_spectra'):
+        track['ms2_spectra'] = rt_cluster_msms(
+            track['ms2_spectra'], similarity_function, rt_gap, mz_tolerance, distance_threshold
+        )
+    return key, track
 
 
 class MassGrid:
@@ -510,10 +520,13 @@ class CompositeMap:
         mz_tolerance : m/z tolerance used in MS/MS similarity calculation. 
         '''
         print("\nClustering MS/MS spectra per mass track ...\n")
-        for ii, track in self.composite_mass_tracks.items():
-            track['ms2_spectra'] = rt_cluster_msms(
-                track['ms2_spectra'], similarity_function, rt_gap, mz_tolerance, distance_threshold
-                )
+        worker = partial(_cluster_track_ms2_worker,
+                         similarity_function=similarity_function,
+                         rt_gap=rt_gap,
+                         mz_tolerance=mz_tolerance,
+                         distance_threshold=distance_threshold)
+        results = bulk_process(worker, list(self.composite_mass_tracks.items()))
+        self.composite_mass_tracks = dict(results)
 
 
     def calibrate_sample_RT_by_standards(self, sample):

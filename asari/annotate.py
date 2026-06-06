@@ -211,14 +211,10 @@ def annotate_lcmsms(
         ms2_tolerance_in_da=0.01,
     ):
     '''
-    LC-MS/MS annotation
+    LC-MS/MS annotation of the input JSON file on a pre-indexed database_file. 
 
-    Have MS/MS clusters;
-    
-    DB search for MS/MS;
-
-    compile annotation per empCpd
-    
+    infile : MS/MS spectra or clusters (as from Asari LCMSMS process workflow) in JSON
+    database_file : pre-indexed database_file compatible with Flash Entropy
     '''
     params = {'mz_tol_ms1': 0.01,
         'mz_tol_ms2': 0.01,

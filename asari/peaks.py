@@ -74,10 +74,7 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
 # Statistics guided peak detection
 # -----------------------------------------------------------------------------
 
-
 def stats_detect_elution_peaks(job):
-    
-    
     '''
     Statistics guided peak detection. 
     This is the main method in asari for detecting elution peaks on a mass track.
