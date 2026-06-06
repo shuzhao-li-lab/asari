@@ -54,6 +54,8 @@ Pre-annation, i.e., grouping ions to empirical compounds, is done using [Khipu](
 
 Annotation typically involves compound libraries and databases. Please refer to specific workflows. 
 
+Flash entropy is used in some MS/MS search. See notebooks/index_spectral_db.ipynb on preparing the database from MSP or JSON.
+
 ### Pipelines
 An example pipeline is [PCPFM](https://pypi.org/project/pcpfm/), which includes data processing, annotation, QC and data wrangling. Thermo raw files conversion is included in PCPFM. 
 
@@ -78,6 +80,17 @@ To annotate GC-MS feature table using a custom database and alkane standards:
 --db /Users/lish/li.proj/asari_project/GCHRMS/Resources/GCHRMS_Database_251217.msp 
 --denovo F --workflow GC
 `
+
+To use LC-MS/MS workflow to produce feature tables and MS/MS clusters:
+
+`asari process --mode pos --input mydir/projectx_dir --workflow LCMSMS
+`
+
+To search MS/MS agains a database:
+
+`annotate --db /Users/lish/li.proj/Resources/MSMS_database.pkl -i mydir/projectx_dir/ms2_spectra.json -o mydir/projectx_dir/ --workflow LCMSMS
+`
+
 
 To pre-annotate LC-MS feature table then match to a database (default HMDB for now):
 
