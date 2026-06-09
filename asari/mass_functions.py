@@ -7,6 +7,7 @@ Alternatively, some of the mass functions can be implemented in C and compiled t
 '''
 
 import numpy as np
+from collections import defaultdict
 from scipy.signal import find_peaks 
 from scipy.ndimage import uniform_filter1d
 
@@ -579,19 +580,15 @@ def identify_mass_peaks(bin_data_tuples, mz_tolerance, presorted=True):
     -------
     A list of m/z values, peaks in m/z values distribution, at least mz_tolerance apart.
     '''
-
-    #todo - should identify mass peaks have a default mz_tolerance of 5 ppm? like the other asari functions?
     tol4 = int(mz_tolerance * 10000)
     size = max(2, int(0.5 * tol4))
     mz4 = [int(x[0]*10000) for x in bin_data_tuples]
     if not presorted:
         mz4.sort()
-    dict_count = {}
-    positioned = range(mz4[0], mz4[-1]+1)
-    for ii in positioned:
-        dict_count[ii] = 0
+    dict_count = defaultdict(int)
     for x in mz4:
         dict_count[x] += 1
+    positioned = range(min(mz4), max(mz4)+1)
     values = uniform_filter1d(
         [dict_count[ii] for ii in positioned], size=size, mode='nearest'
         )
