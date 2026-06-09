@@ -14,10 +14,8 @@ import os
 import json
 import numpy as np
 import pymzml
-from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import linkage, fcluster
 from asari.mass_functions import complete_mass_paired_mapping
-from .cosine import cosine_similarity
 from .file_io import read_features_from_asari_table
 
 
@@ -151,19 +149,47 @@ def export_table_ms1match_results(resultDict, cpdDict, outfile):
 # ----------------------
 # 
 
-def cluster_msms_spectra(list_ms2_spectra, similarity_function, mz_tolerance=0.05, distance_threshold=0.8):
+def _normalize_spectrum(peaks):
+    a = np.array(peaks, dtype=float)
+    norm = np.linalg.norm(a[:, 1])
+    if norm > 0:
+        a[:, 1] /= norm
+    return a
+
+def _cosine_prenormed(s1, s2, mz_tolerance):
+    """Greedy cosine on already-normalized numpy arrays. Returns score in [0, 1]."""
+    mz_diff = np.abs(s1[:, 0, None] - s2[None, :, 0])   # (k1, k2) broadcast
+    ii, jj = np.where(mz_diff <= mz_tolerance)
+    if len(ii) == 0:
+        return 0.0
+    prods = s1[ii, 1] * s2[jj, 1]
+    order = np.argsort(-prods)
+    used1, used2 = set(), set()
+    score = 0.0
+    for idx in order:
+        i, j = ii[idx], jj[idx]
+        if i not in used1 and j not in used2:
+            score += prods[idx]
+            used1.add(i)
+            used2.add(j)
+    return min(score, 1.0)
+
+def cluster_msms_spectra(list_ms2_spectra, similarity_function=None, mz_tolerance=0.05, distance_threshold=0.8):
     """
     Cluster MS/MS spectra using cosine similarity as the distance metric.
 
-    Builds a pairwise cosine-distance matrix (distance = 1 - cosine_score),
-    then applies agglomerative hierarchical clustering (average linkage).
+    Builds a pairwise cosine-distance condensed vector, then applies
+    agglomerative hierarchical clustering (average linkage).
+    Spectra are normalized once before the O(n²) loop to avoid redundant work.
 
     Parameters
     ----------
     list_ms2_spectra : list of dicts
         Each dict must have a 'peaks' key with a list of (mz, intensity) tuples.
+    similarity_function : callable, optional
+        If provided, used instead of the built-in optimized cosine scorer.
     mz_tolerance : float
-        m/z tolerance passed to cosine_similarity.
+        m/z tolerance for peak matching.
     distance_threshold : float
         Linkage cut threshold; 0 means identical spectra, 1 means no similarity.
 
@@ -180,22 +206,28 @@ def cluster_msms_spectra(list_ms2_spectra, similarity_function, mz_tolerance=0.0
     if n == 1:
         return [0], list_ms2_spectra[:]
 
-    dist_matrix = np.zeros((n, n))
-    for i in range(n):
-        for j in range(i + 1, n):
-            score, _ = similarity_function(
+    if similarity_function is None:
+        normed = [_normalize_spectrum(sp['peaks']) for sp in list_ms2_spectra]
+        dists = [
+            1.0 - _cosine_prenormed(normed[i], normed[j], mz_tolerance)
+            for i in range(n) for j in range(i + 1, n)
+        ]
+    else:
+        dists = [
+            1.0 - similarity_function(
                 list_ms2_spectra[i]['peaks'], list_ms2_spectra[j]['peaks'], mz_tolerance
-            )
-            dist_matrix[i, j] = dist_matrix[j, i] = 1.0 - score
+            )[0]
+            for i in range(n) for j in range(i + 1, n)
+        ]
 
-    Z = linkage(squareform(dist_matrix), method='average')
+    Z = linkage(np.array(dists), method='average')
     raw_labels = fcluster(Z, distance_threshold, criterion='distance') - 1  # 0-indexed
 
     representatives = []
     for c in range(max(raw_labels) + 1):
         members = [list_ms2_spectra[i] for i in range(n) if raw_labels[i] == c]
-        rep = max(members, key=lambda x: sum(p[1] for p in x['peaks']))  # highest total peak intensity
-        rep['cluster_size'] = len(members)  # optional: add cluster size info
+        rep = max(members, key=lambda x: sum(p[1] for p in x['peaks']))
+        rep['cluster_size'] = len(members)
         representatives.append(rep)
 
     return raw_labels.tolist(), representatives
@@ -209,7 +241,7 @@ def rt_cluster_msms(
 
     list_ms2_spectra : [{precursor_mz: float, rtime: float, peaks: [(), ...]}, ...]
     rt_gap : spectra more than this many seconds apart start a new RT group.
-    mz_tolerance : m/z tolerance for cosine_similarity.
+    mz_tolerance : m/z tolerance for similarity_function.
     distance_threshold : cosine-distance cut for within-group clustering.
 
     Returns list of representative spectra (one per cosine cluster).
@@ -217,16 +249,12 @@ def rt_cluster_msms(
     if not list_ms2_spectra:
         return []
 
-    list_ms2_spectra.sort(key=lambda x: x['rtime'])
-    rt_groups = []
-    current_group = [list_ms2_spectra[0]]
-    for i in range(1, len(list_ms2_spectra)):
-        if list_ms2_spectra[i]['rtime'] - list_ms2_spectra[i - 1]['rtime'] <= rt_gap:
-            current_group.append(list_ms2_spectra[i])
-        else:
-            rt_groups.append(current_group)
-            current_group = [list_ms2_spectra[i]]
-    rt_groups.append(current_group)
+    sorted_spectra = sorted(list_ms2_spectra, key=lambda x: x['rtime'])
+    rtimes = np.array([sp['rtime'] for sp in sorted_spectra])
+    breaks = np.where(np.diff(rtimes) > rt_gap)[0] + 1
+    rt_groups = [sorted_spectra[s:e] for s, e in zip(
+        [0] + breaks.tolist(), breaks.tolist() + [len(sorted_spectra)]
+    )]
 
     clustered_results = []
     for group in rt_groups:

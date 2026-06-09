@@ -27,7 +27,6 @@ from .samples import SimpleSample
 
 from .utils import bulk_process
 from .tools.ms2 import rt_cluster_msms
-from .tools.cosine import cosine_similarity
 
 
 def _cluster_track_ms2_worker(item, similarity_function, rt_gap, mz_tolerance, distance_threshold):
@@ -509,7 +508,7 @@ class CompositeMap:
         self.composite_mass_tracks = result
 
     def cluster_ms2_spectra(self, 
-                            similarity_function=cosine_similarity, 
+                            similarity_function=None, 
                             rt_gap=5, 
                             mz_tolerance=0.01, 
                             distance_threshold=0.8):
@@ -517,6 +516,8 @@ class CompositeMap:
         Cluster all MS/MS spectra on each mass track, 
         replace track['ms2_spectra'] by cluster results (extended representative spectrum).
 
+        similarity_function : default is the faster version of cosine. 
+        rt_gap : used to divide clusters on retention time.
         mz_tolerance : m/z tolerance used in MS/MS similarity calculation. 
         '''
         print("\nClustering MS/MS spectra per mass track ...\n")

@@ -20,6 +20,8 @@ def cosine_similarity(spec1, spec2, mz_tolerance=0.05):
     intensity product, each peak used at most once.
     This is simple_cosine, the most common cosine variant in MS/MS database search
     (equivalent to CosineGreedy in matchms).
+
+    See ms2._cosine_prenormed for batch applications.
     """
     s1 = np.array(spec1, dtype=float)
     s2 = np.array(spec2, dtype=float)
