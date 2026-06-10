@@ -1,3 +1,12 @@
+v1.17.3 -> v1.17.4
+    Added KDE as alternative for condensing very large MS/MS clusters.
+
+v1.17.2 -> v1.17.3
+    Added faster MS/MS clustering (optimized similarity function)
+
+v1.17.1 -> v1.17.2
+    Added LC-MS/MS workflow.
+
 v1.17.0 -> v1.17.1
     Replaced cosine functions.
     Updated molecular ion calculation in GC.

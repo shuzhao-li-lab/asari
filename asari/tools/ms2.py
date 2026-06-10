@@ -15,6 +15,9 @@ import json
 import numpy as np
 import pymzml
 from scipy.cluster.hierarchy import linkage, fcluster
+from scipy.signal import find_peaks 
+import statsmodels.api as statsmodel
+
 from asari.mass_functions import complete_mass_paired_mapping
 from .file_io import read_features_from_asari_table
 
@@ -233,8 +236,37 @@ def cluster_msms_spectra(list_ms2_spectra, similarity_function=None, mz_toleranc
     return raw_labels.tolist(), representatives
 
 
+def find_track_kde_peaks(sorted_list_rtimes,
+                                  distance, wlen=100, relative_height=0.1,
+                              ):
+    '''
+    Run KDE and KDE peak detection for a large list. 
+     Default applied to a chromatogram (typically 200 ~ 2000 seconds).
+
+    This is used to find precursor features among redundant MS/MS spectra on a mass track. 
+    Not always feasible to find good elution peaks in LC-MS/MS data. 
+
+    Returns list of rtimes of apex locations.
+    '''
+    bandwidth = 0.5     # second
+    kde = statsmodel.nonparametric.KDEUnivariate(sorted_list_rtimes)
+    kde.fit(bw=bandwidth) 
+    threshold = relative_height * kde.density.max()
+    prominence = 0.5 * threshold
+    peaks, properties = find_peaks(kde.density, 
+                                height=threshold, 
+                                distance=distance,
+                                prominence=prominence,
+                                wlen=wlen,
+                                ) 
+    real_apexes = [kde.support[ii] for ii in peaks]
+    return real_apexes
+
+
 def rt_cluster_msms(
-        list_ms2_spectra, similarity_function, rt_gap=5, mz_tolerance=0.05, distance_threshold=0.8
+        list_ms2_spectra, similarity_function, 
+        rt_gap=5, mz_tolerance=0.05, distance_threshold=0.8,
+        switch_list_size=100, kde_peak_window=1
         ):
     '''
     Cluster MS/MS spectra first by RT proximity, then by cosine similarity within each RT group.
@@ -243,25 +275,45 @@ def rt_cluster_msms(
     rt_gap : spectra more than this many seconds apart start a new RT group.
     mz_tolerance : m/z tolerance for similarity_function.
     distance_threshold : cosine-distance cut for within-group clustering.
+    kde_peak_window : window size to find representative spectrum around a KDE peak
 
     Returns list of representative spectra (one per cosine cluster).
     '''
     if not list_ms2_spectra:
         return []
-
-    sorted_spectra = sorted(list_ms2_spectra, key=lambda x: x['rtime'])
-    rtimes = np.array([sp['rtime'] for sp in sorted_spectra])
-    breaks = np.where(np.diff(rtimes) > rt_gap)[0] + 1
-    rt_groups = [sorted_spectra[s:e] for s, e in zip(
-        [0] + breaks.tolist(), breaks.tolist() + [len(sorted_spectra)]
-    )]
+    
+    if len(list_ms2_spectra) == 1:
+        list_ms2_spectra[0]['cluster_size'] = 1
+        return list_ms2_spectra
 
     clustered_results = []
-    for group in rt_groups:
-        _, reps = cluster_msms_spectra(group, similarity_function, mz_tolerance=mz_tolerance,
-                                       distance_threshold=distance_threshold)
-        clustered_results.extend(reps)
+    sorted_spectra = sorted(list_ms2_spectra, key=lambda x: x['rtime'])
+    rtimes = np.array([sp['rtime'] for sp in sorted_spectra])
 
+    if len(list_ms2_spectra) <= switch_list_size:
+        # Do similarity clustering on small input size
+        breaks = np.where(np.diff(rtimes) > rt_gap)[0] + 1
+        rt_groups = [sorted_spectra[s:e] for s, e in zip(
+            [0] + breaks.tolist(), breaks.tolist() + [len(sorted_spectra)]
+        )]
+        for group in rt_groups:
+            _, reps = cluster_msms_spectra(group, similarity_function, mz_tolerance=mz_tolerance,
+                                        distance_threshold=distance_threshold)
+            clustered_results.extend(reps)
+
+    else:
+        # Do kernel density detection on large input size
+        peak_rtimes = find_track_kde_peaks(rtimes, distance=rt_gap)
+        # Select one representative spectrum per peak, by most intensity among up to 10 spectra ~ peak position.
+        for this_rt in peak_rtimes:
+            left, right = this_rt - kde_peak_window, this_rt + kde_peak_window
+            _group = [x for x in sorted_spectra if left < x['rtime'] < right]
+            if _group:
+                rep = max(_group, key=lambda x: sum(p[1] for p in x['peaks']))
+                # negative value in cluster_size indicates from KDE extraction, not similarity clustering
+                rep['cluster_size'] = -len(_group)
+                clustered_results.append(rep)
+    
     return clustered_results
 
 
