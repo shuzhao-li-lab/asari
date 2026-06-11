@@ -308,6 +308,7 @@ def audit_mass_track(list_intensity,
     if max_intensity > HIGH:
         scaling_factor = max_intensity/HIGH
         list_intensity = list_intensity/scaling_factor
+        max_intensity = HIGH
         
     median_intensity = np.median(list_intensity)
     if median_intensity > LOW: 
