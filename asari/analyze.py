@@ -86,7 +86,11 @@ def get_file_masstrack_stats(infile, parameters, return_sample=False):
 
         Mass accuracy was estimated on 203 matched values as -0.4 ppm.
 
-    To-do: to add output info on instrumentation. Not sure how pymzml handles the info if at all.
+        
+    To-do: to add output info on instrumentation? (Not sure how pymzml handles the info if at all.)
+        To merge from chromatograms.extract_massTracks_; 
+        and add plot_scan_seq.plot_msn
+
     '''
     mz_tolerance_ppm = parameters['mz_tolerance_ppm']
     min_intensity = parameters['min_intensity_threshold']

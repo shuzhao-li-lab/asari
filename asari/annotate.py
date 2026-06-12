@@ -206,9 +206,10 @@ def annotate_lcmsms(
         infile,
         outdir,
         database_file,
-        project_name_handle='result',
-        # ms2_tolerance_in_ppm=5,     # not used now
+        project_name_handle='lcmsmsresult',
         ms2_tolerance_in_da=0.01,
+        cosine_similarity_filter=0.5,
+        database_key='INCHIKEY'
     ):
     '''
     LC-MS/MS annotation of the input JSON file on a pre-indexed database_file. 
@@ -216,7 +217,7 @@ def annotate_lcmsms(
     infile : MS/MS spectra or clusters (as from Asari LCMSMS process workflow) in JSON
     database_file : pre-indexed database_file compatible with Flash Entropy
     '''
-    params = {'mz_tol_ms1': 0.01,
+    entropy_screen_params = {'mz_tol_ms1': 0.01,
         'mz_tol_ms2': 0.01,
         'ms2_sim_tol': 0.2,     # intentionally low, to filter later. ENTROPY_FILTER = 0.2
         'precursor_mz_offset': 1.6,
@@ -225,48 +226,68 @@ def annotate_lcmsms(
     entropy_search = pickle.load(open(database_file, 'rb'))
     print(f"Loaded database of {len(entropy_search.precursor_mz_array)} spectra.")
     ms2_spectra = json.load(open(infile))
-    cleaned_spectra = clean_list_ms2spectra(ms2_spectra, entropy_search, params)
+    cleaned_spectra = clean_list_ms2spectra(ms2_spectra, entropy_search, entropy_screen_params)
     print(f"Loadded {len(cleaned_spectra)} cleaned experimental spectra.\n")
     
     results = []
     for (precursor_mz, peaks, rtime, spid) in cleaned_spectra:
         similarity, matched_num = entropy_search.identity_search(precursor_mz=precursor_mz, 
                                                                 peaks=peaks,
-                                                                ms1_tolerance_in_da=params['mz_tol_ms1'],
-                                                                ms2_tolerance_in_da=params['mz_tol_ms2'],
+                                                                ms1_tolerance_in_da=entropy_screen_params['mz_tol_ms1'],
+                                                                ms2_tolerance_in_da=entropy_screen_params['mz_tol_ms2'],
                                                                 output_matched_peak_number=True)
-        if np.max(similarity) > params['ms2_sim_tol']:
+        if np.max(similarity) > entropy_screen_params['ms2_sim_tol']:
             # get best entropy match
             best_idx = np.argmax(similarity)
             entropy_matched_entry = entropy_search[best_idx]
             entropy_score = similarity[best_idx]
             number_matched_peaks = matched_num[best_idx]
             # get cosine score
-            cosine_matched_entry = entropy_search[best_idx]
             cosine_score, _ = cosine_similarity(peaks, entropy_matched_entry['peaks'], 
-                                            mz_tolerance=params['mz_tol_ms2'])
-            
-            db_entry = entropy_matched_entry
-            if not isinstance(db_entry['peaks'], list):
-                db_entry['peaks'] = db_entry['peaks'].tolist()
+                                            mz_tolerance=ms2_tolerance_in_da)
+            if cosine_score > cosine_similarity_filter:
+                results.append( (entropy_matched_entry, cosine_score, entropy_score, number_matched_peaks, spid, precursor_mz, rtime) )
 
-            results.append({
-                'spid': spid,
-                'precursor_mz': precursor_mz,
-                'rtime': rtime,
-                'peaks': peaks.tolist(),
-                'entropy_matched_entry': db_entry,
-                'entropy_score': float(entropy_score),
-                'cosine_score': float(cosine_score),
-                'number_matched_peaks': int(number_matched_peaks),
-            })
-    
+    # Collapse redundant DB entries for export, selecting by best cosine_score
+    concise_results = {}
+    for res in results:
+            k = res[0][database_key]
+            if k in concise_results:
+                if res[1] > concise_results[k][1]:
+                    concise_results[k] = res
+            else:
+                concise_results[k] = res
+
+    # 
+    json_concise_results = {}
+    for k, res in concise_results.items():
+        # if not isinstance(db_entry['peaks'], list): db_entry['peaks'] = db_entry['peaks'].tolist()
+        _ = res[0].pop('peaks')         # exclude peaks
+        d = {
+            'database_key': k,
+            'spid': res[4],
+            'expt_precursor_mz': round(res[5], 4),
+            'expt_rtime': res[6],
+            'entropy_score': round(float(res[2]), 3),
+            'cosine_score': round(float(res[1]), 3),
+            'number_matched_peaks': int(res[3]),
+        }
+        d.update(res[0])
+        json_concise_results[k] = d
+
     json_output_file = os.path.join(outdir, project_name_handle+'_MS2_annotation.json')
     with open(json_output_file, 'w', encoding='utf-8') as O:
-        json.dump(results, O, indent=2, ensure_ascii=False)
-    print(f"MS/MS annotation results ({len(results)}) were written to {json_output_file}.\n\n")
+        json.dump(json_concise_results, O, indent=2, ensure_ascii=False)
 
-
+    tsv_output_file = os.path.join(outdir, project_name_handle+'_MS2_annotation.tsv')
+    LL = list(json_concise_results.values())
+    keys = list(LL[0].keys())
+    s = '\t'.join(keys) + '\n'
+    for row in LL: s += '\t'.join(str(row.get(k, '')) for k in keys) + '\n'
+    with open(tsv_output_file, 'w') as fh:
+        fh.write(s)
+        
+    print(f"MS/MS annotation results ({len(json_concise_results)}) in JSON and tsv were written to {outdir}.\n\n")
 
 
 #

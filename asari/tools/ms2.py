@@ -241,7 +241,7 @@ def find_track_kde_peaks(sorted_list_rtimes,
                               ):
     '''
     Run KDE and KDE peak detection for a large list. 
-     Default applied to a chromatogram (typically 200 ~ 2000 seconds).
+    Default applied to a chromatogram (typically 200 ~ 2000 seconds).
 
     This is used to find precursor features among redundant MS/MS spectra on a mass track. 
     Not always feasible to find good elution peaks in LC-MS/MS data. 
@@ -358,11 +358,73 @@ def json_ms2_to_msp(records, outfile='test.msp'):
         fh.write('\n'.join(lines))
 
 
+def msp_to_mgf(infile, outfile=None):
+    """Convert an MSP file of MS/MS spectra to MGF format for GNPS.
+
+    Parameters
+    ----------
+    infile : str
+        Path to the input .msp file (format produced by json_ms2_to_msp).
+    outfile : str, optional
+        Path for the output .mgf file. Defaults to infile with .msp replaced by .mgf.
+
+    Returns
+    -------
+    str
+        Path of the written MGF file.
+    """
+    if outfile is None:
+        outfile = infile.replace('.msp', '.mgf')
+
+    with open(infile) as fh:
+        text = fh.read()
+
+    # Split into per-spectrum blocks on blank lines
+    blocks = [b.strip() for b in text.split('\n\n') if b.strip()]
+
+    lines = []
+    for scan_num, block in enumerate(blocks, start=1):
+        blines = block.splitlines()
+        header, peaks = {}, []
+        in_peaks = False
+        for line in blines:
+            if in_peaks:
+                peaks.append(line)
+            elif line.lower().startswith('num peaks'):
+                in_peaks = True
+            else:
+                for sep in (':', '='):
+                    if sep in line:
+                        k, _, v = line.partition(sep)
+                        header[k.strip().upper()] = v.strip()
+                        break
+
+        precursor_mz = header.get('PRECURSORMZ', '0.0')
+        rt = header.get('RETENTIONTIME', '')
+        feature_id = header.get('ID', '')
+
+        lines.append('BEGIN IONS')
+        lines.append(f'SCANS={scan_num}')
+        lines.append(f'PEPMASS={precursor_mz}')
+        lines.append('CHARGE=1')
+        lines.append('COLLISION_ENERGY=0.0')
+        if rt:
+            lines.append(f'RTINSECONDS={rt}')
+        if feature_id:
+            lines.append(f'FEATURE_ID={feature_id}')
+        lines.extend(peaks)
+        lines.append('END IONS')
+        lines.append('')
+
+    with open(outfile, 'w') as fh:
+        fh.write('\n'.join(lines))
+
+    return outfile
 
 
 #
 # ----------------------
-# 
+#
 
 def extract_ms2_from_file(infile, min_intensity=1000):
     '''

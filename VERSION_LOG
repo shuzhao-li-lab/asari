@@ -1,3 +1,7 @@
+v1.17.4 -> v1.17.5
+    Added tools.ms2.msp_to_mgf for writing GNPS format.
+    Bug fix max_intensity = HIGH in scaling (thanks to Marios Nikolaidis).
+
 v1.17.3 -> v1.17.4
     Added KDE as alternative for condensing very large MS/MS clusters.
 
