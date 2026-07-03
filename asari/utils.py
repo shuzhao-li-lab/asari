@@ -4,6 +4,7 @@ import multiprocessing as mp
 import os
 import time
 import hashlib
+from sys import platform
 import zipfile
 from io import BytesIO
 from importlib import resources as pkg_resources
@@ -53,7 +54,8 @@ def bulk_process(command, arguments, jobs_per_worker=False):
     Not considering distributed computing (e.g. dask) because it's easier to parallelize projects than computing. 
     '''
     n_workers = jobs_per_worker if (jobs_per_worker and jobs_per_worker != 'auto') else mp.cpu_count()
-    with mp.Pool(n_workers) as client:
+    ctx = mp.get_context('fork') if platform != 'win32' else mp.get_context()
+    with ctx.Pool(n_workers) as client:
         return client.starmap(command, [(arg,) for arg in arguments])
     
     
