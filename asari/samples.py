@@ -9,11 +9,13 @@ class SimpleSample:
     Lightweight class of an experimental sample to facilitate workflow.
     The primary use of this class is managing data stroage and retreival at sample level.
 
-    Depending on database_mode, sample list_mass_tracks are stored in memory, or on disk, or in MongoDB.
+    Depending on database_mode, sample list_mass_tracks are stored in memory, or on disk, or in DB.
     Function to get mass tracks from a mzML file is in workflow.process_project and batch_EIC_from_samples_.
     Peaks and empCpds are determined in constructors.CompositeMap.
     '''
-    def __init__(self, registry={}, experiment=None, database_mode='ondisk', mode='pos', is_reference=False):
+    def __init__(self, registry={}, 
+                 experiment=None, database_mode='ondisk', mode='pos', 
+                 is_reference=False):
         '''
         Build a lightweight sample class.
 

@@ -212,6 +212,52 @@ def mass_paired_mapping(list1, list2, std_ppm=5):
 
     return mapped, ratio_deltas
 
+
+def mass_paired_dict_mapping(dict1, dict2, std_ppm=5):
+    '''
+    Variant of mass_paired_mapping to allow ID tracking in dicts. 
+    Nonunique matches are left out.
+
+    Parameters
+    ----------
+    dict1: dict{id_number: m/z}
+    dict2: dict{id_number: m/z}
+    std_ppm: float, optional, default: 5 
+        limit of instrument accuracy in matching m/z values. 
+
+    Returns
+    -------
+    mapped : 
+        mapping list [(index from dict1, index from dict2), ...]
+    ratio_deltas : 
+        mean m/z ratio shift between two dicts. This is ppm*10^-6. 
+        No need to convert btw ppm here.
+
+    '''
+    all = [(v, 1, k) for k,v in dict1.items()] + [(v, 2, k) for k,v in dict2.items()]
+    # [(mz, list_origin, index_origin), ...]
+    all.sort()
+    NN = len(all)
+    # Add a mock entry to allow loop goes through NN.
+    all.append((999999, 2, None))
+    mapped, ratio_deltas = [], []
+    for ii in range(1, NN):
+        if all[ii][1] != all[ii-1][1]:          # from two diff list_origin
+            _tolerance = all[ii][0] * std_ppm * 0.000001
+            _d = all[ii][0]-all[ii-1][0]
+            if _d < _tolerance and all[ii+1][0]-all[ii][0] > _tolerance:
+                # not allowing ii to be matched to both ii-1 and ii+1
+                if all[ii][1] > all[ii-1][1]:   # always ordered as list1, list2
+                    mapped.append( (all[ii-1][2], all[ii][2]) )
+                    ratio_deltas.append( _d/all[ii][0] )
+                else:
+                    mapped.append( (all[ii][2], all[ii-1][2]) )
+                    ratio_deltas.append( -_d/all[ii][0] )
+
+    return mapped, ratio_deltas
+
+
+
 def complete_mass_paired_mapping(list1, list2, std_ppm=5):
     '''
     To find best matched pairs of m/z values between two lists. 
@@ -276,6 +322,66 @@ def complete_mass_paired_mapping(list1, list2, std_ppm=5):
     list1_unmapped = [x for x in range(len(list1)) if x not in [y[0] for y in mapped]]
     list2_unmapped = [x for x in range(len(list2)) if x not in [y[1] for y in mapped]]
     return mapped, list1_unmapped, list2_unmapped
+
+
+def complete_mass_paired_dict_mapping(dict1, dict2, std_ppm=5):
+    '''
+    Variant of complete_mass_paired_mapping to allow ID tracking in dicts. 
+
+    To find best matched pairs of m/z values between two dicts. 
+    When multiple matches occur within std_ppm, this keeps the pair of closest m/z.
+    This is different from mass_paired_mapping, which only keeps unique matches.
+    Singletons are included in returned result if no matches are found.
+    This does not calculate ratio_deltas.
+
+    Returns
+    -------
+    mapped: 
+        list of mapped index pairs. E.g. [ (3, 6), (6, 8), (33, 151), ...] 
+    dict1_unmapped : 
+        list of unmapped indexes in dict1.
+    dict2_unmapped : 
+        list of unmapped indexes in dict2.
+
+    Note
+    ----
+    This and related functions are for m/z alignment only, not used for general search. 
+    See asari.tools.match_features for general search.
+    '''
+    all = [(v, 1, k) for k,v in dict1.items()] + [(v, 2, k) for k,v in dict2.items()]
+    # [(mz, list_origin, index_origin), ...]
+    all.sort()
+    NN = len(all)
+    mapped = []
+    for ii in range(1, NN):
+        if all[ii][1] != all[ii-1][1]:          # from two diff list_origin
+            _tolerance = all[ii][0] * std_ppm * 0.000001
+            _d = all[ii][0]-all[ii-1][0]
+            if _d < _tolerance:
+                if all[ii][1] > all[ii-1][1]:   # always ordered as list1, list2
+                    mapped.append( (all[ii-1][2], _d, all[ii][2]) )
+                else:
+                    mapped.append( (all[ii][2], _d, all[ii-1][2]) )
+
+    # Now deal with multiple matches in either List1 or List2, smallest _d wins
+    mapped2 = []
+    mapped.append( (-1, -1, -1) )           # mock entry to allow loop below completes
+    staged = mapped[0]
+    for ii in range(1, len(mapped)):
+        if mapped[ii][0] == staged[0] or mapped[ii][2] == staged[2]:
+            if mapped[ii][1] < staged[1]:   # smaller _d 
+                staged = mapped[ii]
+        else:
+            mapped2.append(staged)
+            staged =  mapped[ii]         
+
+    mapped = [(x[0], x[2]) for x in mapped2]
+    # Now deal with singletons
+    dict1_unmapped = [x for x in dict1 if x not in [y[0] for y in mapped]]
+    dict2_unmapped = [x for x in dict2 if x not in [y[1] for y in mapped]]
+    return mapped, dict1_unmapped, dict2_unmapped
+
+
 
 def all_mass_paired_mapping(list1, list2, std_ppm=5):
     '''
@@ -401,11 +507,11 @@ def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks,
     REF_reference_mzlist: list
         the list of mz values from the REF sample
     REF_landmarks: list
-        the list of landmarks in the REF sample
+        the list of landmark indexes in the REF sample
     SM_mzlist: list
         the list of mz values in the sample
     SM_landmarks: list
-        the list of landmarks in the sample
+        the list of landmark indexes in the sample
     std_ppm: float, optional, default: 5
         the assumed mass resolution in ppm
     correction_tolerance_ppm: float, optional, default: 1
@@ -437,6 +543,9 @@ def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks,
     Do correciton on list2 if m/z shift exceeds correction_tolerance_ppm.
     See `MassGrid.add_sample`.
 
+    For high-density m/z values, there is potential shift when combining features to update m/z values.
+    A better solution will be implemented in a future version, using reference based mass grid for alignment, 
+    where the mass grid can be fixed on theoretical values (SL 2026-07-08).
     '''
     _N1 = len(REF_reference_mzlist)
     # tracking how SM_mzlist is mapped to ref
@@ -487,6 +596,80 @@ def landmark_guided_mapping(REF_reference_mzlist, REF_landmarks,
     new_reference_map2 = [_d2[x] for x in range(len(new_reference_mzlist))]
 
     return new_reference_mzlist, new_reference_map2, REF_landmarks, _r
+
+
+def landmark_guided_dict_mapping(REF_reference_mzdict, REF_landmarks, 
+                            SM_mzdict, SM_landmarks, 
+                            std_ppm=5, 
+                            correction_tolerance_ppm=1
+                            ):
+    '''
+    This is the variant of m/z alignment function `landmark_guided_mapping`,
+    but preserves the id_number of input data with different return format.
+
+    A new sample is compared to the reference in a MassGrid, 
+    then added to the MassGrid based on matched m/z values. 
+    The MassGrid records the alignment information.
+
+    This is a two-step process: aligning the anchors (landmarks) first, 
+    mz correction if needed, then completing the remaining m/z values.
+    Since the landmarks are of high confidence, this improves the quality 
+    of m/z alignment.
+
+    Parameters
+    ----------
+    REF_reference_mzdict: dict
+        the dict of mz values from the REF sample
+    REF_landmarks: list
+        the list of landmark indexes in the REF sample
+    SM_mzdict: dict
+        the dict of mz values in the sample
+    SM_landmarks: list
+        the list of landmark indexes in the sample
+    std_ppm: float, optional, default: 5
+        the assumed mass resolution in ppm
+    correction_tolerance_ppm: float, optional, default: 1
+        a mass correction is applied if the mass shift is above this value
+
+    Returns
+    -------
+    mapped_pairs : 
+        mapped pairs of IDs of the two input dicts.
+    dict2_unmapped : 
+        singleton indexes from SM_malist. 
+    _r : 
+        correction ratios on SM_mzlist, not used now.
+
+    Note
+    ----
+    See `landmark_guided_mapping` for usage in typical raw data processing.
+
+    '''
+    _d2, _r = {}, None   # _d2 tracking how SM_mzlist is mapped to ref
+    _N1 = len(REF_reference_mzdict)
+    # first align to landmark mz values
+    anchors_1 = {x: REF_reference_mzdict[x] for x in REF_landmarks}
+    anchors_2 = {x: SM_mzdict[x] for x in SM_landmarks}
+    mapped, ratio_deltas = mass_paired_dict_mapping(anchors_1, anchors_2, std_ppm)
+    # check number of mapped, min 10, to avoid forcing outlier sample into mass correction
+    if len(mapped) > max(0.2*_N1, 10):
+        _r = np.mean(ratio_deltas)
+        if abs(_r) > correction_tolerance_ppm*0.000001:          # do m/z correction
+            SM_mzdict = {k: v/(1+_r) for k,v in SM_mzdict.items()}
+            # rerun after mz correction
+            anchors_2 = {x: SM_mzdict[x] for x in SM_landmarks}
+            mapped, ratio_deltas = mass_paired_mapping(anchors_1, anchors_2, std_ppm)
+
+    # move onto remaining ions
+    dict1_remaining = {k: v for k,v in REF_reference_mzdict.items() if k not in [x[0] for x in mapped]}
+    dict2_remaining = {k: v for k,v in SM_mzdict.items() if k not in [x[1] for x in mapped]}
+    mapped2, dict1_unmapped, dict2_unmapped = complete_mass_paired_dict_mapping(
+            dict1_remaining, dict2_remaining, std_ppm)
+    mapped_pairs = mapped + mapped2
+    print("    mapped pairs = %d / %d " %(len(mapped_pairs), len(SM_mzdict)))
+    
+    return mapped_pairs, dict2_unmapped, ratio_deltas
+
 
 
 # -----------------------------------------------------------------------------

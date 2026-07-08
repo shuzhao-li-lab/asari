@@ -186,8 +186,6 @@ class MassGrid:
         ----------
         sample : SimpleSample instance
             instance of SimpleSample class.
-        database_cursor : cursor object
-            Not used now.
 
         Updates
         -------
@@ -214,12 +212,12 @@ class MassGrid:
             np.full((len(new_reference_mzlist), 1+self._number_of_samples_), None),
             columns=['mz'] + self.list_sample_names,
         )
-        NewGrid[ :self.MassGrid.shape[0]] = self.MassGrid
-        NewGrid['mz'] = new_reference_mzlist
-        NewGrid[ sample.name ] = new_reference_map2
+        NewGrid[ :self.MassGrid.shape[0]] = self.MassGrid   # replicate last grid
+        NewGrid['mz'] = new_reference_mzlist                # update ref m/z list
+        NewGrid[ sample.name ] = new_reference_map2         # update col of this sample
         self.MassGrid = NewGrid
         self._mz_landmarks_ = updated_REF_landmarks
-        sample.mz_calibration_ratio = _r            # not used now
+        sample.mz_calibration_ratio = _r                    # not used now
         
         self.experiment.all_samples.append(sample)
 
@@ -358,6 +356,8 @@ class CompositeMap:
         '''
         Extrapolate retention time on self.reference_sample_instance to max scan number in the experiment.
         This will be used to calculate retention time in the end, as intermediary steps use scan numbers.
+        This step of standardization is needed because 
+        scan numbers may not be consistent between samples, or continuous within samples. 
 
         Parameters
         ----------

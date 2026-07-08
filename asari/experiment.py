@@ -53,7 +53,7 @@ class ext_Experiment:
         self.sample_registry = sample_registry
         self.valid_sample_ids = self.get_valid_sample_ids()
         self.number_of_samples = len(self.valid_sample_ids)
-        self.number_scans = self.get_max_scan_number(sample_registry)
+        self.number_scans = self.get_max_scan_number()
         self.all_samples = self.all_sample_instances = []
 
         self.parameters = parameters
@@ -104,19 +104,13 @@ class ext_Experiment:
         except:
             return sorted(sample_order_by_timestamp, key=lambda x: x[0])
     
-    def get_max_scan_number(self, sample_registry):
+    def get_max_scan_number(self):
         '''
         Return max scan number among samples, or None if no valid sample.
-
-        Parameters
-        ----------
-        sample_registry: dict
-            a dict that maps sample IDs to sample data
+        self.sample_registry: a dict that maps sample IDs to sample data
         '''
-
-        # todo - why does this function need to take sample_registry as an external argument vs. self.sample_registry?
-        if sample_registry:
-            return max([sample_registry[k]['max_scan_number'] for k in self.valid_sample_ids]) + 1
+        if self.sample_registry:
+            return max([self.sample_registry[k]['max_scan_number'] for k in self.valid_sample_ids]) + 1
         else:
             return None
 

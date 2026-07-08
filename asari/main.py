@@ -12,6 +12,7 @@ from .default_parameters import PARAMETERS
 
 from .analyze import estimate_min_peak_height, analyze_single_sample
 from .annotate import annotate_project
+from .join import join_tables
 from .utils import build_boolean_dict
 
 
@@ -33,7 +34,8 @@ def annotate(parameters, args):
     annotate_project(args.input, parameters=parameters)
 
 def join(parameters, args):
-    print("NOT IMPLEMENTED")
+    join_tables(args.input, parameters=parameters)
+    # print("NOT IMPLEMENTED")
 
 def viz(parameters, args):
     try:    

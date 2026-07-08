@@ -430,7 +430,8 @@ def single_sample_EICs_(job):
                             parameters['compress'] # compress
                             )}
 
-    
+
+# phasing out:
     
 # -----------------------------------------------------------------------------
 # main workflow for `xic`
