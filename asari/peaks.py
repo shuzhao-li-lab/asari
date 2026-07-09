@@ -615,6 +615,32 @@ def get_gaussian_peakarea_on_intensity_list(intensity_list, left, right):
     return area
 
 
+def gaussian_peak_height(peak_area, mu, sigma):
+    '''
+    Compute the height of a Gaussian-shaped peak from its integral area,
+    center position, and standard deviation. Inverse of the area formula
+    used in get_gaussian_peakarea_on_intensity_list.
+
+    Parameters
+    ----------
+    peak_area : float
+        integral area under the Gaussian peak.
+    mu : float
+        center position of the peak. Not used in the calculation
+        (height is independent of mu for a Gaussian),
+        kept for interface symmetry with gaussian_function__.
+    sigma : float
+        standard deviation of the peak.
+
+    Returns
+    -------
+    height : float
+        peak height (a in gaussian_function__),
+        derived from area = a * sqrt(2 * pi * sigma**2).
+    '''
+    return peak_area / np.sqrt(2 * np.pi * sigma**2)
+
+
 def lowess_smooth_track(list_intensity, number_of_scans):
     '''
     To smooth data using LOWESS before peak detection. For testing.

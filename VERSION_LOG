@@ -1,3 +1,6 @@
+v1.17.5 -> v1.18.1
+    Added join subcommand and related functions.
+
 v1.17.4 -> v1.17.5
     Added tools.ms2.msp_to_mgf for writing GNPS format.
     Bug fix max_intensity = HIGH in scaling (thanks to Marios Nikolaidis).

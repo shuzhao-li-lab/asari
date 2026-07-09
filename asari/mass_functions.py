@@ -666,7 +666,7 @@ def landmark_guided_dict_mapping(REF_reference_mzdict, REF_landmarks,
     mapped2, dict1_unmapped, dict2_unmapped = complete_mass_paired_dict_mapping(
             dict1_remaining, dict2_remaining, std_ppm)
     mapped_pairs = mapped + mapped2
-    print("    mapped pairs = %d / %d " %(len(mapped_pairs), len(SM_mzdict)))
+    print("    matched mass tracks = %d / %d " %(len(mapped_pairs), len(SM_mzdict)))
     
     return mapped_pairs, dict2_unmapped, ratio_deltas
 
