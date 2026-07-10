@@ -361,58 +361,61 @@ def consolidate_track_features(dict_sample_features, parameters, id_number, mz, 
             feat['source'] = name
             all_features.append(feat)
 
-    left_base = min([feat['rtime_left_base'] for feat in all_features]) 
-    right_base = max([feat['rtime_right_base'] for feat in all_features])
-    padding = max(0.2 * (right_base - left_base), 10)           # avoid 0 or too small value
-    # time points sampled on track
-    list_rtime = np.arange(max(0, left_base-padding), right_base+padding, scan_time)        #.tolist()
-    if not list_rtime.any():
-        print(all_features)
+    if not all_features:
         return []
     else:
-        composite_mass_track = np.zeros(len(list_rtime))
-        for feat in all_features:
-            # This simulates a peak using Gaussian function
-            sigma = 0.33 * max([feat['rtime']-feat['rtime_left_base'],  feat['rtime_right_base']-feat['rtime']])
-            peak_height = feat['peak_area'] / np.sqrt(2 * np.pi * sigma**2)
-            peak_data = peak_height * np.exp(-(list_rtime - feat['rtime'])**2/(2*sigma**2)) 
-            composite_mass_track += peak_data
+        left_base = min([feat['rtime_left_base'] for feat in all_features]) 
+        right_base = max([feat['rtime_right_base'] for feat in all_features])
+        padding = max(0.2 * (right_base - left_base), 10)           # avoid 0 or too small value
+        # time points sampled on track
+        list_rtime = np.arange(max(0, left_base-padding), right_base+padding, scan_time)        #.tolist()
+        if not list_rtime.any():
+            print(all_features)
+            return []
+        else:
+            composite_mass_track = np.zeros(len(list_rtime))
+            for feat in all_features:
+                # This simulates a peak using Gaussian function
+                sigma = 0.33 * max([feat['rtime']-feat['rtime_left_base'],  feat['rtime_right_base']-feat['rtime']])
+                peak_height = feat['peak_area'] / np.sqrt(2 * np.pi * sigma**2)
+                peak_data = peak_height * np.exp(-(list_rtime - feat['rtime'])**2/(2*sigma**2)) 
+                composite_mass_track += peak_data
 
-        # detection of elution peaks on composite_mass_track
-        min_peak_height = parameters['min_peak_height']
-        min_prominence_threshold = parameters['min_prominence_threshold']
-        min_fwhm = round( 0.5 * parameters['min_timepoints'] )
-        min_intensity_threshold = parameters['min_intensity_threshold']
-        wlen = parameters['wlen']
+            # detection of elution peaks on composite_mass_track
+            min_peak_height = parameters['min_peak_height']
+            min_prominence_threshold = parameters['min_prominence_threshold']
+            min_fwhm = round( 0.5 * parameters['min_timepoints'] )
+            min_intensity_threshold = parameters['min_intensity_threshold']
+            wlen = parameters['wlen']
 
-        scaling_factor, LOW, HIGH = 1, min_intensity_threshold, 1E8
-        scaling_factor = HIGH/max(composite_mass_track)
-        composite_mass_track = composite_mass_track * scaling_factor
-        composite_mass_track = np.where(composite_mass_track > LOW, composite_mass_track, 0)
+            scaling_factor, LOW, HIGH = 1, min_intensity_threshold, 1E8
+            scaling_factor = HIGH/max(composite_mass_track)
+            composite_mass_track = composite_mass_track * scaling_factor
+            composite_mass_track = np.where(composite_mass_track > LOW, composite_mass_track, 0)
 
-        peaks, properties = find_peaks(composite_mass_track, 
-                                        height=min_peak_height, 
-                                        distance=min_fwhm,
-                                        prominence=min_prominence_threshold,
-                                        width=min_fwhm, 
-                                        wlen=wlen,
-                                        ) 
-        new_peaks = []
-        for ii in range(peaks.size):
-            new_peaks.append({
-                    'mz': round(mz, 4),
-                    'parent_masstrack_id': id_number,
-                    'rtime': round(list_rtime[peaks[ii]], 2),
-                    'height': int(properties['peak_heights'][ii] / scaling_factor),
-                    'rtime_left_base': round(list_rtime[properties['left_bases'][ii]], 2),
-                    'rtime_right_base': round(list_rtime[properties['right_bases'][ii]], 2)
-            })
+            peaks, properties = find_peaks(composite_mass_track, 
+                                            height=min_peak_height, 
+                                            distance=min_fwhm,
+                                            prominence=min_prominence_threshold,
+                                            width=min_fwhm, 
+                                            wlen=wlen,
+                                            ) 
+            new_peaks = []
+            for ii in range(peaks.size):
+                new_peaks.append({
+                        'mz': round(mz, 4),
+                        'parent_masstrack_id': id_number,
+                        'rtime': round(list_rtime[peaks[ii]], 2),
+                        'height': int(properties['peak_heights'][ii] / scaling_factor),
+                        'rtime_left_base': round(list_rtime[properties['left_bases'][ii]], 2),
+                        'rtime_right_base': round(list_rtime[properties['right_bases'][ii]], 2)
+                })
 
-        # map input features to new_peaks
-        for peak in new_peaks:
-            peak['members'] = get_features_in_range(peak, all_features)
+            # map input features to new_peaks
+            for peak in new_peaks:
+                peak['members'] = get_features_in_range(peak, all_features)
 
-        return new_peaks
+            return new_peaks
 
 
 def get_features_in_range(peak, all_features):
