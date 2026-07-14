@@ -1,3 +1,6 @@
+v1.17.5 -> v1.18.2
+    Improved join function with operational/combined mass tracks.
+
 v1.17.5 -> v1.18.1
     Added join subcommand and related functions.
 

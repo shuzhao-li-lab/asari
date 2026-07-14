@@ -24,7 +24,7 @@ from mass2chem.search import find_mzdiff_pairs_from_masstracks
 
 from .mass_functions import (flatten_tuplelist,
                              landmark_guided_dict_mapping,
-                             )
+                             check_close_mzs)
 from .experiment import ext_Experiment
 from .constructors import (CompositeMap, MassGrid)
 from .tools.file_io import read_features_from_asari_table
@@ -123,8 +123,9 @@ def join_tables(file_list_paths, parameters):
             REF_reference_mzdict[_N1 + ii] = SM_mzdict[idx]
             new_reference_map2[_N1 + ii] = idx
             # update landmark m/z values using the new index numbers as part of new_reference_mzlist
-            if idx in table['_mz_landmarks_']:
-                REF_landmarks.append(_N1 + ii)
+            # Not important to add more landmarks. 
+            # if idx in table['_mz_landmarks_']:
+            #    REF_landmarks.append(_N1 + ii)
 
         # Update MassGrid
         new_num_rows = len(REF_reference_mzdict)
@@ -171,7 +172,7 @@ def join_tables(file_list_paths, parameters):
             feat['rtime'] = new_rt_values[ii]
 
     #
-    master_track2features = {}
+    master_track2features = {}      # 2-level dict: {table_name: {parent_masstrack_id: [features]}}
     for table in tables:
         _d = {'': []}           # catch NA
         for feat in  table['sample_data']['list_features']:
@@ -182,25 +183,63 @@ def join_tables(file_list_paths, parameters):
         master_track2features[table['name']] = _d
 
     print("\nCombining features and detecting elution peaks on the composite mass tracks.\n\n")
+    
+    #
+    # def combined tracks, to merge tracks of close m/z values, by parameters['mz_tolerance_ppm'] (default 5 ppm)
+    # 
+    operational_tracks, operational_tracks_mz = {}, {}
+    mztracks = list(zip(MG.MassGrid['mz'].tolist(), MG.MassGrid.index))     # [(83.0603, 0), (84.0443, 1), ...]
+    mztracks.sort()
+    tracks_to_merge = check_close_mzs([x[0] for x in mztracks], parameters['mz_tolerance_ppm'])
+    to_merge_clusters, _registered_ = {}, {}
+    for ii, (a,b) in enumerate(tracks_to_merge):
+        if a in _registered_:
+            to_merge_clusters[_registered_[a]].append(mztracks[b])
+        elif b in _registered_:
+            to_merge_clusters[_registered_[b]].append(mztracks[a])
+        else:
+            to_merge_clusters[ii] = [mztracks[a], mztracks[b]]
+            _registered_[a] = ii
+            _registered_[b] = ii
+    
+    print(f"Number of composite mass tracks to merge due to close m/z values: {len(to_merge_clusters)}")
+    for ii, track in enumerate(mztracks):           # track = (mz, index)
+        if ii in _registered_:
+            cluster_id = _registered_[ii]
+            if cluster_id in operational_tracks:
+                operational_tracks[cluster_id].append(track[1])
+            else:
+                operational_tracks[cluster_id] = [track[1]]
+        else:
+            operational_tracks[ii] = [track[1]]
+    
     # Update feature list; decide feature correspondence on each composite mass track
     new_feature_list = []
-    for ii in MG.MassGrid.index:
-        row_dict = MG.MassGrid.iloc[ii, :].to_dict()        # mapping name to mass track index
-        row_features = {}
-        for t, track2feats in master_track2features.items():
-            if row_dict[t]:
-                row_features[t] = track2feats[row_dict[t]]
-            else:
-                row_features[t] = []
-        # if str(ii).endswith('1000'): print(row_features)
-        new_feature_list += consolidate_track_features(row_features, parameters, ii, MG.MassGrid['mz'][ii])
-
-    # write mapping record 
     names = [table['name'] for table in tables]
-    new_feature_list, empty_features = reformat_composite_feature_list(new_feature_list, names)
-    # A few features would fail new peak matching, stored in empty_features
+    for jj, track_indices in operational_tracks.items():
+        median_mz = np.median([MG.MassGrid['mz'][ii] for ii in track_indices])
+        operational_tracks_mz[jj] = median_mz
+        row_features = {name: [] for name in names}
+        for ii in track_indices:
+            row_dict = MG.MassGrid.iloc[ii, :].to_dict()        # mapping name to mass track index
+            for t, track2feats in master_track2features.items():
+                if row_dict[t]:
+                    row_features[t] += track2feats[row_dict[t]]
 
-    header = "id,mz,rtime,rtime_left_base,rtime_right_base,parent_masstrack_id,height_combined".split(",")
+        # if str(ii).endswith('1000'): print(row_features)
+        new_feature_list += consolidate_track_features(
+            row_features, parameters, jj, median_mz
+            )
+
+    # export operational_tracks, operational_tracks_mz to tsv file
+    with open(os.path.join(outdir, 'operational_mass_tracks_mz.tsv'), 'w', encoding='utf-8') as f:
+        for jj, mz in operational_tracks_mz.items():
+            f.write(f"{jj}\t{mz}\t{operational_tracks[jj]}\n")
+
+    # write mapping record; A few features would fail new peak matching, stored in empty_features
+    new_feature_list, empty_features = reformat_composite_feature_list(new_feature_list, names)
+
+    header = "id,mz,rtime,rtime_left_base,rtime_right_base,parent_masstrack_id_operational,height_combined".split(",")
     for name in names:
         header += [f'id({name})', f'mz({name})', f'apex({name})']
     s = '\t'.join(header) + '\n'
