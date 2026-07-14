@@ -17,8 +17,8 @@ from .utils import build_boolean_dict
 
 
 booleandict = build_boolean_dict()
-SUBCOMMANDS = ["analyze", "process", "annotate", "viz", "list_workflows"]
-              # "xic", "extract", "join", 
+SUBCOMMANDS = ["analyze", "process", "annotate", "viz", "join", "list_workflows"]
+              # "xic", "extract", 
 
 def process(parameters):
     list_input_files = read_project_dir(parameters['input'])
@@ -35,7 +35,6 @@ def annotate(parameters, args):
 
 def join(parameters, args):
     join_tables(args.input, parameters=parameters)
-    # print("NOT IMPLEMENTED")
 
 def viz(parameters, args):
     try:    

@@ -2,11 +2,12 @@
 join as 1st class module, as it will be used to divide & conquer large studies.
 
 The mass alignment is same as landmark_guided_mapping; 
-RT alignment is default LOESS plus a similar approach in CSM, rank prioritized.
+RT alignment is as default LOESS.
 Merge feature tables and zero fill absent features in samples.
-
 Track input feature IDs and parent_masstrack_id; keep mapping record.
-       
+
+Example use:
+python3 -m asari.main join -i /Users/lish/li.play/join_MT_files.txt -o /Users/lish/li.play/ -j test_join_mt01
 '''
 
 import os
@@ -34,9 +35,14 @@ def join_tables(file_list_paths, parameters):
     This joins data from multiple feature tables using the same LC/GC-MS method.
     Batch correction should be performed after joining. 
 
+    file_list_paths : a text file containing list of paths, one per line
+    parameters : dict, containing parameters as typical Asari processing
+
     Treat each table as a virtual "sample".
-    Build a 'MassGrid' first by aligning masstracks btw tables;
-    then map features on each composite mass track. 
+    Build a 'MassGrid' first by aligning masstracks btw tables; 
+    RT alignment is performed on features that are high and unique per mass track.
+    Elution peaks are reconstructed using Gaussian simulation, and peak detection is performed on the composite mass track.
+    Features on each composite mass track are mapped back to the original tables. 
 
     The IDs of mass tracks are not compatible with default Asari processing, 
     because the latter uses positional indexes but this function reuses old IDs. 
@@ -98,6 +104,8 @@ def join_tables(file_list_paths, parameters):
     reverse_ref_dict = {x['id_number']:ii for ii,x in enumerate(MG.reference_sample_instance.list_mass_tracks)}
     # redo index
     REF_landmarks = [reverse_ref_dict[x] for x in MG._mz_landmarks_]
+    print("Scan number is arbitrary in the `join` process. \nMassGrid alignment and composite peak detection are similar to raw data processing.\n")
+    
     for table in tables[1:]:
         print(f"Adding to MassGrid {table['input_file']}.")
         _N1 = len(REF_reference_mzdict)
@@ -173,6 +181,7 @@ def join_tables(file_list_paths, parameters):
                 _d[feat['parent_masstrack_id']] = [feat]
         master_track2features[table['name']] = _d
 
+    print("\nCombining features and detecting elution peaks on the composite mass tracks.\n\n")
     # Update feature list; decide feature correspondence on each composite mass track
     new_feature_list = []
     for ii in MG.MassGrid.index:
@@ -185,8 +194,6 @@ def join_tables(file_list_paths, parameters):
                 row_features[t] = []
         # if str(ii).endswith('1000'): print(row_features)
         new_feature_list += consolidate_track_features(row_features, parameters, ii, MG.MassGrid['mz'][ii])
-
-    # print(new_feature_list[500])
 
     # write mapping record 
     names = [table['name'] for table in tables]
@@ -317,6 +324,8 @@ def reformat_composite_feature_list(new_feature_list, table_names):
 
 def consolidate_track_features(dict_sample_features, parameters, id_number, mz, scan_time=0.1):
     '''
+    Combining signals from multiple samples on the same mass track, and detect elution peaks on the composite mass track.
+    
     dict_sample_features : groups of features from each sample (table) on same mass track
     scan_time : interval used to resample peak shape (seconds)
 

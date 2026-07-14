@@ -91,7 +91,6 @@ To search MS/MS agains a database:
 `annotate --db /Users/lish/li.proj/Resources/MSMS_database.pkl -i mydir/projectx_dir/ms2_spectra.json -o mydir/projectx_dir/ --workflow LCMSMS
 `
 
-
 To pre-annotate LC-MS feature table then match to a database (default HMDB for now):
 
 `asari annotate -i /Users/lish/li.play/test16_v16_599432/preferred_Feature_table.tsv -o /Users/lish/li.play/test16_v16_599432/ -j LCMSanno --workflow LC --mode pos`
@@ -105,6 +104,12 @@ To launch a dashboard in your web browser after the project is processed into di
 To get statistical description on a single file (useful to understand data and parameters):
 
 `asari analyze --input mydir/projectx_dir/file_to_analyze.mzML`
+
+To join data from multiple feature tables using the same LC/GC-MS method:
+
+`asari join -i pathlist.txt -o OUTDIR -j project_name`
+
+The input for `join` is a list of directories or paths to full feature tables, each a result of asari processing.
 
 Please check documentation and demo notebooks for additional uses. 
 
