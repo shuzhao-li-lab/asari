@@ -272,7 +272,6 @@ In the container, ThermoRawFileParser is under `/usr/local/thermo/`.
 - Default elution peak detection is based on local maxima using statistically guided parameters. For highly complex local EIC, additional algorithm may be needed.
 
 **Next steps in development**
-- Implementation of `join` function to facilitate better parallelization. The goal is to have 'native' level of matching features when large datasets are split and processed separately. This can be equivalent function of matching different datasets.
 - To improve TOF support. This maybe related to better construction of mass tracks when the m/z space gets too crowded.
 - Automated handling of sample clusters, since different sample types may be included in an experiment.
 
