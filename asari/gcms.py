@@ -67,24 +67,24 @@ def reformat_gcms_lib(list_cpd_standards,
             _peaks = entry[peaks_key]
             if mz_range:    # must do before designating base peak
                 _peaks = [x for x in _peaks if mz_range[0] < x[0] < mz_range[1]]
-            _base_peak = designate_base_peak(_peaks)
-            if filter_factor:
-                _peaks = filter_peaks_by_low_intensity_factor(_peaks, _base_peak[1], filter_factor)  
-            
-            counter += 1
-            cpd = GC_lib_entry(
-                'cpd' + f"{counter:08}",
-                entry.get(inchi_key, ''),
-                entry.get(name_key, ''),
-                float(entry[rt_key]),
-                float(entry[mw_key]),
-                entry.get(formula_key, ''),
-                [round(x[0]) for x in _peaks],
-                np.array(_peaks),
-                _base_peak,
-                ''          # meta_text
-            )
-            list_lib_entries.append(cpd)
+            if _peaks:
+                _base_peak = designate_base_peak(_peaks)
+                if filter_factor:
+                    _peaks = filter_peaks_by_low_intensity_factor(_peaks, _base_peak[1], filter_factor)  
+                counter += 1
+                cpd = GC_lib_entry(
+                    'cpd' + f"{counter:08}",
+                    entry.get(inchi_key, ''),
+                    entry.get(name_key, ''),
+                    float(entry[rt_key]),
+                    float(entry[mw_key]),
+                    entry.get(formula_key, ''),
+                    [round(x[0]) for x in _peaks],
+                    np.array(_peaks),
+                    _base_peak,
+                    ''          # meta_text
+                )
+                list_lib_entries.append(cpd)
     return list_lib_entries
 
 def json_pseudospectra_to_msp(records, outfile='test.msp'):
@@ -585,7 +585,7 @@ def write_tsv_empCpd_anno(list_empCpds, dict_features, dict_lib_entries, outfile
         'empCpd', 'name', 'inchikey', 'formula', 'lib_exact_mass', 'score_cosine', 'score_entropy', 
         'num_matched_peaks', 
         'quant_ion', 'mz_quant_ion', 'rtime_quant_ion(min)', 'RI_quant_ion', 'lib_RI', 'delta_RI', 
-        'has_basepeak', 'has_molecularion', 'presence_ratio'
+        'has_basepeak', 'has_molecular_ion', 'presence_ratio'
     ]
     s = '\t'.join(header) + '\n'
     for epd in list_empCpds:

@@ -16,7 +16,7 @@ LC:
 asari annotate -i /Users/lish/li.play/test16_v16_599432/preferred_Feature_table.tsv -o /Users/lish/li.play/test16_v16_599432/ -j v16lc --workflow LC --mode pos
 
 LC-MS/MS
-annotate --db /Users/lish/li.proj/Resources/MSMS-Public_experimentspectra-pos-VS19.pkl -i /Users/lish/li.play/miao_u2c_IDX028_asari_project_6512215/export/ms2_spectra.json -o /Users/lish/li.play/miao_u2c_IDX02/ --workflow LCMSMS
+asari annotate --db /Users/lish/li.proj/Resources/MSMS-Public_experimentspectra-pos-VS19.pkl -i /Users/lish/li.play/miao_u2c_IDX028_asari_project_6512215/export/ms2_spectra.json -o /Users/lish/li.play/miao_u2c_IDX02/ --workflow LCMSMS
 
 '''
 
