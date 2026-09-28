@@ -54,7 +54,9 @@ def reformat_gcms_lib(list_cpd_standards,
                       peaks_key='peaks', rt_key='RETENTIONTIME', 
                       inchi_key = 'InChIKey', name_key='Name',
                       mw_key = 'ExactMass', formula_key = 'Formula',
-                      filter_factor=None):
+                      filter_factor=None,
+                      mz_range=(50, 750)
+                      ):
     '''list_cpd_standards is list of dicts, e.g. result from parse_msp_to_listdict. 
     MSP files are often not well standardized. Attention is required in porting, but this is not a frequenct task.
     '''
@@ -63,9 +65,12 @@ def reformat_gcms_lib(list_cpd_standards,
     for entry in list_cpd_standards:
         if peaks_key in entry and rt_key in entry and entry[rt_key]:
             _peaks = entry[peaks_key]
+            if mz_range:    # must do before designating base peak
+                _peaks = [x for x in _peaks if mz_range[0] < x[0] < mz_range[1]]
             _base_peak = designate_base_peak(_peaks)
             if filter_factor:
                 _peaks = filter_peaks_by_low_intensity_factor(_peaks, _base_peak[1], filter_factor)  
+            
             counter += 1
             cpd = GC_lib_entry(
                 'cpd' + f"{counter:08}",
