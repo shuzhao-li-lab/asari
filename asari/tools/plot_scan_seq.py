@@ -84,7 +84,7 @@ def plot_msn(ms1_spectra, ms2_spectra,
         ax[0].text(x['rtime'], x['median_intensity'] + text_offset, x['num_peaks'], fontsize=6, ha='center')
         
     ax[0].set_ylim(ymax=max(yy) + 0.5)
-    ax[0].set_xlabel("Retention time (sec)")
+    ax[0].set_xlabel("Retention time (sec)", loc="right")
     ax[0].set_ylabel("Median log10 intensity")
     ax[0].legend(loc='upper right', ncols=2, bbox_to_anchor=(1, 1.2))
     ax[0].spines['top'].set_visible(False)
@@ -104,7 +104,7 @@ def plot_msn(ms1_spectra, ms2_spectra,
     # props = dict(boxstyle='round', facecolor='y', alpha=0.1)
     ax[1].text(0.05, 0.95, note, transform=ax[1].transAxes, fontsize=8,
         verticalalignment='top',) # bbox=props)
-    ax[1].set_xlabel("Retention time (sec)")
+    ax[1].set_xlabel("Retention time (sec)", loc="right")
     ax[1].set_ylabel("Base peak intensity")
     ax[1].spines['top'].set_visible(False)
     ax[1].spines['right'].set_visible(False)
