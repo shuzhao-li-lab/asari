@@ -16,9 +16,28 @@ import re
 #
 # SL simple function
 #
-MSP_dict = { # can add more here for controlled volcabulary
-    'MW': 'ExactMass',
+# Controlled vocabulary: canonical key -> variants seen in .msp files.
+# Order matters - msp_standarize keeps the first variant found in an entry,
+# so preferred variants go first (e.g. exact mass before MW, which is often nominal).
+# 'peaks' is not listed as parse_msp_to_listdict already writes entry['peaks'].
+# RTINSECONDS and retention index (RI) are deliberately left out to avoid unit mix-up.
+_MSP_variants = {
+    'Name': ['Name', 'Compound Name', 'Compound_Name', 'CompoundName', 'Compound', 'Title'],
+    'InChIKey': ['InChIKey', 'InchiKey', 'InChI Key', 'InChI_Key', 'Inchi_Key'],
+    'ExactMass': ['ExactMass', 'Exact Mass', 'Exact_Mass', 'Monoisotopic Mass', 'Monoisotopic_Mass',
+                  'MonoisotopicMass', 'Exact Mol Weight', 'MW', 'Mol Weight', 'Molecular Weight',
+                  'Molecular_Weight', 'MolecularWeight'],
+    'Formula': ['Formula', 'Molecular Formula', 'Molecular_Formula', 'MolecularFormula', 'Mol Formula'],
+    'RETENTIONTIME': ['RETENTIONTIME', 'RetentionTime', 'Retention Time', 'Retention_Time',
+                      'RT', 'RT_min', 'RTINMINUTES', 'Retention Time (min)'],
 }
+
+MSP_dict = {}
+for _v, _variants in _MSP_variants.items():
+    for _k in _variants:
+        for _case in (_k, _k.lower(), _k.upper(), _k.capitalize()):
+            if _case != _v:
+                MSP_dict.setdefault(_case, _v)
 
 def msp_standarize(LL, MSP_dict):
     for e in LL:

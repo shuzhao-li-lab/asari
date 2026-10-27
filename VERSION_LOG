@@ -1,3 +1,9 @@
+v1.18.5 -> v1.19.0
+    Cleaned up gcms.py. 
+
+
+
+
 v1.18.4 -> v1.18.5
     Bug fixes on YAML parsing, multicores in batch_deep_detect_elution_peaks.
 
