@@ -1,6 +1,24 @@
 '''
 Functions for subcommand `annotate`
 
+Annotation links compound identity to features measured in an experiment. 
+
+- For LC-MS, annotation follows [L1.lib -> features]. 
+- For LC-MS/MS, annotation follows [MS2 -> L2.lib -> features].
+Where lib is a compound library with m/z and retention time (and CCS etc.), to be matched to experimentally measured parameters.
+
+MS2 involves clustering of experimental spectra and database search. The result can be in compatible `lib` format. 
+
+Mulitple databases and libs can be used. Additional annotation methods (e.g. CSM) are possible. We use a `combine` step to combine results from multiple libs. 
+
+As multiple features can derive from the same compound, pre-annotation assigns such relationships (isotopes, adducts, fragments and conjugates) in MS and LC-MS. 
+Annotation should prioritize primary ions or neutral mass.
+Mass match alone (low level of confidence) should center on neutral mass. 
+
+GC-MS data are dominated by fragments, requiring a different workflow. 
+
+*******
+
 GC-HRMS annotation functions are added here.
 This does not change default --anno for LC-MS data processing; but we will unify in next version.
 
@@ -266,18 +284,14 @@ def annotate_lcmsms(
         d = {
             'database_key': k,
             'spid': res[4],
-            'expt_precursor_mz': round(res[5], 4),
-            'expt_rtime': res[6],
+            'mz': round(res[5], 4),     # expt_precursor_mz
+            'rtime': res[6],            # expt_rtime
             'entropy_score': round(float(res[2]), 3),
             'cosine_score': round(float(res[1]), 3),
             'number_matched_peaks': int(res[3]),
         }
         d.update(res[0])
         json_concise_results[k] = d
-
-    json_output_file = os.path.join(outdir, project_name_handle+'_MS2_annotation.json')
-    with open(json_output_file, 'w', encoding='utf-8') as O:
-        json.dump(json_concise_results, O, indent=2, ensure_ascii=False)
 
     tsv_output_file = os.path.join(outdir, project_name_handle+'_MS2_annotation.tsv')
     LL = list(json_concise_results.values())
@@ -287,6 +301,10 @@ def annotate_lcmsms(
     with open(tsv_output_file, 'w') as fh:
         fh.write(s)
         
+    json_output_file = os.path.join(outdir, project_name_handle+'_MS2_annotation.json')
+    with open(json_output_file, 'w', encoding='utf-8') as O:
+        json.dump(LL, O, indent=2, ensure_ascii=False)
+
     print(f"MS/MS annotation results ({len(json_concise_results)}) in JSON and tsv were written to {outdir}.\n\n")
 
 
@@ -373,6 +391,7 @@ class LCMS_Annotation:
         print(f"JSON version was written to {outfile}.\n\n")
 
 
+
     def load_annotation_db(self, src='hmdb4'):
         '''
         Load database of known compound using jms.dbStructures.knownCompoundDatabase.
@@ -410,7 +429,6 @@ class LCMS_Annotation:
         [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...],
         where ref_id_num is index number of mass track in MassGrid.
         '''
-    def db_mass_calibrate(self, max_features=1000, required_calibrate_threshold=0.000002):
         mz_landmarks = [f['mz'] for f in self.list_features[:max_features]]
         mass_accuracy_ratio = self.KCD.evaluate_mass_accuracy_ratio(
             mz_landmarks, mode=self.parameters['mode'], mz_tolerance_ppm=10)
@@ -425,6 +443,8 @@ class LCMS_Annotation:
         else:
             print("Mass accuracy check is skipped, too few mz_landmarks (%d) matched." 
                   %len(mz_landmarks))
+
+
 
     def append_orphans_to_epmCpds(self, dict_empCpds):
         '''
@@ -533,7 +553,17 @@ class LCMS_Annotation:
 
 
 
+
+
+
+
+
+#
+#
 # merging with LCMS_Annotation class
+#
+
+
 def annotate_user_featuretable(infile, parameters):
     '''
     

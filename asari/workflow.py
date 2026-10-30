@@ -104,7 +104,7 @@ def process_project(list_input_files, parameters):
     else:
         print("Workflow not supported. Error 100.")
         
-    EE.export_all(anno=parameters['anno']) 
+    EE.export_all(diagnosis=parameters['diagnosis']) 
     
     if parameters['database_mode'] != 'memory':
         remove_intermediate_pickles(parameters)

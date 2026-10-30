@@ -80,7 +80,8 @@ PARAMETERS = {
     'denovo': False,                     # toggle to run de novo construction of empirical compounds (deconvolution)
 
     # for LC annotation, to update
-    'anno': False,                       # to pre-annotate features
+    'anno': False,                       # to pre-annotate features; to phase out after 1.19
+    'diagnosis': True,                   # to keep cache files for viz
     'check_isotope_ratio': False,
     'khipu_rtime_tolerance': 2,          # in seconds, for khipu annotation grouping of features into empirical compounds, to update
     

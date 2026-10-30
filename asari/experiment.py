@@ -181,31 +181,24 @@ class ext_Experiment:
         self.CMAP.global_peak_detection()
 
 
-    def export_all(self, anno=False):
+    def export_all(self, diagnosis=False):
         '''
         Export all files.
         Annotation of features to empirical compounds is done here.
 
         Parameters
         ----------
-        anno: bool, optional, default: False
-            if true, generate annotation files, export CMAP pickle and do QC plot;
-            else skip annotating.
-            
-        To move out anno
-        
+        diagnosis: bool, optional, default: True
+            if true, export CMAP pickle for diagnosis and viz
         '''
         if self.parameters['workflow'] in ["LC", "GC"]:
             self.CMAP.MassGrid.to_csv(
                 os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
-            if anno:
+            if diagnosis:
                 for peak in self.CMAP.FeatureList:
                     peak['id'] = str(peak['id_number'])
                 self.export_CMAP_pickle()
-                self.annotate()
-                
-                # self.generate_qc_plot_pdf()
-                
+
             self.export_feature_tables()
             self.export_log()
             self.export_readme()
@@ -213,7 +206,7 @@ class ext_Experiment:
         elif self.parameters['workflow'] == "DIMS":
             self.CMAP.MassGrid.to_csv(
                 os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
-            if anno:
+            if diagnosis:
                 # add later
                 pass
             self.export_feature_tables()
@@ -250,88 +243,6 @@ class ext_Experiment:
 
             self.export_log()
             self.export_readme()
-
-    #
-    # To remove annotation out of core package, the following functions go to annotate.py
-    #
-
-    def annotate(self):
-        '''
-        Annotate features via JMS (jms.dbStructures) and khipu.
-        The pre-annotation step is khipu based emprical compound construction, followed by 
-        three steps of annotation:
-
-        1) Search known compound database, via neutral mass inferred by khipu
-
-        2) Search singletons for a formula match
-
-        3) Encapsulate remaining features in empCpd format, so that all are exported consistently.
-
-        Export Feature_annotation as tsv, Annotated_empricalCompounds in both JSON and pickle.
-        Reference databases can be pre-loaded. 
-        Measured m/z values are calibrated to database based values (db_mass_calibrate).
-
-        Note
-        ----
-        This produces default annotation with asari, 
-        but one can redo annotation on the features afterwards, using a method of choice.
-        With JMS/khipu, one can also pass custom adduct/isotopes to EED.adduct_patterns etc. 
-        See ExperimentalEcpdDatabase.get_isotope_adduct_patterns().
-        '''
-        self.load_annotation_db()
-        self.db_mass_calibrate()
-
-        # asari uses seconds for rt
-        EED = ExperimentalEcpdDatabase(mode=self.mode, 
-                                       mz_tolerance_ppm=self.mz_tolerance_ppm, rt_tolerance=2)
-        # passing patterns from .default_parameters
-        if self.mode == 'pos':
-            EED.adduct_patterns = adduct_search_patterns
-        else:
-            EED.adduct_patterns = adduct_search_patterns_neg
-        EED.isotope_search_patterns = isotope_search_patterns
-        EED.extended_adducts = extended_adducts
-
-        EED.build_from_list_peaks(self.CMAP.FeatureList)
-        # It takes three steps to take care of all features. First khipu organized empCpds
-        EED.extend_empCpd_annotation(self.KCD)
-        # Second, singletons that get a formula match in KCD
-        EED.annotate_singletons(self.KCD)       
-        # Third, the remaining features unmatched to anything (orphans). Exported for potential downstream work.
-        EED.dict_empCpds = self.append_orphans_to_epmCpds(EED.dict_empCpds)
-
-        self.export_peak_annotation(EED.dict_empCpds, self.KCD, 'Feature_annotation')
-
-        if self.sample_registry:                    # check because some subcommands may not have sample_registry
-            self.select_unique_compound_features(EED.dict_empCpds)
-        
-        # export JSON
-        outfile = os.path.join(self.parameters['outdir'], 'Annotated_empiricalCompounds.json')
-        with open(outfile, 'w', encoding='utf-8') as f:
-            json.dump(EED.dict_empCpds, f, cls=NpEncoder, ensure_ascii=False, indent=2)
-
-        # export pickle
-        outfile = os.path.join(self.parameters['outdir'], 'export', 'epd.pickle')
-        with open(outfile, 'wb') as f:
-            pickle.dump(EED.dict_empCpds, f, pickle.HIGHEST_PROTOCOL)
-
-    def generate_qc_plot_pdf(self, outfile="qc_plot.pdf"):
-        '''
-        
-        Moving out to tool, not keeping in core package. 
-        
-        Generates a PDF figure of a combined plot feature quality metrics.
-        Used only when --anno True (default).
-        Skip if matplotlib is missing.
-        '''
-        try:
-            from .qc import asari_qc_plot
-            # using prefilter CMAP.FeatureTable
-            asari_qc_plot(self.CMAP.FeatureTable,
-                          outfile=os.path.join(self.parameters['outdir'], 'export', outfile))
-
-        except ImportError:
-            print("[QC plot] cannot import matplotlib, skipping.")
 
     def export_CMAP_pickle(self):
         '''
@@ -377,170 +288,6 @@ class ext_Experiment:
         outfile = os.path.join(self.parameters['outdir'], 'export', 'cmap.pickle')
         with open(outfile, 'wb') as f:
             pickle.dump(_export, f, pickle.HIGHEST_PROTOCOL)
-
-
-    def load_annotation_db(self, src='hmdb4'):
-        '''
-        Load database of known compound using jms.dbStructures.knownCompoundDatabase.
-        The compound tree is precomputed indexing.
-        The `src` parameter is not used now, but placeholder to add more options later.
-
-        Parameters
-        ----------
-        src: str, optional, default: hmdb4
-            not used but can, in the future, dictate which database is used to generate annotations
-            
-                
-        To move annotation out of core package. 
-        
-        as for GC and LCMSMS
-                
-        
-        '''
-        self.KCD = knownCompoundDatabase()
-        self.KCD.mass_indexed_compounds = pickle.load( 
-            pkg_resources.open_binary(db, 'mass_indexed_compounds.pickle') )
-        self.KCD.emp_cpds_trees = pickle.load( 
-            pkg_resources.open_binary(db, 'emp_cpds_trees.pickle') )
-
-    def db_mass_calibrate(self, required_calibrate_threshold=0.000002):
-        '''
-        Use KCD.evaluate_mass_accuracy_ratio to check systematic mass shift,
-        which is calculated as the average ppm difference between measured m/z and theoretical values.
-        If greater than required_calibrate_threshold (default 2 ppm), 
-        calibrate m/z values for the whole experiment by updating self.CMAP.FeatureList.
-
-        Parameters
-        ---------
-        required_calibrate_treshold: float, optional, default: 0.000002
-            if the mass shift exceeds this value, mass correction will be applied. 
-
-        Note
-        ----
-        Data format in good_reference_landmark_peaks: 
-        [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...],
-        where ref_id_num is index number of mass track in MassGrid.
-        '''
-        mz_landmarks = [self.CMAP.MassGrid['mz'][p['ref_id_num']] 
-                        for p in self.CMAP.good_reference_landmark_peaks]
-        mass_accuracy_ratio = self.KCD.evaluate_mass_accuracy_ratio(
-            mz_landmarks, mode=self.mode, mz_tolerance_ppm=10)
-        if mass_accuracy_ratio:
-            if abs(mass_accuracy_ratio) > required_calibrate_threshold:
-                print("Mass shift is greater than %2.1f ppm. Correction applied." 
-                      %(required_calibrate_threshold*1000000))
-                _correction = mass_accuracy_ratio + 1
-                for F in self.CMAP.FeatureList:
-                    F['mz'] = F['mz'] / _correction
-                    F['mz_corrected_by_division'] = _correction
-        else:
-            print("Mass accuracy check is skipped, too few mz_landmarks (%d) matched." 
-                  %len(mz_landmarks))
-
-    def append_orphans_to_epmCpds(self, dict_empCpds):
-        '''
-        This is the third step of feature annotation in self.annotate,
-        to encapsulate features without annotation in empCpd format.
-        Input via dict_empCpds and returns updated dict_empCpds.
-        See also: annotate
-
-        Parameters
-        ----------
-        dict_empCpds: dict
-            a dictionary of empirical compounds in empCpd format
-
-        '''
-        all_feature_ids = []
-        for _, V in dict_empCpds.items():
-            all_feature_ids += [peak['id_number'] for peak in V['MS1_pseudo_Spectra']]
-
-        orphans = [peak for peak in self.CMAP.FeatureList if peak['id_number'] not in all_feature_ids]
-        # will need better tracking of empCpd ID; already used in jms.dbStructures new_id_start = len(self.dict_empCpds) + 10000
-        new_id_start = len(dict_empCpds) + 100000
-        for peak in orphans:
-            dict_empCpds[new_id_start] = {'interim_id': new_id_start,
-                    'neutral_formula_mass': '', 
-                    'neutral_formula': '',
-                    'MS1_pseudo_Spectra': [peak],
-                    'ion_relation': None,
-                    'modification': None}
-            new_id_start += 1
-
-        return dict_empCpds
-
-    def export_peak_annotation(self, dict_empCpds, KCD, export_file_name_prefix):
-        '''
-        Export feature annotation to tab delimited tsv file, where interim_id is empCpd id.
-        
-        Parameters
-        ----------
-        dict_empCpds : dict
-            dictionary of empirical compounds, using interim_id as key, as seen in JMS.
-        KCD : KnownCompoundDatabase instance
-            the known compound database that was used in annotating the empirical compounds.
-        export_file_name_prefix : str
-            to used in output file name.
-        '''
-        s = "[peak]id_number\tmz\trtime\tapex(scan number)\t[EmpCpd]interim_id\
-            \t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\
-            \tname_1st_guess\tmatched_DB_shorts\tmatched_DB_records\n"
-        
-        for _, V in dict_empCpds.items():
-            name_1st_guess, matched_DB_shorts, matched_DB_records = '', '', ''
-            if 'list_matches' in V:
-                list_matches = V['list_matches']
-                if list_matches:
-                    name_1st_guess = KCD.mass_indexed_compounds[list_matches[0][0]]['compounds'][0]['name']
-                    matched_DB_shorts = ", ".join([ "(" + KCD.short_report_emp_cpd(xx[0]) + ")"  for xx in list_matches])
-                    matched_DB_records = ", ".join([str(xx) for xx  in list_matches])
-
-            for peak in V['MS1_pseudo_Spectra']:
-                s += '\t'.join([str(x) for x in [
-                    peak['id_number'], peak['mz'], peak['rtime'], peak['apex'], 
-                    V['interim_id'], peak.get('ion_relation', ''),
-                    V['neutral_formula'], V['neutral_formula_mass'],
-                    name_1st_guess, matched_DB_shorts, matched_DB_records]]) + "\n"
-
-        outfile = os.path.join(self.parameters['outdir'], export_file_name_prefix + '.tsv')
-        with open(outfile, encoding='utf-8', mode='w') as O:
-            O.write(s)
-
-        print("\nAnnotation of %d Empirical compounds was written to %s.\n\n" %(len(dict_empCpds), outfile))
-
-    def select_unique_compound_features(self, dict_empCpds):
-        '''
-        Get unique feature by highest composite peak area per empirical compound. 
-        One may consider alternatives to select the peak representing an empirical compound,
-        e.g. by SNR or M+H, M-H ions. This is can be done separately on the exported files.
-
-        Parameters
-        ----------
-        dict_empCpds : dict
-            dictionary of empirical compounds, using interim_id as key, as seen in JMS.
-            
-        To move annotation out of core package.
-        
-        
-        '''
-        self.selected_unique_features = {}
-        for interim_id, V in dict_empCpds.items():
-            if len(V['MS1_pseudo_Spectra']) == 1:
-                self.selected_unique_features[V['MS1_pseudo_Spectra'][0]['id_number']] = (
-                        # empCpd id, neutral_formula, ion_relation
-                        interim_id, V['neutral_formula'], 'singleton'
-                )
-            else:
-                try:
-                    all_peaks = sorted([(peak['peak_area'], peak['goodness_fitting'], peak) 
-                                        for peak in V['MS1_pseudo_Spectra']],
-                                        reverse=True)
-                    best_peak = all_peaks[0][2]
-                except TypeError:
-                    best_peak = V['MS1_pseudo_Spectra'][0]
-                self.selected_unique_features[best_peak['id_number']] = (
-                    # empCpd id, neutral_formula, ion_relation (will change not always anchor)
-                    interim_id, V['neutral_formula'], best_peak.get('ion_relation', '')
-                )
 
     def export_feature_tables(self, _snr=2, _peak_shape=0.7, _cSelectivity=0.7):
         '''
@@ -619,7 +366,6 @@ class ext_Experiment:
             print("Unique compound table (%d x %d) was written to %s.\n" %(
                                 unique_compound_table.shape[0], number_of_samples, outfile))
 
-        
     def export_log(self):
         '''
         Export project parameters to project.json,
@@ -640,3 +386,68 @@ class ext_Experiment:
         outfile = os.path.join(self.parameters['outdir'], 'README.txt')
         with open(outfile, 'w', encoding='utf-8') as f:
             f.write(readme_doc_str)
+
+
+    #
+    # to move out core Asari after 2.0
+    #
+
+    def load_annotation_db(self, src='hmdb4'):
+        '''
+        Load database of known compound using jms.dbStructures.knownCompoundDatabase.
+        The compound tree is precomputed indexing.
+        The `src` parameter is not used now, but placeholder to add more options later.
+
+        Parameters
+        ----------
+        src: str, optional, default: hmdb4
+            not used but can, in the future, dictate which database is used to generate annotations
+            
+                
+        To move annotation out of core package. 
+        
+        as for GC and LCMSMS
+                
+        
+        '''
+        self.KCD = knownCompoundDatabase()
+        self.KCD.mass_indexed_compounds = pickle.load( 
+            pkg_resources.open_binary(db, 'mass_indexed_compounds.pickle') )
+        self.KCD.emp_cpds_trees = pickle.load( 
+            pkg_resources.open_binary(db, 'emp_cpds_trees.pickle') )
+
+    def db_mass_calibrate(self, required_calibrate_threshold=0.000002):
+        '''
+        Use KCD.evaluate_mass_accuracy_ratio to check systematic mass shift,
+        which is calculated as the average ppm difference between measured m/z and theoretical values.
+        If greater than required_calibrate_threshold (default 2 ppm), 
+        calibrate m/z values for the whole experiment by updating self.CMAP.FeatureList.
+
+        Parameters
+        ---------
+        required_calibrate_treshold: float, optional, default: 0.000002
+            if the mass shift exceeds this value, mass correction will be applied. 
+
+        Note
+        ----
+        Data format in good_reference_landmark_peaks: 
+        [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...],
+        where ref_id_num is index number of mass track in MassGrid.
+        '''
+        mz_landmarks = [self.CMAP.MassGrid['mz'][p['ref_id_num']] 
+                        for p in self.CMAP.good_reference_landmark_peaks]
+        mass_accuracy_ratio = self.KCD.evaluate_mass_accuracy_ratio(
+            mz_landmarks, mode=self.mode, mz_tolerance_ppm=10)
+        if mass_accuracy_ratio:
+            if abs(mass_accuracy_ratio) > required_calibrate_threshold:
+                print("Mass shift is greater than %2.1f ppm. Correction applied." 
+                      %(required_calibrate_threshold*1000000))
+                _correction = mass_accuracy_ratio + 1
+                for F in self.CMAP.FeatureList:
+                    F['mz'] = F['mz'] / _correction
+                    F['mz_corrected_by_division'] = _correction
+        else:
+            print("Mass accuracy check is skipped, too few mz_landmarks (%d) matched." 
+                  %len(mz_landmarks))
+
+

@@ -276,15 +276,12 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     else:
         debug_print(to_print=f"Using default peak_area: {parameters['peak_area']}")
 
-    # to del anno arg
-    
-    # set anno
-    if args.anno:
-        parameters['anno'] = booleandict[args.anno]
-        assert parameters['anno'] in {True, False}, "Anno must be either True or False."
-        debug_print(to_print=f"Setting anno to {parameters['anno']}")
+    if args.diagnosis:
+        parameters['diagnosis'] = booleandict[args.diagnosis]
+        assert parameters['diagnosis'] in {True, False}, "Anno must be either True or False."
+        debug_print(to_print=f"Setting diagnosis to {parameters['diagnosis']}")
     else:
-        debug_print(to_print=f"Using default anno: {parameters['anno']}")
+        debug_print(to_print=f"Using default diagnosis: {parameters['diagnosis']}")
 
     # set debug rtime align
     if args.debug_rtime_align:
@@ -403,8 +400,11 @@ def build_parser():
             help='peak area calculation, sum, auc or gauss for area under the curve')
     parser.add_argument('--keep_intermediates', 
             help='keep all intermediate files, ondisk mode only.')
-    parser.add_argument('--anno',
-            help='perform default annotation after processing data')
+    #parser.add_argument('--anno',
+    #        help='perform default annotation after processing data')
+    # diagnosis
+    parser.add_argument('--diagnosis',
+                help='keep diagnosis and viz data after processing data')
     parser.add_argument('--debug_rtime_align', 
             help='Toggle on debug mode for retention alignment: output align figures and reference features.')
     parser.add_argument('--drop_unaligned_samples', 
