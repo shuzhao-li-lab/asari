@@ -266,7 +266,7 @@ def annotate_lcmsms(
             if cosine_score > cosine_similarity_filter:
                 results.append( (entropy_matched_entry, cosine_score, entropy_score, number_matched_peaks, spid, precursor_mz, rtime) )
 
-    # Collapse redundant DB entries for export, selecting by best cosine_score
+    # Collapse redundant DB entries for export, selecting by best cosine_score. Consider to keep top N later.
     concise_results = {}
     for res in results:
             k = res[0][database_key]
@@ -277,33 +277,42 @@ def annotate_lcmsms(
                 concise_results[k] = res
 
     # 
-    json_concise_results = {}
+    json_concise_results = []
     for k, res in concise_results.items():
         # if not isinstance(db_entry['peaks'], list): db_entry['peaks'] = db_entry['peaks'].tolist()
         _ = res[0].pop('peaks')         # exclude peaks
-        d = {
-            'database_key': k,
+        json_concise_results.append({
             'spid': res[4],
             'mz': round(res[5], 4),     # expt_precursor_mz
             'rtime': res[6],            # expt_rtime
             'entropy_score': round(float(res[2]), 3),
             'cosine_score': round(float(res[1]), 3),
             'number_matched_peaks': int(res[3]),
-        }
-        d.update(res[0])
-        json_concise_results[k] = d
+            'database_key': k,
+            'database_entry': res[0],
+        })
 
     tsv_output_file = os.path.join(outdir, project_name_handle+'_MS2_annotation.tsv')
-    LL = list(json_concise_results.values())
-    keys = list(LL[0].keys())
-    s = '\t'.join(keys) + '\n'
-    for row in LL: s += '\t'.join(str(row.get(k, '')) for k in keys) + '\n'
+    keys1 = ['spid', 'mz', 'rtime', 'entropy_score', 'cosine_score', 'number_matched_peaks']
+    keys2 = list(json_concise_results[0]['database_entry'].keys())
+    s = '\t'.join(keys1 + keys2) + '\n'
+    for row in json_concise_results: 
+        s += '\t'.join([str(row.get(k, '')) for k in keys1]
+                                  + [str(row['database_entry'].get(k, '')) for k in keys2]
+                                  ) + '\n'
     with open(tsv_output_file, 'w') as fh:
         fh.write(s)
-        
+
+    json_export = {
+        'type': 'MS/MS', 
+        'database': database_file,
+        'algorithm': 'entropy,cosine',
+        'time_stamp': ':'.join([str(x) for x in time.localtime()[1:6]]),
+        'list_of_features': json_concise_results
+    }
     json_output_file = os.path.join(outdir, project_name_handle+'_MS2_annotation.json')
     with open(json_output_file, 'w', encoding='utf-8') as O:
-        json.dump(LL, O, indent=2, ensure_ascii=False)
+        json.dump(json_export, O, indent=2, ensure_ascii=False)
 
     print(f"MS/MS annotation results ({len(json_concise_results)}) in JSON and tsv were written to {outdir}.\n\n")
 
