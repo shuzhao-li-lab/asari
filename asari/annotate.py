@@ -190,9 +190,17 @@ def annotate_gcms_full(
     # Export list_empCpds JSON and MSP
     list_empCpds = serialize_annotated_empCpds(list_empCpds)
     json_output_file = os.path.join(outdir, project_name_handle+'_annotated_pseudospectra.json')
-    with open(json_output_file, 'w', encoding='utf-8') as O:
-        json.dump(list_empCpds, O, indent=2, ensure_ascii=False)
     json_pseudospectra_to_msp(list_empCpds, json_output_file.replace('.json', '.msp'))
+    json_export = {
+        'type': 'GCMS', 
+        'database': database_file,
+        'algorithm': 'asari-gc-rs',
+        'time_stamp': ':'.join([str(x) for x in time.localtime()[1:6]]),
+        'list_of_empCpds': list_empCpds
+    }
+    with open(json_output_file, 'w', encoding='utf-8') as O:
+        json.dump(json_export, O, indent=2, ensure_ascii=False)
+    
     print(project_name_handle + "_annotated_pseudospectra was written to JSON and MSP formats.\n")
 
     # Deconvolution de novo
