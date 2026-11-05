@@ -33,7 +33,7 @@ from .tools.file_io import read_features_from_asari_table
 def join_tables(file_list_paths, parameters):
     '''
     This joins data from multiple feature tables using the same LC/GC-MS method.
-    Batch correction should be performed after joining. 
+    Batch correction of intensities should be performed after joining. 
 
     file_list_paths : a text file containing list of paths, one per line
     parameters : dict, containing parameters as typical Asari processing
@@ -49,7 +49,7 @@ def join_tables(file_list_paths, parameters):
     Therefore, the sample-wise MassGrid building is standalone version here.
 
     The landmark_guided_dict_mapping function has mass calibration, 
-    triggered by correction_tolerance_ppm (1 default)
+    triggered by correction_tolerance_ppm (1 default).
 
     Format of composite feature is like:
     {'id': 'F00000501m', 'mz': 284.2945, 'rtime': 1116.97, 'parent_masstrack_id': 107, 'height': 150503047, 'rtime_left_base': 1115.77, 'rtime_right_base': 1118.17, 
@@ -57,6 +57,11 @@ def join_tables(file_list_paths, parameters):
     '2C19_H_full_Feature_table.tsv': [{'id': 'F366', 'mz': 284.2946, 'apex': 1116.55}], 
     '2B6_H_full_Feature_table.tsv': [{'id': 'F360', 'mz': 284.2945, 'apex': 1116.81}], 
     'WT_H_full_Feature_table.tsv': []}}
+
+    TO-DO: 
+    options to use standards-calibrated RT alignment or turn off. 
+    E.g. environmental samples may not have consistent landmarks to align;
+    GC RI can be applied per batch, no need to realign in join.
 
     '''
     time_stamp = [str(x) for x in time.localtime()[1:6]]

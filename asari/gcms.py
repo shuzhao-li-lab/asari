@@ -9,10 +9,11 @@ from scipy.spatial.distance import pdist
 
 import ms_entropy as ME
 from jms.search import build_centurion_tree
-from .mass_functions import complete_mass_paired_mapping, all_mass_paired_mapping
 from .tools.cosine import cosine_similarity
-from .tools import match_features 
 from .tools.msp_parser import MSP_dict, parse_msp_to_listdict, msp_standarize
+
+# from .mass_functions import complete_mass_paired_mapping, all_mass_paired_mapping
+# from .tools import match_features 
 
 # Nonunique features are allowed. I.e. a feature can belong to multiple PseudoSpectrum. 
 class PseudoSpectrum(NamedTuple):

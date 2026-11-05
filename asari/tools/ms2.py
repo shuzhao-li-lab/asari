@@ -523,7 +523,9 @@ def match_ms2files_to_features(ms1_fulltable, list_ms2_files,
     
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description='Match MS2 spectra from mzML files to LC-MS1 features from Asari result table.')
+    parser = argparse.ArgumentParser(
+        description='Match MS2 spectra from mzML files to LC-MS1 features from Asari result table.'
+        )
     parser.add_argument('ms1_fulltable', help='Asari feature table file (tsv format).')
     parser.add_argument('ms2_dir', help='Directory containing MS2 mzML files.')
     parser.add_argument('--rt_tol', type=float, default=30, help='Retention time tolerance in seconds (default: 30).')

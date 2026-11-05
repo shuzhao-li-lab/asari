@@ -1,13 +1,10 @@
 import os
 import subprocess
 import multiprocessing as mp
-
-from zipfile import ZipFile
-
 import requests
 
+from zipfile import ZipFile
 from .utils import bulk_process
-
 
 class mzMLconverter:
     versions = {
