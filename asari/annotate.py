@@ -65,6 +65,8 @@ def annotate_project(infile, parameters):
     print(f"Annotation directory: {outdir}.\n\n")
     
     if parameters['workflow'] == "LC":
+
+
         ANN = LCMS_Annotation(parameters)
         ANN.parameters['outdir'] = outdir
         ANN.annotate_user_featuretable(infile)
@@ -91,6 +93,8 @@ def annotate_project(infile, parameters):
         )
 
     elif parameters['workflow'] == "LCMSMS":
+
+
         annotate_lcmsms(
             infile=infile,
             outdir=outdir,
@@ -129,41 +133,69 @@ def annotate_gcms_full(
     feature_distance_filter=None,
     do_mirror_plot=True,
     max_core_features=20000,
-    denovo=False 
+    denovo=False, 
+    algorithm='highres'
     ):
-    '''Workflow using batch_lib_search_score. 
-    
+    '''
+    Workflows 
+    a) Reverse search starting with HRMS database using def batch_lib_reverse_search_score(
+. 
+    b) Fwd search against low-res database, starting with list_pseudospectra
+
+    denovo : to construct pseudospectra (feature groups) from scratch. This is performed after HRMS database reverse search.
     low_peak_filter_factor : to exclude peaks in a spectrum if low_peak_filter_factor*peak < base_peak.
     
     '''
-    # infile in asari format
-    num_samples, list_features = read_features_from_asari_table(open(infile).read())
-    ri_model = read_fit_KovatsIndex_rtime(KovatsIndex, sep='\t', frac=0.3)
-    list_features = append_kovats_index(list_features, ri_model)
-    list_features.sort(key=lambda x: x['peak_area'], reverse=True)
-    dict_features = {f['id']: f for f in list_features}
-    
-    # load GCHRMS Database in MSP or JSON format
+    # load GC-MS Database in MSP or JSON format
     list_lib_entries = reformat_gcms_lib( load_gcms_dbfile(database_file), 
                                      filter_factor=low_peak_filter_factor
                                      )
     dict_lib_entries = {e.id: e for e in list_lib_entries}
     print(f"Imported {len(list_lib_entries)} compound library entries.")
-    
-    feature_dataframe = pd.read_csv(infile, sep="\t", index_col=0)
-    feature_dataframe = feature_dataframe.iloc[:, 10:]
-    
-    matched_results = batch_lib_search_score(
-        list_lib_entries, list_features, dict_features, feature_dataframe,
-        mz_tolerance_da=ms2_tolerance_in_da, ri_tolerance=ri_tolerance,
-        cosine_penalty = cosine_penalty, corr_cutoff=corr_cutoff
-    )
-    list_empCpds, feature_anno_list = curate_batch_lib_search_result(
-        matched_results, 
-        mz_tolerance_da=ms2_tolerance_in_da,
-        score_cutoff_cosine=score_cutoff_cosine, 
-        score_cutoff_entropy=score_cutoff_entropy,
-    )
+
+    if algorithm == 'lowres':
+        # use denovo_pseudospectra json as input; convert to unit mz
+        list_query_spectra = convert_unit_mz(
+            json.load(open(infile))
+        )
+        matched_results = batch_forward_unit_search_score(
+            list_query_spectra, 
+            convert_unit_mz(list_lib_entries),
+            ri_tolerance=30,
+            include_missing_ri=True,
+                    min_matched_peaks=3,
+                    top_n=1,
+        )
+
+        list_empCpds, feature_anno_list = (
+
+            # placeholder
+
+        )
+
+
+    else:   # highres
+        # infile in asari format
+        num_samples, list_features = read_features_from_asari_table(open(infile).read())
+        ri_model = read_fit_KovatsIndex_rtime(KovatsIndex, sep='\t', frac=0.3)
+        list_features = append_kovats_index(list_features, ri_model)
+        list_features.sort(key=lambda x: x['peak_area'], reverse=True)
+        dict_features = {f['id']: f for f in list_features}
+        
+        feature_dataframe = pd.read_csv(infile, sep="\t", index_col=0)
+        feature_dataframe = feature_dataframe.iloc[:, 10:]
+        matched_results = batch_lib_reverse_search_score(
+            list_lib_entries, list_features, dict_features, feature_dataframe,
+            mz_tolerance_da=ms2_tolerance_in_da, ri_tolerance=ri_tolerance,
+            cosine_penalty = cosine_penalty, corr_cutoff=corr_cutoff
+        )
+        list_empCpds, feature_anno_list = curate_batch_lib_search_result(
+            matched_results, 
+            mz_tolerance_da=ms2_tolerance_in_da,
+            score_cutoff_cosine=score_cutoff_cosine, 
+            score_cutoff_entropy=score_cutoff_entropy,
+        )
+
     write_tsv_feature_anno(feature_anno_list, dict_features, dict_lib_entries, 
                         os.path.join(outdir, "Features_" + project_name_handle + '.tsv'))
     write_tsv_empCpd_anno(list_empCpds, dict_features, dict_lib_entries, 
@@ -189,7 +221,7 @@ def annotate_gcms_full(
     
     # Export list_empCpds JSON and MSP
     list_empCpds = serialize_annotated_empCpds(list_empCpds)
-    json_output_file = os.path.join(outdir, project_name_handle+'_annotated_pseudospectra.json')
+    json_output_file = os.path.join(outdir, 'Annotated_pseudospectra_' + project_name_handle + '.json')
     json_pseudospectra_to_msp(list_empCpds, json_output_file.replace('.json', '.msp'))
     json_export = {
         'type': 'GCMS', 
@@ -201,10 +233,10 @@ def annotate_gcms_full(
     with open(json_output_file, 'w', encoding='utf-8') as O:
         json.dump(json_export, O, indent=2, ensure_ascii=False)
     
-    print(project_name_handle + "_annotated_pseudospectra was written to JSON and MSP formats.\n")
+    print(f"{json_output_file} was written to JSON and MSP formats.\n")
 
-    # Deconvolution de novo
-    if denovo:
+    # Deconvolution de novo, only after high-resolution reverse search
+    if denovo and algorithm != 'lowres':
         print("De novo construction of pseudospectra (deconvolution)...")
         core_features = set([f['feature'] for f in feature_anno_list])
         list_pseudospectra, core_features = iterative_build_pseudospectra_by_hcl(

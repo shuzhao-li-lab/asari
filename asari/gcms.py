@@ -6,6 +6,7 @@ import statsmodels.api as sm
 
 from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial.distance import pdist
+from scipy import sparse
 
 import ms_entropy as ME
 from jms.search import build_centurion_tree
@@ -427,7 +428,7 @@ def has_molecular_ion(exact_mass, _peaks, mz_tolerance_da=0.005):
 # Workflows 
 #
 
-def batch_lib_search_score(
+def batch_lib_reverse_search_score(
     list_cpds, 
     list_features, 
     dict_features,
@@ -437,11 +438,10 @@ def batch_lib_search_score(
     cosine_penalty=1,   # not used
     corr_cutoff=0.6, 
     ):
-    '''Match all features from an experiment to compound library of spectra.
-    
+    '''Match compound library of spectra to features from an experiment, 
+    using a reverse search algorithm.
     The featuers within mz and RI window are grouped as a pseudospectrum, 
     which excludes features that do not correlated with the core set. 
-    
     cosine_score and entropy_score are calculated on each pseudospectrum. 
     '''
     Results = []
@@ -486,6 +486,7 @@ def batch_lib_search_score(
     print(f"{len(Results)} matched to library compounds.\n")
     return Results
 
+
 def curate_batch_lib_search_result(
     matched_results, 
     mz_tolerance_da=0.005, 
@@ -496,7 +497,7 @@ def curate_batch_lib_search_result(
     
     determine quant_ion: using the feature of highest sum(correlations to others) in all matched features.
 
-    matched_results : a list of dicts of matched lib_entry and pseudo_spec, from batch_lib_search_score.
+    matched_results : a list of dicts of matched lib_entry and pseudo_spec, from batch_lib_reverse_search_score.
     feature_dataframe : dataframe from feature table, indexed on feaature IDs, sample intensity starts in first col.
     
     Data for mirror plot are in (peaks_as_features, peaks_in_lib).
@@ -748,3 +749,198 @@ def iterative_build_pseudospectra_by_hcl(
         
     return list_pseudospectra, core_features
 
+#
+# Low resolution functions
+#
+
+# ---------------------------------------------------------------------------
+# Unit m/z conversion
+# ---------------------------------------------------------------------------
+
+def _to_unit(peaks):
+    '''
+    peaks: iterable of [mz, intensity].
+    Returns (unit_mz int32 sorted unique, unit_intensity float64, L2-normalized).
+    Intensities falling into the same nominal mass are summed.
+    '''
+    arr = np.asarray(peaks, dtype=np.float64).reshape(-1, 2)
+    arr = arr[arr[:, 1] > 0]
+    if arr.shape[0] == 0:
+        return np.empty(0, np.int32), np.empty(0, np.float64)
+    # plain rounding (half up), not Python's banker's rounding
+    mz = np.floor(arr[:, 0] + 0.5).astype(np.int32)
+    unit_mz, inv = np.unique(mz, return_inverse=True)
+    inten = np.bincount(inv, weights=arr[:, 1])
+    inten /= np.sqrt(np.dot(inten, inten))
+    return unit_mz, inten
+
+
+def convert_unit_mz(list_spectra):
+    '''
+    Convert spectra to unit m/z. Exact m/z is converted to unit mass by plain rounding.
+
+    Applies to both query spectra and library spectra.
+    Input: list of spectra, each a dict with 'peaks' or a list of [mz, intensity].
+    Returns a new list of dicts (input is not modified): the original fields plus
+        'unit_mz': sorted unique int32 array of nominal masses,
+        'unit_intensity': float64 array, summed per nominal mass and L2-normalized,
+    so that cosine similarity reduces to a dot product over shared integers.
+    '''
+    result = []
+    for spec in list_spectra:
+        if isinstance(spec, dict):
+            new = dict(spec)
+            peaks = spec.get('peaks', [])
+        else:
+            new, peaks = {}, spec
+        new['unit_mz'], new['unit_intensity'] = _to_unit(peaks)
+        result.append(new)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Scoring
+# ---------------------------------------------------------------------------
+
+def _get_unit(spec):
+    if isinstance(spec, dict):
+        if 'unit_mz' not in spec:
+            return _to_unit(spec.get('peaks', []))
+        return spec['unit_mz'], spec['unit_intensity']
+    return _to_unit(spec)
+
+
+def unit_search_cosine(spec1, spec2):
+    """
+    The function accepts two spectra, preferably already converted by convert_unit_mz
+    (raw dicts with 'peaks' or [mz, intensity] lists are converted on the fly, slower).
+
+    Because unit m/z values are sorted unique integers and intensities are
+    pre-normalized, cosine = sum of intensity products over shared m/z.
+
+    The score is a float in [0, 1], where 1.0 is a perfect match.
+    Returns score, num_matched_peaks
+    """
+    mz1, int1 = _get_unit(spec1)
+    mz2, int2 = _get_unit(spec2)
+    if mz1.size == 0 or mz2.size == 0:
+        return 0.0, 0
+    # search the shorter array in the longer one
+    if mz1.size > mz2.size:
+        mz1, int1, mz2, int2 = mz2, int2, mz1, int1
+    idx = np.searchsorted(mz2, mz1)
+    idx[idx == mz2.size] = 0
+    hit = mz2[idx] == mz1
+    n = int(hit.sum())
+    if n == 0:
+        return 0.0, 0
+    score = float(np.dot(int1[hit], int2[idx[hit]]))
+    return min(score, 1.0), n
+
+
+def _build_matrix(unit_spectra, n_cols):
+    '''CSR matrix (n_spectra x n_cols) of normalized unit intensities.'''
+    lengths = np.fromiter((s['unit_mz'].size for s in unit_spectra), dtype=np.int64,
+                          count=len(unit_spectra))
+    indptr = np.concatenate([[0], np.cumsum(lengths)])
+    if indptr[-1] == 0:
+        return sparse.csr_matrix((len(unit_spectra), n_cols))
+    indices = np.concatenate([s['unit_mz'] for s in unit_spectra])
+    data = np.concatenate([s['unit_intensity'] for s in unit_spectra])
+    return sparse.csr_matrix((data, indices, indptr), shape=(len(unit_spectra), n_cols))
+
+
+def batch_forward_unit_search_score(
+        query_list,
+        list_cpds,  # library
+        ri_tolerance=30,
+        include_missing_ri=True,
+        min_matched_peaks=3,
+        top_n=1,
+        chunk_size=2000,
+    ):
+    '''
+    Match EI spectra between query list and a library of known compounds.
+
+    Limit spectral comparison to the window within ri_tolerance.
+    - ri_tolerance=None disables the RI filter.
+    - include_missing_ri: library entries (or queries) without RI cannot be ruled
+      out by RI; keep them as candidates if True (MoNA: most entries lack RI).
+
+    Both inputs are converted to unit m/z if not already done by convert_unit_mz.
+    All scores are computed as sparse matrix products, in chunks of queries:
+        cosine  = Q @ L.T            (rows L2-normalized)
+        matched = (Q>0) @ (L>0).T
+
+    Returns one dict per query that has a match (cosine > 0 and
+    num_matched_peaks >= min_matched_peaks), with the best match fields at top
+    level and up to top_n candidates in 'candidates'.
+    '''
+    if query_list and 'unit_mz' not in query_list[0]:
+        query_list = convert_unit_mz(query_list)
+    if list_cpds and 'unit_mz' not in list_cpds[0]:
+        list_cpds = convert_unit_mz(list_cpds)
+    if not query_list or not list_cpds:
+        return []
+
+    max_mz = 1 + max(
+        max((int(s['unit_mz'][-1]) for s in query_list if s['unit_mz'].size), default=0),
+        max((int(s['unit_mz'][-1]) for s in list_cpds if s['unit_mz'].size), default=0),
+    )
+    L = _build_matrix(list_cpds, max_mz)
+    LT = L.T.tocsc()
+    LT_bin = LT.copy()
+    LT_bin.data[:] = 1.0
+
+    lib_ri = np.array([np.nan if s.get('RI') is None else s['RI'] for s in list_cpds])
+    lib_ri_missing = np.isnan(lib_ri)
+
+    Results = []
+    for start in range(0, len(query_list), chunk_size):
+        chunk = query_list[start:start + chunk_size]
+        Q = _build_matrix(chunk, max_mz)
+        Q_bin = Q.copy()
+        Q_bin.data[:] = 1.0
+        scores = (Q @ LT).toarray()
+        matched = (Q_bin @ LT_bin).toarray()
+
+        if ri_tolerance is not None:
+            q_ri = np.array([np.nan if s.get('RI') is None else s['RI'] for s in chunk])
+            with np.errstate(invalid='ignore'):
+                in_window = np.abs(q_ri[:, None] - lib_ri[None, :]) <= ri_tolerance
+            if include_missing_ri:
+                in_window |= lib_ri_missing[None, :] | np.isnan(q_ri)[:, None]
+            scores[~in_window] = 0.0
+        scores[matched < min_matched_peaks] = 0.0
+
+        for i, query in enumerate(chunk):
+            row = scores[i]
+            if top_n == 1:
+                best = np.array([row.argmax()])
+            else:
+                k = min(top_n, row.size)
+                best = np.argpartition(-row, k - 1)[:k]
+                best = best[np.argsort(-row[best], kind='stable')]
+            best = best[row[best] > 0]
+            if best.size == 0:
+                continue
+            candidates = [{
+                'lib_index': int(j),
+                'lib_entry': list_cpds[j],
+                'lib_name': list_cpds[j].get('Name'),
+                'lib_RI': list_cpds[j].get('RI'),
+                'cosine_score': float(min(row[j], 1.0)),
+                'num_matched_peaks': int(matched[i, j]),
+            } for j in best]
+            top = candidates[0]
+            Results.append({
+                'query_id': query.get('id'),
+                'query_RI': query.get('RI'),
+                'lib_entry': top['lib_entry'],
+                'lib_name': top['lib_name'],
+                'lib_RI': top['lib_RI'],
+                'cosine_score': top['cosine_score'],
+                'num_matched_peaks': top['num_matched_peaks'],
+                'candidates': candidates,
+            })
+    return Results

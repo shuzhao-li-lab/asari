@@ -278,10 +278,15 @@ def update_params_from_CLI(parameters, args, debug_print=False):
 
     if args.diagnosis:
         parameters['diagnosis'] = booleandict[args.diagnosis]
-        assert parameters['diagnosis'] in {True, False}, "Anno must be either True or False."
+        assert parameters['diagnosis'] in {True, False}, "diagnosis must be either True or False."
         debug_print(to_print=f"Setting diagnosis to {parameters['diagnosis']}")
     else:
         debug_print(to_print=f"Using default diagnosis: {parameters['diagnosis']}")
+
+    if args.algorithm:
+        parameters['algorithm'] = args.algorithm
+
+
 
     # set debug rtime align
     if args.debug_rtime_align:
@@ -373,6 +378,8 @@ def build_parser():
             help='Custom paramter file in YAML. Use parameters.yaml as template.')
     parser.add_argument('-c', '--multicores', type=int,
             help='nunmber of CPU cores intented to use')
+    parser.add_argument('--algorithm',
+                help='to specify algorithm to use')
     
     parser.add_argument('--files', type=str,
             help='text file listing input mzML file paths, one per line; alternative to --input directory')

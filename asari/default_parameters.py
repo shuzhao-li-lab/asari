@@ -11,20 +11,16 @@
 # 
 PARAMETERS = {
     'project_name': 'asari_project',
+    'workflow': 'LC',                   # 'LC', 'GC', 'DIMS', ... 
+    'algorithm': '',                    # to specifiy algorithm for subcommands, e.g. annotate --algorithm lowres
+    'diagnosis': False,                   # to keep cache files for viz
+
     'outdir': 'output',
     'keep_intermediates': False,        # if true, keep on-disk intermediates       
     'reuse_intermediates': None,        # if provided as a path, reuse intermediates  with same basename as input mzML files to skip extraction.
     'database_mode': 'ondisk',          # `auto` determined on sample number 
                                         # 'ondisk', 'memory' (run in memory, only small studies), 
     'multicores': 4,                    # number of cores allowed in parallel processing
-    
-    # Not using now 
-    # 'target': None,                     # target mz values for extraction     
-    # 'single_file_qc_reports': False,    # if True, generate QC reports for each file, needs spikeins provided or defaults are used.
-    # 'spikeins': None,
-    # 'convert_raw': False,               # if True, convert raw files to mzML, requires mono installed
-    # 'dask_ip': None,                    # IP address for dask distributed computing, to implement
-    # 'retention_index_standards': None,  # path to retention index standards, needed for 'GC' workflow
     
     # mass parameters
     'mode': 'pos',                      # ionization mode
@@ -43,10 +39,6 @@ PARAMETERS = {
     'autoheight': False,                # min_peak_height can be estimated automatically by setting autoheight on in CLI  
     'gaussian_shape': 0.5,              # min cutoff of goodness of fitting to Gauss model
     'peak_area': 'sum',                 # `sum` for simple sum, `auc` for area under the curve, `gauss` for gaussian
-
-    # experimental design related parameters
-    'sample_metadata': None,            # path to sample metadata file, can be used in future to guide alignment and annotation
-    'workflow': 'LC',                   # 'LC', 'GC', 'DIMS', ... 
 
     # autoheight parameters
     'min_min_peak_height': 10,           # in autoheight mode, this sets a lower bound on the minimum peak height it can return
@@ -81,13 +73,10 @@ PARAMETERS = {
 
     # for LC annotation, to update
     'anno': False,                       # to pre-annotate features; to phase out after 1.19
-    'diagnosis': True,                   # to keep cache files for viz
+
     'check_isotope_ratio': False,
     'khipu_rtime_tolerance': 2,          # in seconds, for khipu annotation grouping of features into empirical compounds, to update
     
-    # 
-    'compress': False,       # not use compress option. "join" solves the problem by splitting job  
-
     # default output names
     'output_feature_table': 'Feature_table.tsv',
     'mass_grid_mapping': "_mass_grid_mapping.csv",
@@ -97,6 +86,18 @@ PARAMETERS = {
     # dashboard parameters
     'table_for_viz': 'preferred',
     'vizualization_max_samples': 20,
+    # 
+    'compress': False,       # not use compress option. "join" solves the problem by splitting job  
+    'sample_metadata': None,            # path to sample metadata file, can be used in future to guide alignment and annotation
+
+    # Not using now 
+    # 'target': None,                     # target mz values for extraction     
+    # 'single_file_qc_reports': False,    # if True, generate QC reports for each file, needs spikeins provided or defaults are used.
+    # 'spikeins': None,
+    # 'convert_raw': False,               # if True, convert raw files to mzML, requires mono installed
+    # 'dask_ip': None,                    # IP address for dask distributed computing, to implement
+    # 'retention_index_standards': None,  # path to retention index standards, needed for 'GC' workflow. Replaced by kovats.
+    
     }
 
 
