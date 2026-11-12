@@ -582,8 +582,13 @@ def _normalize_annotation_record(entry, index):
             'lib_peaks': entry.get('peaks_in_lib', []),
         }
         info = {k: v for k, v in entry.items()
-                if k not in ('features', 'peaks_as_features', 'peaks_in_lib', 'peaks')}
+                if k not in ('features', 'peaks_as_features', 'peaks_in_lib', 'peaks')
+                and not isinstance(v, (list, dict))}
         info['number_of_features'] = len(entry.get('features') or [])
+        if 'sources' in entry:
+            # from join --join_algorithm annotation_combine
+            info['sources'] = '; '.join(f"{x['source']}:{x['empCpd']}" for x in entry['sources'])
+            info['number_shared_features_with'] = len(entry.get('shared_features_with') or [])
     record['index'] = index
     record['info'] = info
     return record

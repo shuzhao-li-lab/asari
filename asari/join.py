@@ -523,3 +523,307 @@ def read_table_to_json(feature_table_file):
             'list_mass_tracks': list_mass_tracks
         }
     }
+
+
+# -----------------------------------------------------------------------------
+# join_algorithm dispatch
+# -----------------------------------------------------------------------------
+
+JOIN_ALGORITHMS = ['composite_table_merge', 'annotation_combine']
+
+def join_project(file_list_paths, parameters):
+    """
+    Run subcommand `join` by parameters['join_algorithm']:
+    'composite_table_merge' (default) joins LC/GC-MS feature tables (join_tables);
+    'annotation_combine' combines annotations from different runs or methods, by workflow (GC for now).
+    """
+    algorithm = parameters.get('join_algorithm', 'composite_table_merge')
+    if algorithm == 'composite_table_merge':
+        join_tables(file_list_paths, parameters)
+    elif algorithm == 'annotation_combine':
+        if parameters['workflow'] == 'GC':
+            combine_gc_annotations(file_list_paths, parameters)
+        else:
+            print(f"annotation_combine is not yet supported for workflow {parameters['workflow']}; GC only.")
+    else:
+        print(f"Unknown join_algorithm {algorithm}, must be one of {', '.join(JOIN_ALGORITHMS)}.")
+
+
+# -----------------------------------------------------------------------------
+# annotation_combine for GC
+# -----------------------------------------------------------------------------
+
+def read_annotation_path_list(file_list_paths, pattern='Annotated_pseudospectra_*.json'):
+    """
+    file_list_paths : a text file containing list of paths, one per line,
+    each an annotation JSON file or an annotation directory (containing pattern).
+    """
+    import glob
+    paths = []
+    for line in open(file_list_paths).read().splitlines():
+        line = line.strip().strip('",')
+        if not line or line in ('[', ']'):
+            continue
+        if os.path.isdir(line):
+            found = sorted(glob.glob(os.path.join(line, pattern)))
+            if not found:
+                print(f"Warning: no {pattern} in {line}, skipped.")
+            paths += found[:1]
+        elif os.path.isfile(line):
+            paths.append(line)
+        else:
+            print(f"Warning: {line} not found, skipped.")
+    return paths
+
+def _read_tsv_rows(infile, key):
+    """Read a tsv into {row[key]: row}; empty dict if file not found."""
+    if not os.path.exists(infile):
+        return {}
+    df = pd.read_csv(infile, sep='\t', dtype=str, keep_default_na=False)
+    return {row[key]: row for row in df.to_dict('records')}
+
+def load_gc_annotation_source(json_file, source_index):
+    """
+    Load an annotation JSON (from GC annotate) and its companion tsv files in the same directory
+    (empCpds_<handle>.tsv, Features_<handle>.tsv), used for library and feature details.
+    """
+    data = json.load(open(json_file))
+    handle = os.path.basename(json_file).replace('Annotated_pseudospectra_', '').replace('.json', '')
+    indir = os.path.dirname(json_file)
+    return {
+        'source': source_index,
+        'file': json_file,
+        'database': data.get('database'),
+        'algorithm': data.get('algorithm'),
+        'time_stamp': data.get('time_stamp'),
+        'list_of_empCpds': data.get('list_of_empCpds', []),
+        'empCpd_rows': _read_tsv_rows(os.path.join(indir, 'empCpds_' + handle + '.tsv'), 'empCpd'),
+        'feature_rows': _read_tsv_rows(os.path.join(indir, 'Features_' + handle + '.tsv'), 'feature'),
+    }
+
+def compound_identity_key(epd, inchikey_block=1):
+    """
+    Common identifier of the annotated compound across databases:
+    first inchikey_block blocks of InChIKey (default 1, the skeleton, ignoring stereochemistry and charge);
+    else normalized name; else lib_entry_id.
+    """
+    inchikey = (epd.get('inchikey') or '').strip()
+    if inchikey and inchikey.lower() not in ('none', 'nan'):
+        return 'inchikey:' + '-'.join(inchikey.split('-')[:inchikey_block])
+    name = (epd.get('name') or '').strip().lower()
+    if name:
+        return 'name:' + name
+    return 'lib:' + str(epd.get('lib_entry_id'))
+
+def _representative_score(epd):
+    """Rank to select representative entry: cosine score, then entropy score."""
+    return (epd.get('cosine_score') or 0, epd.get('entropy_score') or 0)
+
+def combine_gc_empCpds(sources, inchikey_block=1):
+    """
+    Combine annotated empCpds from multiple sources (runs or methods on the same feature table).
+    Feature IDs are consistent across sources, empCpd IDs are not.
+
+    Entries are grouped if they have the same compound identity (compound_identity_key)
+    and share at least one feature (connected components, so A~B and B~C are grouped).
+    The same compound on disjoint features (e.g. at different RI) is kept separate.
+    Within a group, the entry of highest cosine score is the representative,
+    for name, quant_ion, RI, scores and peaks (peaks_as_features, peaks_in_lib for mirror plots).
+
+    Returns list of combined empCpds, sorted by RI, with new IDs, and extra fields:
+    identity_key, number_of_sources, sources ([{source, empCpd, lib_entry_id, name, inchikey, scores}]),
+    shared_features_with (combined empCpds of different identity sharing features, i.e. conflicting annotations).
+    """
+    entries = []        # (source_index, epd)
+    for S in sources:
+        for epd in S['list_of_empCpds']:
+            entries.append((S['source'], epd))
+
+    # union-find within each identity key, by shared features
+    parent = list(range(len(entries)))
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    seen = {}       # (identity_key, feature) -> entry index
+    for ii, (_, epd) in enumerate(entries):
+        key = compound_identity_key(epd, inchikey_block)
+        for f in set(epd.get('features') or [epd.get('quant_ion')]):
+            if (key, f) in seen:
+                a, b = find(ii), find(seen[(key, f)])
+                if a != b:
+                    parent[a] = b
+            else:
+                seen[(key, f)] = ii
+    groups = {}
+    for ii in range(len(entries)):
+        groups.setdefault(find(ii), []).append(ii)
+
+    combined = []
+    for members in groups.values():
+        rep_source, rep = max((entries[i] for i in members), key=lambda x: _representative_score(x[1]))
+        features = list(rep.get('features') or [])
+        _fset = set(features)
+        for i in members:
+            for f in entries[i][1].get('features') or []:
+                if f not in _fset:
+                    features.append(f)
+                    _fset.add(f)
+        new = {k: v for k, v in rep.items() if k not in ('id', 'features')}
+        new.update({
+            'identity_key': compound_identity_key(rep, inchikey_block),
+            'features': features,
+            'representative': {'source': rep_source, 'empCpd': rep['id']},
+            'number_of_sources': len(set(entries[i][0] for i in members)),
+            'sources': [{
+                'source': entries[i][0],
+                'empCpd': entries[i][1].get('id'),
+                'lib_entry_id': entries[i][1].get('lib_entry_id'),
+                'name': entries[i][1].get('name'),
+                'inchikey': entries[i][1].get('inchikey'),
+                'cosine_score': entries[i][1].get('cosine_score'),
+                'entropy_score': entries[i][1].get('entropy_score'),
+            } for i in members],
+        })
+        combined.append(new)
+
+    combined.sort(key=lambda x: (x.get('RI') is None, x.get('RI') or 0, x['identity_key']))
+    for ii, epd in enumerate(combined):
+        epd['id'] = 'empCpd_' + "{:04d}".format(ii + 1)
+
+    # conflicting annotations: different identity on shared features
+    feature_to_cpds = {}
+    for epd in combined:
+        for f in epd['features']:
+            feature_to_cpds.setdefault(f, []).append(epd['id'])
+    for epd in combined:
+        others = set()
+        for f in epd['features']:
+            others.update(feature_to_cpds[f])
+        others.discard(epd['id'])
+        epd['shared_features_with'] = sorted(others)
+    return combined
+
+def write_tsv_combined_empCpds(combined, sources, outfile):
+    """
+    Table of combined empCpds, same columns as empCpds_ tsv from GC annotate
+    (library and quant ion details from the representative source), plus combination columns.
+    """
+    base_header = ['empCpd', 'name', 'inchikey', 'formula', 'lib_exact_mass', 'score_cosine', 'score_entropy',
+        'num_matched_peaks', 'quant_ion', 'mz_quant_ion', 'rtime_quant_ion(min)', 'RI_quant_ion', 'lib_RI', 'delta_RI',
+        'has_basepeak', 'has_molecular_ion', 'presence_ratio']
+    extra_header = ['number_of_sources', 'sources', 'number_of_features', 'number_shared_features_with', 'database']
+    dict_sources = {S['source']: S for S in sources}
+    s = '\t'.join(base_header + extra_header) + '\n'
+    for epd in combined:
+        rep = epd['representative']
+        row = dict(dict_sources[rep['source']]['empCpd_rows'].get(rep['empCpd'], {}))
+        row.update({'empCpd': epd['id'], 'name': epd.get('name'), 'inchikey': epd.get('inchikey'),
+                    'quant_ion': epd.get('quant_ion')})
+        for k, v in [('score_cosine', 'cosine_score'), ('score_entropy', 'entropy_score')]:
+            if not row.get(k) and epd.get(v) is not None:
+                row[k] = round(epd[v], 3)
+        if not row.get('RI_quant_ion') and epd.get('RI') is not None:
+            row['RI_quant_ion'] = int(epd['RI'])
+        if not row.get('mz_quant_ion') and epd.get('quant_ion_mz') is not None:
+            row['mz_quant_ion'] = epd['quant_ion_mz']
+        row.update({
+            'number_of_sources': epd['number_of_sources'],
+            'sources': ';'.join(f"{x['source']}:{x['empCpd']}" for x in epd['sources']),
+            'number_of_features': len(epd['features']),
+            'number_shared_features_with': len(epd['shared_features_with']),
+            'database': dict_sources[rep['source']]['database'],
+        })
+        s += '\t'.join(['' if row.get(k) is None else str(row.get(k)) for k in base_header + extra_header]) + '\n'
+    with open(outfile, 'w') as O:
+        O.write(s)
+
+def write_tsv_combined_features(combined, sources, outfile):
+    """
+    Table per annotated feature, same columns as Features_ tsv from GC annotate.
+    Feature details (mz, rtime, RI, peak_area etc.) are taken from any source that has them,
+    since pseudospectra-based annotations may lack feature details.
+    """
+    header = ['feature', 'mz', 'rtime', 'RI', 'empCpd', 'quant_ion', 'score_cosine', 'score_entropy',
+              'name', 'inchikey', 'lib_RI', 'delta_RI', 'peak_area', 'cSelectivity', 'peak_shape', 'snr',
+              'detection_counts', 'number_of_sources']
+    feature_cols = ['mz', 'rtime', 'RI', 'peak_area', 'cSelectivity', 'peak_shape', 'snr', 'detection_counts']
+    dict_features = {}
+    for S in sources:
+        for f, row in S['feature_rows'].items():
+            FF = dict_features.setdefault(f, {})
+            for k in feature_cols:
+                if not FF.get(k) and row.get(k):
+                    FF[k] = row[k]
+    dict_sources = {S['source']: S for S in sources}
+    s = '\t'.join(header) + '\n'
+    for epd in combined:
+        rep = epd['representative']
+        lib_RI = dict_sources[rep['source']]['empCpd_rows'].get(rep['empCpd'], {}).get('lib_RI', '')
+        for f in epd['features']:
+            FF = dict_features.get(f, {})
+            try:
+                delta_RI = round(float(FF['RI']) - float(lib_RI), 2)
+            except (KeyError, ValueError, TypeError):
+                delta_RI = ''
+            row = dict(FF, feature=f, empCpd=epd['id'], quant_ion=epd.get('quant_ion'),
+                       score_cosine='' if epd.get('cosine_score') is None else round(epd['cosine_score'], 3),
+                       score_entropy='' if epd.get('entropy_score') is None else round(epd['entropy_score'], 3),
+                       name=epd.get('name'), inchikey=epd.get('inchikey'), lib_RI=lib_RI, delta_RI=delta_RI,
+                       number_of_sources=epd['number_of_sources'])
+            s += '\t'.join(['' if row.get(k) is None else str(row.get(k)) for k in header]) + '\n'
+    with open(outfile, 'w') as O:
+        O.write(s)
+
+def combine_gc_annotations(file_list_paths, parameters):
+    """
+    join --join_algorithm annotation_combine --workflow GC.
+    Combine multiple GC annotation JSON files (Annotated_pseudospectra_*.json, from runs or methods
+    on the same feature table) to one JSON, and export empCpds_ and Features_ tsv files and MSP.
+    See combine_gc_empCpds for the combination rules.
+
+    file_list_paths : a text file containing list of paths to annotation JSON files or directories, one per line.
+    """
+    from .utils import NpEncoder
+    from .gc_functions import json_pseudospectra_to_msp
+
+    json_files = read_annotation_path_list(file_list_paths)
+    if len(json_files) < 2:
+        print("Need at least two annotation files to combine, found %d." %len(json_files))
+        return
+    time_stamp = [str(x) for x in time.localtime()[1:6]]
+    handle = parameters['project_name']
+    outdir = os.path.join(parameters['outdir'], '_'.join([handle, 'annotation_combine', ''.join(time_stamp)]))
+    os.makedirs(outdir, exist_ok=True)
+    print(f"Output directory: {outdir}.\n")
+
+    sources = [load_gc_annotation_source(f, ii) for ii, f in enumerate(json_files)]
+    for S in sources:
+        print("  source %d: %d empCpds, %s, %s" %(S['source'], len(S['list_of_empCpds']), S['algorithm'], S['file']))
+    combined = combine_gc_empCpds(sources, inchikey_block=parameters.get('combine_inchikey_block', 1))
+
+    write_tsv_combined_empCpds(combined, sources, os.path.join(outdir, 'empCpds_' + handle + '.tsv'))
+    write_tsv_combined_features(combined, sources, os.path.join(outdir, 'Features_' + handle + '.tsv'))
+    json_output_file = os.path.join(outdir, 'Annotated_pseudospectra_' + handle + '.json')
+    json_pseudospectra_to_msp(combined, json_output_file.replace('.json', '.msp'))
+    json_export = {
+        'type': 'GCMS',
+        'database': '; '.join(sorted(set(str(S['database']) for S in sources))),
+        'algorithm': 'annotation_combine',
+        'time_stamp': ':'.join(time_stamp),
+        'sources': [{k: S[k] for k in ['source', 'file', 'database', 'algorithm', 'time_stamp']}
+                    | {'number_of_empCpds': len(S['list_of_empCpds'])} for S in sources],
+        'list_of_empCpds': combined,
+    }
+    with open(json_output_file, 'w', encoding='utf-8') as O:
+        json.dump(json_export, O, ensure_ascii=False, cls=NpEncoder)
+    parameters['join_sources'] = json_files
+    with open(os.path.join(outdir, 'project.json'), 'w', encoding='utf-8') as f:
+        json.dump(parameters, f, ensure_ascii=False, indent=2, cls=NpEncoder)
+
+    multi = sum(1 for x in combined if x['number_of_sources'] > 1)
+    print("\nCombined %d empCpds into %d (%d supported by multiple sources, %d with features shared by other annotations)."
+          %(sum(len(S['list_of_empCpds']) for S in sources), len(combined), multi,
+            sum(1 for x in combined if x['shared_features_with'])))
+    print(f"Results written to {outdir}.\n")

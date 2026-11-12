@@ -16,7 +16,7 @@ from .default_parameters import PARAMETERS
 from .analyze import estimate_min_peak_height, analyze_single_sample
 from .deconvolute import deconvolute_project
 from .annotate import annotate_project
-from .join import join_tables
+from .join import join_project, JOIN_ALGORITHMS
 from .utils import build_boolean_dict
 
 
@@ -71,8 +71,11 @@ def annotate(parameters, args):
     annotate_project(args.input, parameters=parameters)
 
 def join(parameters, args):
-    """Run subcommand `join` on multiple feature tables."""
-    join_tables(args.input, parameters=parameters)
+    """
+    Run subcommand `join` by --join_algorithm: composite_table_merge (default) on multiple feature tables;
+    annotation_combine on multiple annotation results (GC workflow).
+    """
+    join_project(args.input, parameters=parameters)
 
 def list_workflows(parameters=None, args=None):
     """Run subcommand `list_workflows`: print available workflows (use with --workflow)."""
@@ -93,7 +96,8 @@ def viz(parameters, args):
         datadir = args.input
         # the dashboard workflow is determined by 'run' in project.json:
         # 'annotate' (GC, LCMSMS, MSMS) to browse annotated spectra; else processed LC/GC project
-        if read_project_desc(datadir).get('run') == 'annotate':
+        _desc = read_project_desc(datadir)
+        if _desc.get('run') == 'annotate' or (_desc.get('run') == 'join' and _desc.get('join_algorithm') == 'annotation_combine'):
             project_desc, meta, records = read_annotation_project(datadir)
             annotation_dashboard(project_desc, meta, records)
             return
@@ -373,6 +377,11 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     if args.cluster_ms2:
         parameters['cluster_ms2'] = booleandict[args.cluster_ms2]
         debug_print(to_print=f"Setting cluster_ms2 to: {parameters['cluster_ms2']}")
+    if args.join_algorithm:
+        assert args.join_algorithm in JOIN_ALGORITHMS, \
+            "join_algorithm must be one of %s." %', '.join(JOIN_ALGORITHMS)
+        parameters['join_algorithm'] = args.join_algorithm
+        debug_print(to_print=f"Setting join_algorithm to: {parameters['join_algorithm']}")
     if args.mirror_plot:
         parameters['do_mirror_plot'] = booleandict[args.mirror_plot]
         debug_print(to_print=f"Setting do_mirror_plot to: {parameters['do_mirror_plot']}")
@@ -502,6 +511,10 @@ def build_parser():
             help='For LCMSMS and MSMS workflows, cluster MS/MS spectra (default True), '
                  'per mass track in LCMSMS or per precursor m/z group in MSMS; '
                  'if False, export unclustered MS/MS spectra per input file')
+    parser.add_argument('--join_algorithm', type=str,
+            help='For `join`: composite_table_merge (default), joining LC/GC-MS feature tables; '
+                 'or annotation_combine, combining annotation results of different runs or methods '
+                 '(--workflow GC; input is a text file listing annotation JSON files or directories)')
     parser.add_argument('--mirror_plot',
             help='For `annotate --workflow GC`, export PDF mirror plots under mirrorplots/ (default False). '
                  'Interactive mirror plots are available in `asari viz` on the annotation directory')

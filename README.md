@@ -155,6 +155,13 @@ To join data from multiple feature tables using the same LC/GC-MS method:
 `asari join -i pathlist.txt -o OUTDIR -j project_name`
 
 The input for `join` is a list of directories or paths to full feature tables, each a result of asari processing.
+This uses the default `--join_algorithm composite_table_merge`.
+
+To combine GC annotation results from different runs or methods on the same feature table (e.g. reverse search, and forward search on different deconvolutions or libraries):
+
+`asari join -i annotation_list.txt -o OUTDIR -j project_name --workflow GC --join_algorithm annotation_combine`
+
+The input is a text file listing `Annotated_pseudospectra_*.json` files or annotation directories, one per line. Annotations are combined by feature IDs and compound identity (first block of InChIKey by default, `combine_inchikey_block` in parameters; name if no InChIKey): annotations of the same compound sharing any feature are merged, the one of highest cosine score as representative. Output is the same set of files as GC annotation (`Annotated_pseudospectra_`, `empCpds_`, `Features_` and MSP), with sources and number of supporting sources per empCpd; the result directory can be viewed by `asari viz`. `annotation_combine` for LC is planned for next version.
 
 Please check documentation and demo notebooks for additional uses. 
 

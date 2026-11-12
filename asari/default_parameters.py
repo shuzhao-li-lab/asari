@@ -96,6 +96,8 @@ PARAMETERS = {
     'json_empricalCompounds': "_empCpd_json.json",
 
     # dashboard parameters
+    'join_algorithm': 'composite_table_merge',  # `join`: composite_table_merge (feature tables) or annotation_combine (GC annotations)
+    'combine_inchikey_block': 1,         # annotation_combine: InChIKey blocks to match compounds (1 = skeleton, 3 = full key)
     'table_for_viz': 'preferred',
     'vizualization_max_samples': 20,
     #

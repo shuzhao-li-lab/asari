@@ -1,3 +1,6 @@
+v1.19.2 -> v1.19.3
+    Added GC "join --join_algorithm new annotation_combine"
+
 v1.19.1 -> v1.19.2
     Updated LCMSMS workflow with --cluster_ms2. 
     Added cluster_msms_spectra_greedy. 

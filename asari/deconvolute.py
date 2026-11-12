@@ -17,7 +17,7 @@ from .gc_deconvolution import *
 def deconvolute_project(infile, parameters):
     """Run subcommand `deconvolute` on infile, by parameters['workflow']."""
     time_stamp = [str(x) for x in time.localtime()[1:6]]
-    subdir = '_'.join(['annotation', parameters['project_name'], ''.join(time_stamp)])
+    subdir = '_'.join([parameters['project_name'], 'deconvolution', ''.join(time_stamp)])
     outdir = os.path.join(parameters['outdir'], subdir)
     os.makedirs(outdir, exist_ok=True)
     print(f"Result directory: {outdir}.\n\n")

@@ -61,7 +61,7 @@ from .deconvolute import (ingest_gc_featuretable, run_gc_deconvolution)
 def annotate_project(infile, parameters):
     """Run subcommand `annotate` on infile, by parameters['workflow'] (LC, GC or LCMSMS)."""
     time_stamp = [str(x) for x in time.localtime()[1:6]]
-    subdir = '_'.join(['annotation', parameters['project_name'], ''.join(time_stamp)])
+    subdir = '_'.join([parameters['project_name'], 'annotation', ''.join(time_stamp)])
     outdir = os.path.join(parameters['outdir'], subdir)
     os.makedirs(outdir, exist_ok=True)
     print(f"Annotation directory: {outdir}.\n\n")
