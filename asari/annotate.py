@@ -90,8 +90,7 @@ def annotate_project(infile, parameters):
             outdir=outdir,
             database_file=parameters['db'],
             project_name_handle=parameters['project_name'],
-            # ms2_tolerance_in_ppm=parameters['ms2_tolerance_in_ppm'],
-            ms2_tolerance_in_da=parameters['ms2_tolerance_in_da'],
+            ms2_tolerance_in_da=parameters.get('lcmsms_ms2_tolerance_in_da', 0.01),
 
         )
 
@@ -120,7 +119,7 @@ def annotate_lcmsms(
     database_file : pre-indexed database_file compatible with Flash Entropy
     """
     entropy_screen_params = {'mz_tol_ms1': 0.01,
-        'mz_tol_ms2': 0.01,
+        'mz_tol_ms2': ms2_tolerance_in_da,
         'ms2_sim_tol': 0.2,     # intentionally low, to filter later. ENTROPY_FILTER = 0.2
         'precursor_mz_offset': 1.6,
         }

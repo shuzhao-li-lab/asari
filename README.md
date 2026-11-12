@@ -120,6 +120,8 @@ To use LC-MS/MS workflow to produce feature tables and MS/MS clusters:
 `asari process --mode pos --input mydir/projectx_dir --workflow LCMSMS
 `
 
+MS/MS spectra are clustered per composite mass track (default greedy clustering with consensus spectra, `ms2_cluster_method` in parameters) and exported to `export/ms2_spectra.json` and `.msp`. Use `--cluster_ms2 F` to skip clustering and export unclustered spectra per input file as `export/ms2_spectra_<sample>.msp`.
+
 To search MS/MS agains a database:
 
 `asari annotate --db /Users/lish/li.proj/Resources/MSMS_database.pkl -i mydir/projectx_dir/ms2_spectra.json -o mydir/projectx_dir/ --workflow LCMSMS

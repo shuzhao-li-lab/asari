@@ -30,11 +30,13 @@ from .utils import bulk_process
 from .tools.ms2 import rt_cluster_msms
 
 
-def _cluster_track_ms2_worker(item, similarity_function, rt_gap, mz_tolerance, distance_threshold):
+def _cluster_track_ms2_worker(item, similarity_function, rt_gap, mz_tolerance, distance_threshold,
+                              method='greedy', similarity_threshold=0.7, score='entropy'):
     key, track = item
     if track.get('ms2_spectra'):
         track['ms2_spectra'] = rt_cluster_msms(
-            track['ms2_spectra'], similarity_function, rt_gap, mz_tolerance, distance_threshold
+            track['ms2_spectra'], similarity_function, rt_gap, mz_tolerance, distance_threshold,
+            method=method, similarity_threshold=similarity_threshold, score=score
         )
     return key, track
 
@@ -514,21 +516,30 @@ class CompositeMap:
                             similarity_function=None,
                             rt_gap=5,
                             mz_tolerance=0.01,
-                            distance_threshold=0.8):
+                            distance_threshold=0.8,
+                            method='greedy',
+                            similarity_threshold=0.7,
+                            score='entropy'):
         """
         Cluster all MS/MS spectra on each mass track,
         replace track['ms2_spectra'] by cluster results (extended representative spectrum).
 
-        similarity_function : default is the faster version of cosine.
+        similarity_function : default None uses built-in score.
         rt_gap : used to divide clusters on retention time.
         mz_tolerance : m/z tolerance used in MS/MS similarity calculation.
+        distance_threshold : for method 'hcl'.
+        method : 'greedy' (consensus) or 'hcl'.
+        similarity_threshold, score : for method 'greedy'.
         """
-        print("\nClustering MS/MS spectra per mass track ...\n")
+        print("\nClustering MS/MS spectra per mass track (%s) ...\n" %method)
         worker = partial(_cluster_track_ms2_worker,
                          similarity_function=similarity_function,
                          rt_gap=rt_gap,
                          mz_tolerance=mz_tolerance,
-                         distance_threshold=distance_threshold)
+                         distance_threshold=distance_threshold,
+                         method=method,
+                         similarity_threshold=similarity_threshold,
+                         score=score)
         results = bulk_process(worker, list(self.composite_mass_tracks.items()))
         self.composite_mass_tracks = dict(results)
 

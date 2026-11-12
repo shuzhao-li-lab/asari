@@ -96,15 +96,11 @@ def process_project(list_input_files, parameters):
     print(f'Processing Experiment Using {parameters["workflow"]} Workflow...')
 
     if parameters['workflow'] == "LC":
-        EE.process_all_LC()    # processing is same for LC and GC
+        EE.process_all_LC() 
 
     elif parameters['workflow'] == "GC":
-        EE.process_all_LC()    # processing is same for LC and GC
-        if parameters['kovats']:
-            # to add kovats RI
-
-
-            pass
+        # processing is mostly same for LC and GC; parameters['kovats'] is checked at export to add RI
+        EE.process_all_LC()     
 
     elif parameters['workflow'] == "DIMS":
         EE.process_all_DIMS()
@@ -113,6 +109,7 @@ def process_project(list_input_files, parameters):
         EE.process_all_LCMSMS()
 
     elif parameters['workflow'] == "MSMS":
+        # to add
         print("Workflow to be implemented. Error 200.")
 
     else:

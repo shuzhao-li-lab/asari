@@ -1,6 +1,6 @@
 """Asari, trackable and scalable Python program for high-resolution metabolomics data processing."""
 
-__version__ = "1.19.1"
+__version__ = "1.19.2"
 
 from . import analyze
 from . import annotate

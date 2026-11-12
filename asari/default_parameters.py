@@ -77,6 +77,13 @@ PARAMETERS = {
     'hires': True,                       # high resolution data; else use unit mz for search (GC)
     'kovats': None,
 
+    # for LCMSMS
+    'cluster_ms2': True,                 # cluster MS/MS spectra per mass track; else export unclustered spectra per input file
+    'ms2_cluster_method': 'greedy',      # 'greedy' (consensus spectra) or 'hcl' (hierarchical; KDE for large lists)
+    'ms2_similarity_threshold': 0.7,     # minimal similarity to join a cluster, for greedy method
+    'ms2_cluster_score': 'entropy',      # 'entropy' or 'cosine', for greedy method
+    'lcmsms_ms2_tolerance_in_da': 0.01,  # da tolerance for MS/MS peak matching in LCMSMS annotation
+
     # for LC annotation, to update
     'anno': False,                       # to pre-annotate features; to phase out after 1.19
 

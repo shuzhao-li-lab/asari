@@ -332,6 +332,9 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     if args.hires:
         parameters['hires'] = booleandict[args.hires]
         debug_print(to_print=f"Setting hires to: {parameters['hires']}")
+    if args.cluster_ms2:
+        parameters['cluster_ms2'] = booleandict[args.cluster_ms2]
+        debug_print(to_print=f"Setting cluster_ms2 to: {parameters['cluster_ms2']}")
     if args.denovo_limit:
         parameters['max_core_features'] = args.denovo_limit
         debug_print(to_print=f"Setting max_core_features to: {parameters['max_core_features']}")
@@ -456,6 +459,9 @@ def build_parser():
             help='input database file in MSP or JSON.')
     parser.add_argument('--hires',
             help='High resolution or not for GC data')
+    parser.add_argument('--cluster_ms2',
+            help='For LCMSMS workflow, cluster MS/MS spectra per mass track (default True); '
+                 'if False, export unclustered MS/MS spectra per input file')
     parser.add_argument('--denovo_limit', type=int,
             help='Feature numbers to consider in de novo construction of empCpds (deconvolution) on GC data')
 

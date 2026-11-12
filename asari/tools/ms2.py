@@ -207,6 +207,7 @@ def cluster_msms_spectra(list_ms2_spectra, similarity_function=None, mz_toleranc
     if n == 0:
         return [], []
     if n == 1:
+        list_ms2_spectra[0]['cluster_size'] = 1
         return [0], list_ms2_spectra[:]
 
     if similarity_function is None:
@@ -234,6 +235,224 @@ def cluster_msms_spectra(list_ms2_spectra, similarity_function=None, mz_toleranc
         representatives.append(rep)
 
     return raw_labels.tolist(), representatives
+
+
+
+#
+# Greedy consensus clustering of MS/MS spectra
+#
+
+def _prepare_ms2_peaks(peaks, min_rel_intensity=0.01, max_peaks=50):
+    """
+    Clean peaks for similarity: drop peaks < min_rel_intensity of base peak, keep top max_peaks,
+    sort by m/z, normalize intensities to sum 1. Returns (k, 2) numpy array; empty if no peaks.
+    """
+    a = np.array(peaks, dtype=float).reshape(-1, 2)
+    if len(a) == 0:
+        return a
+    a = a[a[:, 1] > 0]
+    if len(a) == 0:
+        return a
+    a = a[a[:, 1] >= min_rel_intensity * a[:, 1].max()]
+    if max_peaks and len(a) > max_peaks:
+        a = a[np.argsort(-a[:, 1])[:max_peaks]]
+    a = a[np.argsort(a[:, 0])]
+    a[:, 1] /= a[:, 1].sum()
+    return a
+
+
+def _entropy_weighted(a):
+    """Entropy intensity weighting (Li et al. 2021) on a sum-normalized (k, 2) array."""
+    x = a[:, 1]
+    entropy = -np.sum(x * np.log(x))
+    if entropy < 3:
+        x = x ** (0.25 + 0.25 * entropy)
+        a = a.copy()
+        a[:, 1] = x / x.sum()
+    return a
+
+
+def _greedy_pairs(s1, s2, mz_tolerance, weights):
+    """Greedy one-to-one matching of peaks within mz_tolerance, ordered by weights (2D). Returns (ii, jj)."""
+    mz_diff = np.abs(s1[:, 0, None] - s2[None, :, 0])
+    ii, jj = np.where(mz_diff <= mz_tolerance)
+    if len(ii) == 0:
+        return ii, jj
+    order = np.argsort(-weights[ii, jj])
+    used1, used2, keep = set(), set(), []
+    for idx in order:
+        i, j = ii[idx], jj[idx]
+        if i not in used1 and j not in used2:
+            keep.append(idx)
+            used1.add(i)
+            used2.add(j)
+    return ii[keep], jj[keep]
+
+
+def entropy_similarity_prepared(s1, s2, mz_tolerance=0.01):
+    """
+    Entropy similarity (Li et al. 2021) between two entropy-weighted, sum-normalized (k, 2) arrays.
+    Returns score in [0, 1].
+    """
+    if len(s1) == 0 or len(s2) == 0:
+        return 0.0
+    a, b = s1[:, 1], s2[:, 1]
+    ii, jj = _greedy_pairs(s1, s2, mz_tolerance, a[:, None] + b[None, :])
+    if len(ii) == 0:
+        return 0.0
+    x, y = a[ii], b[jj]
+    xy = x + y
+    score = np.sum(xy * np.log(xy) - x * np.log(x) - y * np.log(y)) / np.log(4)
+    return float(min(max(score, 0.0), 1.0))
+
+
+def _cosine_prepared(s1, s2, mz_tolerance=0.01):
+    """Greedy cosine on sum-normalized (k, 2) arrays, with sqrt intensity."""
+    if len(s1) == 0 or len(s2) == 0:
+        return 0.0
+    a, b = np.sqrt(s1[:, 1]), np.sqrt(s2[:, 1])
+    a, b = a / np.linalg.norm(a), b / np.linalg.norm(b)
+    ii, jj = _greedy_pairs(s1, s2, mz_tolerance, a[:, None] * b[None, :])
+    return float(min(np.sum(a[ii] * b[jj]), 1.0))
+
+
+def consensus_ms2_spectrum(members, mz_tolerance=0.01, min_fraction=0.5, max_peaks=50):
+    """
+    Build a consensus spectrum from a list of prepared (sum-normalized) peak arrays.
+    Peaks from all members are grouped by m/z (gap <= mz_tolerance); a group is kept if
+    found in >= min_fraction of members (all groups kept if <= 2 members).
+    Consensus m/z is intensity-weighted mean; intensity is the mean over members (0 if absent).
+    Returns (k, 2) array, sum-normalized, sorted by m/z.
+    """
+    n = len(members)
+    if n == 1:
+        return members[0]
+    pooled = np.concatenate([np.column_stack([m, np.full(len(m), ii)]) for ii, m in enumerate(members)])
+    pooled = pooled[np.argsort(pooled[:, 0])]
+    breaks = np.where(np.diff(pooled[:, 0]) > mz_tolerance)[0] + 1
+    min_count = 1 if n <= 2 else int(np.ceil(min_fraction * n))
+    result = []
+    for g in np.split(pooled, breaks):
+        if len(np.unique(g[:, 2])) >= min_count:
+            result.append((np.average(g[:, 0], weights=g[:, 1]), g[:, 1].sum() / n))
+    if not result:
+        # fall back to the leader spectrum
+        return members[0]
+    a = np.array(result)
+    if max_peaks and len(a) > max_peaks:
+        a = a[np.argsort(-a[:, 1])[:max_peaks]]
+        a = a[np.argsort(a[:, 0])]
+    a[:, 1] /= a[:, 1].sum()
+    return a
+
+
+def cluster_msms_spectra_greedy(list_ms2_spectra,
+                                similarity_function=None,
+                                mz_tolerance=0.01,
+                                similarity_threshold=0.7,
+                                rt_gap=None,
+                                score='entropy',
+                                min_fraction=0.5,
+                                min_rel_intensity=0.01,
+                                max_peaks=50):
+    """
+    Greedy (leader) clustering of MS/MS spectra with consensus representatives.
+
+    Spectra are visited by descending total intensity. Each spectrum is compared to the leader
+    (most intense member) of existing clusters whose RT range is within rt_gap; it joins the most
+    similar cluster if score >= similarity_threshold, else starts a new cluster.
+    Cost is O(n x clusters in RT window), so any list size is handled and no spectrum is dropped.
+
+    Parameters
+    ----------
+    list_ms2_spectra : [{precursor_mz: float, rtime: float, peaks: [(mz, intensity), ...]}, ...]
+    similarity_function : optional callable(peaks1, peaks2, mz_tolerance) -> (score, ...),
+        applied to raw peaks; if None, built-in score is used.
+    mz_tolerance : m/z tolerance (Da) for peak matching and consensus peak grouping.
+    similarity_threshold : minimal similarity to join a cluster.
+    rt_gap : seconds; spectra further than this from a cluster RT range are not compared.
+        None means no RT constraint.
+    score : 'entropy' (entropy similarity) or 'cosine' (sqrt-intensity cosine).
+    min_fraction : fraction of members a fragment must be found in to enter the consensus.
+    min_rel_intensity, max_peaks : peak cleaning before similarity.
+
+    Returns
+    -------
+    labels : list of int
+        Zero-indexed cluster label for each input spectrum (input order).
+    representatives : list of dict
+        One consensus spectrum per cluster; new dicts, input spectra are not modified.
+        Keys: precursor_mz, rtime (intensity-weighted means), peaks (consensus, scaled to leader),
+        cluster_size, member_rtimes, leader_rtime, samples (if input spectra have 'sample').
+    """
+    n = len(list_ms2_spectra)
+    if n == 0:
+        return [], []
+
+    prepared = [_prepare_ms2_peaks(sp['peaks'], min_rel_intensity, max_peaks) for sp in list_ms2_spectra]
+    if similarity_function is None:
+        if score == 'entropy':
+            sim_arrays = [_entropy_weighted(a) if len(a) else a for a in prepared]
+            sim = entropy_similarity_prepared
+        elif score == 'cosine':
+            sim_arrays = prepared
+            sim = _cosine_prepared
+        else:
+            raise ValueError("score must be 'entropy' or 'cosine'.")
+    else:
+        sim_arrays = [sp['peaks'] for sp in list_ms2_spectra]
+        sim = lambda x, y, tol: similarity_function(x, y, tol)[0]
+
+    totals = [sum(p[1] for p in sp['peaks']) for sp in list_ms2_spectra]
+    order = sorted(range(n), key=lambda i: -totals[i])
+    labels = [-1] * n
+    clusters = []               # dict: leader, members, rt_lo, rt_hi
+    for i in order:
+        rt = list_ms2_spectra[i]['rtime']
+        best, best_score = None, similarity_threshold
+        for c, C in enumerate(clusters):
+            if rt_gap is not None and not (C['rt_lo'] - rt_gap <= rt <= C['rt_hi'] + rt_gap):
+                continue
+            s = sim(sim_arrays[i], sim_arrays[C['leader']], mz_tolerance)
+            if s >= best_score:
+                best, best_score = c, s
+        if best is None:
+            clusters.append({'leader': i, 'members': [i], 'rt_lo': rt, 'rt_hi': rt})
+            labels[i] = len(clusters) - 1
+        else:
+            C = clusters[best]
+            C['members'].append(i)
+            C['rt_lo'], C['rt_hi'] = min(C['rt_lo'], rt), max(C['rt_hi'], rt)
+            labels[i] = best
+
+    representatives = []
+    for C in clusters:
+        leader = list_ms2_spectra[C['leader']]
+        members = [i for i in C['members'] if len(prepared[i])]
+        rep = {k: v for k, v in leader.items() if k not in ('peaks', 'sample')}
+        if len(members) <= 1 or len(prepared[C['leader']]) == 0:
+            rep['peaks'] = [(mz, intensity) for mz, intensity in leader['peaks']]
+        else:
+            cons = consensus_ms2_spectrum([prepared[C['leader']]] + [prepared[i] for i in members
+                                                                     if i != C['leader']],
+                                          mz_tolerance, min_fraction, max_peaks)
+            scale = max(p[1] for p in leader['peaks']) / cons[:, 1].max()
+            rep['peaks'] = [(float(mz), int(round(intensity * scale))) for mz, intensity in cons]
+        w = np.array([totals[i] for i in C['members']], dtype=float)
+        w = w if w.sum() > 0 else None
+        rep['precursor_mz'] = float(np.average([list_ms2_spectra[i]['precursor_mz'] for i in C['members']],
+                                               weights=w))
+        rep['rtime'] = float(np.average([list_ms2_spectra[i]['rtime'] for i in C['members']], weights=w))
+        rep['leader_rtime'] = leader['rtime']
+        rep['member_rtimes'] = sorted(round(list_ms2_spectra[i]['rtime'], 2) for i in C['members'])
+        rep['cluster_size'] = len(C['members'])
+        samples = sorted({list_ms2_spectra[i]['sample'] for i in C['members']
+                          if 'sample' in list_ms2_spectra[i]})
+        if samples:
+            rep['samples'] = samples
+        representatives.append(rep)
+
+    return labels, representatives
 
 
 def find_track_kde_peaks(sorted_list_rtimes,
@@ -266,10 +485,16 @@ def find_track_kde_peaks(sorted_list_rtimes,
 def rt_cluster_msms(
         list_ms2_spectra, similarity_function,
         rt_gap=5, mz_tolerance=0.05, distance_threshold=0.8,
-        switch_list_size=100, kde_peak_window=1
+        switch_list_size=100, kde_peak_window=1,
+        method='greedy', similarity_threshold=0.7, score='entropy'
         ):
     """
-    Cluster MS/MS spectra first by RT proximity, then by cosine similarity within each RT group.
+    Cluster MS/MS spectra on a mass track.
+
+    method 'greedy' : cluster_msms_spectra_greedy, RT-windowed greedy clustering with consensus spectra.
+        Uses similarity_threshold and score; distance_threshold, switch_list_size, kde_peak_window not used.
+    method 'hcl' : first by RT proximity, then by cosine similarity (hierarchical) within each RT group;
+        KDE peak extraction if more than switch_list_size spectra.
 
     list_ms2_spectra : [{precursor_mz: float, rtime: float, peaks: [(), ...]}, ...]
     rt_gap : spectra more than this many seconds apart start a new RT group.
@@ -281,6 +506,13 @@ def rt_cluster_msms(
     """
     if not list_ms2_spectra:
         return []
+
+    if method == 'greedy':
+        _, reps = cluster_msms_spectra_greedy(list_ms2_spectra, similarity_function,
+                                              mz_tolerance=mz_tolerance,
+                                              similarity_threshold=similarity_threshold,
+                                              rt_gap=rt_gap, score=score)
+        return sorted(reps, key=lambda x: x['rtime'])
 
     if len(list_ms2_spectra) == 1:
         list_ms2_spectra[0]['cluster_size'] = 1
@@ -346,8 +578,13 @@ def json_ms2_to_msp(records, outfile='test.msp'):
             peaks = entry.get('peaks_as_features', [])
         lines.append(f"ID: {entry.get('id', '')}")
         lines.append(f"PRECURSORMZ: {entry.get('precursor_mz', '')}")
-        lines.append(f"cluster_size: {entry.get('cluster_size', '')}")
+        if 'sample' in entry:
+            lines.append(f"sample: {entry['sample']}")
+        if 'cluster_size' in entry:
+            lines.append(f"cluster_size: {entry['cluster_size']}")
         lines.append(f"parent_masstrack_id: {entry.get('parent_masstrack_id', '')}")
+        if 'parent_masstrack_mz' in entry:
+            lines.append(f"parent_masstrack_mz: {entry['parent_masstrack_mz']}")
         lines.append(f"RETENTIONTIME: {entry.get('rtime', '')}")
         lines.append(f"Num Peaks: {len(peaks)}")
         for mz, intensity in peaks:
