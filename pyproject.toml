@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asari-metabolomics"
+dynamic = ["version", "dependencies"]
+description = "metabolomics data processing"
+readme = "README.md"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [{ name = "Shuzhao Li", email = "shuzhao.li@gmail.com" }]
+keywords = ["metabolomics", "bioinformatics", "mass spectrometry"]
+requires-python = ">=3.9"
+classifiers = [
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.optional-dependencies]
+# asari viz (Dashboard)
+viz = ["panel>=1.0", "holoviews", "hvplot", "bokeh"]
+# NMF deconvolution in GC workflow, PCA plots
+gc = ["scikit-learn"]
+# misc plotting tools
+plot = ["matplotlib", "seaborn", "plotly"]
+all = ["asari-metabolomics[viz,gc,plot]"]
+
+[project.urls]
+Homepage = "https://github.com/shuzhao-li/asari"
+Documentation = "https://asari.readthedocs.io"
+
+[project.scripts]
+asari = "asari.command_line:main"
+
+[tool.setuptools]
+zip-safe = false
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["asari", "asari.*"]
+
+[tool.setuptools.package-data]
+asari = ["db/*.pickle", "db/*.json", "db/*.msp", "db/README.md"]
+
+[tool.setuptools.dynamic]
+version = { attr = "asari.__version__" }
+dependencies = { file = ["requirements.txt"] }
