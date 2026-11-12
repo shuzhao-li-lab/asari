@@ -2,7 +2,7 @@
 Four spectral similarity algorithms for MS2 spectra comparison.
 
 See evaluation notebook for benchmarking and discussion:
-`notebooks/evaluate_cosine_scoring_functions.ipynb` 
+`notebooks/evaluate_cosine_scoring_functions.ipynb`
 """
 
 import numpy as np
@@ -15,7 +15,7 @@ def cosine_similarity(spec1, spec2, mz_tolerance=0.05):
     where column 0 is m/z and column 1 is intensity.
     The score is a float in [0, 1], where 1.0 is a perfect match.
     Returns score, num_matched_peaks
-    
+
     Greedy cosine similarity: peaks are matched in descending order of
     intensity product, each peak used at most once.
     This is simple_cosine, the most common cosine variant in MS/MS database search

@@ -30,6 +30,7 @@ def read_spectra(path):
 
 
 def read_msp(path):
+    """Read spectra from an MSP file."""
     spectra = []
     with open(path, encoding='utf-8', errors='replace') as f:
         meta, peak_lines = {}, []
@@ -50,6 +51,7 @@ def read_msp(path):
 
 
 def read_mgf(path):
+    """Read spectra from an MGF file."""
     spectra = []
     with open(path, encoding='utf-8', errors='replace') as f:
         meta, peak_lines, inside = {}, [], False

@@ -1,21 +1,21 @@
-'''
+"""
 Functions for subcommand `annotate`
 
-Annotation links compound identity to features measured in an experiment. 
+Annotation links compound identity to features measured in an experiment.
 
-- For LC-MS, annotation follows [L1.lib -> features]. 
+- For LC-MS, annotation follows [L1.lib -> features].
 - For LC-MS/MS, annotation follows [MS2 -> L2.lib -> features].
 Where lib is a compound library with m/z and retention time (and CCS etc.), to be matched to experimentally measured parameters.
 
-MS2 involves clustering of experimental spectra and database search. The result can be in compatible `lib` format. 
+MS2 involves clustering of experimental spectra and database search. The result can be in compatible `lib` format.
 
-Mulitple databases and libs can be used. Additional annotation methods (e.g. CSM) are possible. We use a `combine` step to combine results from multiple libs. 
+Mulitple databases and libs can be used. Additional annotation methods (e.g. CSM) are possible. We use a `combine` step to combine results from multiple libs.
 
-As multiple features can derive from the same compound, pre-annotation assigns such relationships (isotopes, adducts, fragments and conjugates) in MS and LC-MS. 
+As multiple features can derive from the same compound, pre-annotation assigns such relationships (isotopes, adducts, fragments and conjugates) in MS and LC-MS.
 Annotation should prioritize primary ions or neutral mass.
-Mass match alone (low level of confidence) should center on neutral mass. 
+Mass match alone (low level of confidence) should center on neutral mass.
 
-GC-MS data are dominated by fragments, requiring a different workflow. 
+GC-MS data are dominated by fragments, requiring a different workflow.
 
 *******
 
@@ -30,13 +30,13 @@ asari annotate -i /Users/lish/li.proj/IndiPHARM/LookAhead/GCMS/lookahead_gcms_as
             --db /Users/lish/li.proj/asari_project/GCHRMS/Resources/GCHRMS_Database_251217.msp \
                 --denovo F --workflow GC
 
-LC: 
+LC:
 asari annotate -i /Users/lish/li.play/test16_v16_599432/preferred_Feature_table.tsv -o /Users/lish/li.play/test16_v16_599432/ -j v16lc --workflow LC --mode pos
 
 LC-MS/MS
 asari annotate --db /Users/lish/li.proj/Resources/MSMS-Public_experimentspectra-pos-VS19.pkl -i /Users/lish/li.play/miao_u2c_IDX028_asari_project_6512215/export/ms2_spectra.json -o /Users/lish/li.play/miao_u2c_IDX02/ --workflow LCMSMS
 
-'''
+"""
 
 import os
 import json
@@ -48,8 +48,8 @@ from pathvalidate import sanitize_filename
 from . import db
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 
-from .default_parameters import (extended_adducts, adduct_search_patterns_pos, 
-                         adduct_search_patterns_neg, 
+from .default_parameters import (extended_adducts, adduct_search_patterns_pos,
+                         adduct_search_patterns_neg,
                          isotope_search_patterns)
 from .utils import NpEncoder
 from .tools.file_io import read_features_from_asari_table
@@ -59,18 +59,19 @@ from .gc_functions import *
 from .deconvolute import (ingest_gc_featuretable, run_gc_deconvolution)
 
 def annotate_project(infile, parameters):
+    """Run subcommand `annotate` on infile, by parameters['workflow'] (LC, GC or LCMSMS)."""
     time_stamp = [str(x) for x in time.localtime()[1:6]]
     subdir = '_'.join(['annotation', parameters['project_name'], ''.join(time_stamp)])
     outdir = os.path.join(parameters['outdir'], subdir)
     os.makedirs(outdir, exist_ok=True)
     print(f"Annotation directory: {outdir}.\n\n")
-    
+
     if parameters['workflow'] == "LC":
         # to add deconvolute and algorithms in version 2
         ANN = LCMS_Annotation(parameters)
         ANN.parameters['outdir'] = outdir
         ANN.annotate_user_featuretable(infile)
-        
+
     elif parameters['workflow'] == "GC":
         ANN = GCMS_Annotation(dict(parameters, outdir=outdir))
         if infile.endswith('.tsv'):
@@ -89,12 +90,12 @@ def annotate_project(infile, parameters):
             outdir=outdir,
             database_file=parameters['db'],
             project_name_handle=parameters['project_name'],
-            # ms2_tolerance_in_ppm=parameters['ms2_tolerance_in_ppm'], 
-            ms2_tolerance_in_da=parameters['ms2_tolerance_in_da'], 
+            # ms2_tolerance_in_ppm=parameters['ms2_tolerance_in_ppm'],
+            ms2_tolerance_in_da=parameters['ms2_tolerance_in_da'],
 
         )
 
-    # recording project parameters as meta data 
+    # recording project parameters as meta data
     with open(os.path.join(outdir, 'project.json'), 'w', encoding='utf-8') as f:
         json.dump(parameters, f, cls=NpEncoder, ensure_ascii=False, indent=2)
 
@@ -112,27 +113,27 @@ def annotate_lcmsms(
         cosine_similarity_filter=0.5,
         database_key='INCHIKEY'
     ):
-    '''
-    LC-MS/MS annotation of the input JSON file on a pre-indexed database_file. 
+    """
+    LC-MS/MS annotation of the input JSON file on a pre-indexed database_file.
 
     infile : MS/MS spectra or clusters (as from Asari LCMSMS process workflow) in JSON
     database_file : pre-indexed database_file compatible with Flash Entropy
-    '''
+    """
     entropy_screen_params = {'mz_tol_ms1': 0.01,
         'mz_tol_ms2': 0.01,
         'ms2_sim_tol': 0.2,     # intentionally low, to filter later. ENTROPY_FILTER = 0.2
         'precursor_mz_offset': 1.6,
         }
-    
+
     entropy_search = pickle.load(open(database_file, 'rb'))
     print(f"Loaded database of {len(entropy_search.precursor_mz_array)} spectra.")
     ms2_spectra = json.load(open(infile))
     cleaned_spectra = clean_list_ms2spectra(ms2_spectra, entropy_search, entropy_screen_params)
     print(f"Loadded {len(cleaned_spectra)} cleaned experimental spectra.\n")
-    
+
     results = []
     for (precursor_mz, peaks, rtime, spid) in cleaned_spectra:
-        similarity, matched_num = entropy_search.identity_search(precursor_mz=precursor_mz, 
+        similarity, matched_num = entropy_search.identity_search(precursor_mz=precursor_mz,
                                                                 peaks=peaks,
                                                                 ms1_tolerance_in_da=entropy_screen_params['mz_tol_ms1'],
                                                                 ms2_tolerance_in_da=entropy_screen_params['mz_tol_ms2'],
@@ -144,7 +145,7 @@ def annotate_lcmsms(
             entropy_score = similarity[best_idx]
             number_matched_peaks = matched_num[best_idx]
             # get cosine score
-            cosine_score, _ = cosine_similarity(peaks, entropy_matched_entry['peaks'], 
+            cosine_score, _ = cosine_similarity(peaks, entropy_matched_entry['peaks'],
                                             mz_tolerance=ms2_tolerance_in_da)
             if cosine_score > cosine_similarity_filter:
                 results.append( (entropy_matched_entry, cosine_score, entropy_score, number_matched_peaks, spid, precursor_mz, rtime) )
@@ -159,7 +160,7 @@ def annotate_lcmsms(
             else:
                 concise_results[k] = res
 
-    # 
+    #
     json_concise_results = []
     for k, res in concise_results.items():
         # if not isinstance(db_entry['peaks'], list): db_entry['peaks'] = db_entry['peaks'].tolist()
@@ -179,7 +180,7 @@ def annotate_lcmsms(
     keys1 = ['spid', 'mz', 'rtime', 'entropy_score', 'cosine_score', 'number_matched_peaks']
     keys2 = list(json_concise_results[0]['database_entry'].keys())
     s = '\t'.join(keys1 + keys2) + '\n'
-    for row in json_concise_results: 
+    for row in json_concise_results:
         s += '\t'.join([str(row.get(k, '')) for k in keys1]
                                   + [str(row['database_entry'].get(k, '')) for k in keys2]
                                   ) + '\n'
@@ -187,7 +188,7 @@ def annotate_lcmsms(
         fh.write(s)
 
     json_export = {
-        'type': 'MS/MS', 
+        'type': 'MS/MS',
         'database': database_file,
         'algorithm': 'entropy,cosine',
         'time_stamp': ':'.join([str(x) for x in time.localtime()[1:6]]),
@@ -205,20 +206,21 @@ def annotate_lcmsms(
 #
 
 class LCMS_Annotation:
+    """Annotation of LC-MS feature tables."""
     def __init__(self, parameters):
         self.parameters = parameters
 
     def annotate_user_featuretable(self, infile):
-        '''
+        """
             Annotate a user supplied feature table. Used by asari subcommand `annotate`.
 
         Parameters
         ----------
         infile : str
-            input feature table filepath, tab delimited file with first row as header, 
+            input feature table filepath, tab delimited file with first row as header,
             first column m/z and 2nd column rtime.
         parameters : dict
-            parameter dictionary passed from main.py, 
+            parameter dictionary passed from main.py,
             which imports from default_parameters and updates the dict by user arguments.
         rtime_tolerance : int, optional, default: 2
             retention time tolerance to group adducts etc.
@@ -226,12 +228,12 @@ class LCMS_Annotation:
         Outputs
         -------
         two files in current directory, Feature_annotation.tsv and Annotated_empricalCompounds.json
-    
+
 
         Note
         ----
         Annotate features via JMS (jms.dbStructures) and khipu.
-        The pre-annotation step is khipu based emprical compound construction, followed by 
+        The pre-annotation step is khipu based emprical compound construction, followed by
         three steps of annotation:
 
         1) Search known compound database, via neutral mass inferred by khipu
@@ -241,21 +243,21 @@ class LCMS_Annotation:
         3) Encapsulate remaining features in empCpd format, so that all are exported consistently.
 
         Export Feature_annotation as tsv, Annotated_empricalCompounds in both JSON and pickle.
-        Reference databases can be pre-loaded. 
+        Reference databases can be pre-loaded.
         Measured m/z values are calibrated to database based values (db_mass_calibrate).
-        '''
+        """
         _n, list_features = read_features_from_asari_table(open(infile).read())
         for f in list_features:
                 f['representative_intensity'] = f['peak_area']
         list_features.sort(key=lambda x: x['peak_area'], reverse=True)
         self.list_features = list_features
-                
+
         self.load_annotation_db()
         self.db_mass_calibrate()
 
         # asari uses seconds for rt
-        EED = ExperimentalEcpdDatabase(mode=self.parameters['mode'], 
-                                       mz_tolerance_ppm=self.parameters['mz_tolerance_ppm'], 
+        EED = ExperimentalEcpdDatabase(mode=self.parameters['mode'],
+                                       mz_tolerance_ppm=self.parameters['mz_tolerance_ppm'],
                                        rt_tolerance=self.parameters['khipu_rtime_tolerance']
                                        )
         # passing patterns from .default_parameters
@@ -270,7 +272,7 @@ class LCMS_Annotation:
         # It takes three steps to take care of all features. First khipu organized empCpds
         EED.extend_empCpd_annotation(self.KCD)
         # Second, singletons that get a formula match in KCD
-        EED.annotate_singletons(self.KCD)       
+        EED.annotate_singletons(self.KCD)
         # Third, the remaining features unmatched to anything (orphans). Exported for potential downstream work.
         EED.dict_empCpds = self.append_orphans_to_epmCpds(EED.dict_empCpds)
 
@@ -283,9 +285,8 @@ class LCMS_Annotation:
         print(f"JSON version was written to {outfile}.\n\n")
 
 
-
     def load_annotation_db(self, src='hmdb4'):
-        '''
+        """
         Load database of known compound using jms.dbStructures.knownCompoundDatabase.
         The compound tree is precomputed indexing.
         The `src` parameter is not used now, but placeholder to add more options later.
@@ -294,52 +295,51 @@ class LCMS_Annotation:
         ----------
         src: str, optional, default: hmdb4
             not used but can, in the future, dictate which database is used to generate annotations
-              
-        
-        '''
+
+
+        """
         self.KCD = knownCompoundDatabase()
-        self.KCD.mass_indexed_compounds = pickle.load( 
+        self.KCD.mass_indexed_compounds = pickle.load(
             pkg_resources.open_binary(db, 'mass_indexed_compounds.pickle') )
-        self.KCD.emp_cpds_trees = pickle.load( 
+        self.KCD.emp_cpds_trees = pickle.load(
             pkg_resources.open_binary(db, 'emp_cpds_trees.pickle') )
 
     def db_mass_calibrate(self, max_features=1000, required_calibrate_threshold=0.000002):
-        '''
+        """
         Use KCD.evaluate_mass_accuracy_ratio to check systematic mass shift,
         which is calculated as the average ppm difference between measured m/z and theoretical values.
-        If greater than required_calibrate_threshold (default 2 ppm), 
+        If greater than required_calibrate_threshold (default 2 ppm),
         calibrate m/z values for the whole experiment by updating self.CMAP.FeatureList.
 
         Parameters
         ---------
         required_calibrate_treshold: float, optional, default: 0.000002
-            if the mass shift exceeds this value, mass correction will be applied. 
+            if the mass shift exceeds this value, mass correction will be applied.
 
         Note
         ----
-        Data format in good_reference_landmark_peaks: 
+        Data format in good_reference_landmark_peaks:
         [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...],
         where ref_id_num is index number of mass track in MassGrid.
-        '''
+        """
         mz_landmarks = [f['mz'] for f in self.list_features[:max_features]]
         mass_accuracy_ratio = self.KCD.evaluate_mass_accuracy_ratio(
             mz_landmarks, mode=self.parameters['mode'], mz_tolerance_ppm=10)
         if mass_accuracy_ratio:
             if abs(mass_accuracy_ratio) > required_calibrate_threshold:
-                print("Mass shift is greater than %2.1f ppm. Correction applied." 
+                print("Mass shift is greater than %2.1f ppm. Correction applied."
                       %(required_calibrate_threshold*1000000))
                 _correction = mass_accuracy_ratio + 1
                 for F in self.list_features:
                     F['mz'] = F['mz'] / _correction
                     F['mz_corrected_by_division'] = _correction
         else:
-            print("Mass accuracy check is skipped, too few mz_landmarks (%d) matched." 
+            print("Mass accuracy check is skipped, too few mz_landmarks (%d) matched."
                   %len(mz_landmarks))
 
 
-
     def append_orphans_to_epmCpds(self, dict_empCpds):
-        '''
+        """
         This is the third step of feature annotation in self.annotate,
         to encapsulate features without annotation in empCpd format.
         Input via dict_empCpds and returns updated dict_empCpds.
@@ -350,7 +350,7 @@ class LCMS_Annotation:
         dict_empCpds: dict
             a dictionary of empirical compounds in empCpd format
 
-        '''
+        """
         all_feature_ids = []
         for _, V in dict_empCpds.items():
             all_feature_ids += [peak['id_number'] for peak in V['MS1_pseudo_Spectra']]
@@ -360,7 +360,7 @@ class LCMS_Annotation:
         new_id_start = len(dict_empCpds) + 100000
         for peak in orphans:
             dict_empCpds[new_id_start] = {'interim_id': new_id_start,
-                    'neutral_formula_mass': '', 
+                    'neutral_formula_mass': '',
                     'neutral_formula': '',
                     'MS1_pseudo_Spectra': [peak],
                     'ion_relation': None,
@@ -370,9 +370,9 @@ class LCMS_Annotation:
         return dict_empCpds
 
     def export_peak_annotation(self, dict_empCpds, KCD, export_file_name_prefix):
-        '''
+        """
         Export feature annotation to tab delimited tsv file, where interim_id is empCpd id.
-        
+
         Parameters
         ----------
         dict_empCpds : dict
@@ -381,11 +381,11 @@ class LCMS_Annotation:
             the known compound database that was used in annotating the empirical compounds.
         export_file_name_prefix : str
             to used in output file name.
-        '''
+        """
         s = "[peak]id_number\tmz\trtime\tapex(scan number)\t[EmpCpd]interim_id\
             \t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\
             \tname_1st_guess\tmatched_DB_shorts\tmatched_DB_records\n"
-        
+
         for _, V in dict_empCpds.items():
             name_1st_guess, matched_DB_shorts, matched_DB_records = '', '', ''
             if 'list_matches' in V:
@@ -397,7 +397,7 @@ class LCMS_Annotation:
 
             for peak in V['MS1_pseudo_Spectra']:
                 s += '\t'.join([str(x) for x in [
-                    peak['id_number'], peak['mz'], peak['rtime'], peak['apex'], 
+                    peak['id_number'], peak['mz'], peak['rtime'], peak['apex'],
                     V['interim_id'], peak.get('ion_relation', ''),
                     V['neutral_formula'], V['neutral_formula_mass'],
                     name_1st_guess, matched_DB_shorts, matched_DB_records]]) + "\n"
@@ -409,8 +409,8 @@ class LCMS_Annotation:
         print("\nAnnotation of %d Empirical compounds was written to %s.\n\n" %(len(dict_empCpds), outfile))
 
     def select_unique_compound_features(self, dict_empCpds):
-        '''
-        Get unique feature by highest composite peak area per empirical compound. 
+        """
+        Get unique feature by highest composite peak area per empirical compound.
         One may consider alternatives to select the peak representing an empirical compound,
         e.g. by SNR or M+H, M-H ions. This is can be done separately on the exported files.
 
@@ -418,11 +418,11 @@ class LCMS_Annotation:
         ----------
         dict_empCpds : dict
             dictionary of empirical compounds, using interim_id as key, as seen in JMS.
-            
+
         Not used now.
-        
-        
-        '''
+
+
+        """
         self.selected_unique_features = {}
         for interim_id, V in dict_empCpds.items():
             if len(V['MS1_pseudo_Spectra']) == 1:
@@ -432,7 +432,7 @@ class LCMS_Annotation:
                 )
             else:
                 try:
-                    all_peaks = sorted([(peak['peak_area'], peak['goodness_fitting'], peak) 
+                    all_peaks = sorted([(peak['peak_area'], peak['goodness_fitting'], peak)
                                         for peak in V['MS1_pseudo_Spectra']],
                                         reverse=True)
                     best_peak = all_peaks[0][2]
@@ -444,13 +444,12 @@ class LCMS_Annotation:
                 )
 
 
-
-# 
+#
 # ---------------------------------------------------------------------------
-# 
+#
 
 class GCMS_Annotation:
-    '''
+    """
     GC-MS annotation against a spectral library (MSP or JSON).
 
     Workflows, by input and parameters['search_algorithm']:
@@ -462,7 +461,7 @@ class GCMS_Annotation:
     Forward search uses high resolution m/z if parameters['hires'], else unit m/z.
 
     RI comes from an RI column in the feature table, or from parameters['kovats'].
-    '''
+    """
     default_database = 'gcms_corelib_20260930.msp'
 
     def __init__(self, parameters):
@@ -477,7 +476,7 @@ class GCMS_Annotation:
                 )
 
     def load_gcms_database(self, database_file, low_peak_filter_factor=100):
-        '''Load GC-MS Database in MSP or JSON format, as list and dict of GC_lib_entry.'''
+        """Load GC-MS Database in MSP or JSON format, as list and dict of GC_lib_entry."""
         list_lib_entries = reformat_gcms_lib(load_gcms_dbfile(database_file),
                                              filter_factor=low_peak_filter_factor)
         dict_lib_entries = {e.id: e for e in list_lib_entries}
@@ -491,7 +490,7 @@ class GCMS_Annotation:
     # ------------------------------------------------------------------ workflows
 
     def table_workflow(self, infile):
-        '''Annotate an asari feature table (tsv). Returns list_empCpds, feature_anno_list.'''
+        """Annotate an asari feature table (tsv). Returns list_empCpds, feature_anno_list."""
         parameters = self.parameters
         ingested = ingest_gc_featuretable(infile, parameters)
         if ingested is None:
@@ -537,7 +536,7 @@ class GCMS_Annotation:
         return list_empCpds, feature_anno_list
 
     def pseudospectra_workflow(self, list_query_spectra, dict_features=None):
-        '''
+        """
         Forward search of pseudospectra against the library, then export.
         Only in parameters['search_algorithm'] == 'forward', or when input is pseudospectra.
         High resolution data are dealt differently from low resolution data (parameters['hires']).
@@ -547,7 +546,7 @@ class GCMS_Annotation:
         dict_features : features by ID, if available (from a feature table), for export.
 
         Returns list_empCpds, feature_anno_list.
-        '''
+        """
         parameters = self.parameters
         list_query_spectra = standardize_query_spectra(list_query_spectra)
         print(f"Forward search of {len(list_query_spectra)} pseudospectra, "
@@ -579,11 +578,11 @@ class GCMS_Annotation:
         score_cutoff_entropy=0.4,
         corr_cutoff=0.6,
         ):
-        '''
+        """
         Reverse search starting with HRMS database using def batch_lib_reverse_search_score
 
         returns list_empCpds, feature_anno_list
-        '''
+        """
         matched_results = batch_lib_reverse_search_score(
             list_lib_entries, list_features, dict_features, feature_dataframe,
             mz_tolerance_da=ms2_tolerance_in_da, ri_tolerance=ri_tolerance,
@@ -608,7 +607,7 @@ class GCMS_Annotation:
         min_matched_peaks=3,
         top_n=1,
         ):
-        '''
+        """
         Forward search of pseudospectra against GC-MS database,
         separate algorithms for low-res and high-resolution:
         - highres: batch_forward_hires_search_score (entropy + cosine, m/z within ms2_tolerance_in_da);
@@ -617,7 +616,7 @@ class GCMS_Annotation:
         list_query_spectra : list of pseudospectra dicts with 'id', 'RI', 'members', 'peaks'.
 
         returns list_empCpds, feature_anno_list
-        '''
+        """
         if highres:
             matched_results = batch_forward_hires_search_score(
                 list_query_spectra, list_lib_entries,
@@ -648,12 +647,12 @@ class GCMS_Annotation:
     # ------------------------------------------------------------------ export
 
     def export(self, list_empCpds, feature_anno_list, dict_features=None, algorithm=''):
-        '''
+        """
         Export tsv tables (Features_, empCpds_), JSON and MSP of annotated pseudospectra,
         and mirror plots if parameters['do_mirror_plot'].
         dict_features can be None (pseudospectra input): feature details are then
         taken from the empCpds or left blank.
-        '''
+        """
         outdir, handle = self.outdir, self.project_name
         write_tsv_feature_anno(feature_anno_list, dict_features, self.dict_lib_entries,
                                os.path.join(outdir, "Features_" + handle + '.tsv'))
@@ -682,7 +681,7 @@ class GCMS_Annotation:
         print(f"{json_output_file} was written to JSON and MSP formats.\n")
 
     def make_mirror_plots(self, list_empCpds):
-        '''PDF mirror plot per empCpd, experimental peaks vs full library spectrum.'''
+        """PDF mirror plot per empCpd, experimental peaks vs full library spectrum."""
         print("Exporting PDF mirror plots..\n")
         path_mirrorplots = os.path.join(self.outdir, "mirrorplots/")
         os.makedirs(path_mirrorplots, exist_ok=True)
@@ -700,14 +699,14 @@ class GCMS_Annotation:
 
 
 def standardize_query_spectra(list_query_spectra):
-    '''
+    """
     Normalize pseudospectra loaded from different sources to dicts with
     'id', 'rtime', 'RI', 'members', 'peaks' (other fields are kept):
     - port_pseudospectrum_to_json / denovo JSON (already in this format);
     - JSON export of annotation ({'list_of_empCpds': [...]}, 'features' as members);
     - MSP written by json_pseudospectra_to_msp ('ID', 'RETENTIONTIME' as RI, 'Features').
     Spectra without peaks are dropped.
-    '''
+    """
     if isinstance(list_query_spectra, dict):
         list_query_spectra = list_query_spectra.get('list_of_empCpds', [])
     result = []
@@ -728,14 +727,13 @@ def standardize_query_spectra(list_query_spectra):
     return result
 
 
-
 # ---------------------------------------------------------------------------
 #
 # GC export
 #
 
 def _fmt_score(x, digits=3):
-    '''Round a score, or '' if missing (e.g. no entropy score in unit m/z search).'''
+    """Round a score, or '' if missing (e.g. no entropy score in unit m/z search)."""
     return '' if x is None else round(float(x), digits)
 
 def _ri_delta(ri, lib_ri, digits=3):
@@ -745,13 +743,13 @@ def _ri_delta(ri, lib_ri, digits=3):
 
 # write out annotated results
 def write_tsv_feature_anno(feature_anno_list, dict_features, dict_lib_entries, outfile):
-    '''
-    The empCpd output is more concise (annotation by empCpd or cluster). 
+    """
+    The empCpd output is more concise (annotation by empCpd or cluster).
     This exports a table per annotated feature.
     dict_features can be None (pseudospectra input); feature details are then blank.
-    '''
+    """
     header = [
-        'feature', 'mz', 'rtime', 'RI', 
+        'feature', 'mz', 'rtime', 'RI',
         'empCpd', 'quant_ion', 'score_cosine', 'score_entropy', 'name', 'inchikey',
         'lib_RI', 'delta_RI', 'peak_area', 'cSelectivity', 'peak_shape', 'snr', 'detection_counts'
     ]
@@ -763,25 +761,25 @@ def write_tsv_feature_anno(feature_anno_list, dict_features, dict_lib_entries, o
         ri = FF.get('RI')
         lib_RI = dict_lib_entries[feat['lib_entry_id']].RI
         s += '\t'.join([str(x) for x in [
-            k, FF.get('mz', ''), FF.get('rtime', ''), _fmt_score(ri), 
-            feat['empCpd'], feat['quant_ion'], _fmt_score(feat['cosine_score']), 
+            k, FF.get('mz', ''), FF.get('rtime', ''), _fmt_score(ri),
+            feat['empCpd'], feat['quant_ion'], _fmt_score(feat['cosine_score']),
             _fmt_score(feat['entropy_score']), feat['name'], feat['inchikey'],
             _fmt_score(lib_RI), _ri_delta(ri, lib_RI),
-            FF.get('peak_area', ''), FF.get('cSelectivity', ''), FF.get('goodness_fitting', ''), 
+            FF.get('peak_area', ''), FF.get('cSelectivity', ''), FF.get('goodness_fitting', ''),
             FF.get('snr', ''), FF.get('detection_counts', '')
         ]]) + '\n'
     with open(outfile, 'w') as O:
         O.write(s)
-    
+
 def write_tsv_empCpd_anno(list_empCpds, dict_features, dict_lib_entries, outfile):
-    '''Table output for list of empCpds. 
+    """Table output for list of empCpds.
     dict_features can be None (pseudospectra input); quant ion m/z and rtime are then
     taken from the empCpd ('quant_ion_mz', 'rtime') if available.
-    '''
+    """
     header = [
-        'empCpd', 'name', 'inchikey', 'formula', 'lib_exact_mass', 'score_cosine', 'score_entropy', 
-        'num_matched_peaks', 
-        'quant_ion', 'mz_quant_ion', 'rtime_quant_ion(min)', 'RI_quant_ion', 'lib_RI', 'delta_RI', 
+        'empCpd', 'name', 'inchikey', 'formula', 'lib_exact_mass', 'score_cosine', 'score_entropy',
+        'num_matched_peaks',
+        'quant_ion', 'mz_quant_ion', 'rtime_quant_ion(min)', 'RI_quant_ion', 'lib_RI', 'delta_RI',
         'has_basepeak', 'has_molecular_ion', 'presence_ratio'
     ]
     dict_features = dict_features or {}
@@ -796,18 +794,18 @@ def write_tsv_empCpd_anno(list_empCpds, dict_features, dict_lib_entries, outfile
         rtime = FF.get('rtime', epd.get('rtime'))
         ri = epd.get('RI')
         s += '\t'.join([str(x) for x in [
-            epd['id'], epd['name'], epd['inchikey'], lib.compound_formula, lib.exact_mass, 
+            epd['id'], epd['name'], epd['inchikey'], lib.compound_formula, lib.exact_mass,
             _fmt_score(epd['cosine_score']), _fmt_score(epd['entropy_score']),
-            num_matched_peaks, 
-            quant_ion, mz, 
-            '' if rtime in (None, '') else round(rtime/60, 2), 
-            '' if ri is None else int(ri), '' if lib.RI is None else int(lib.RI), _ri_delta(ri, lib.RI, 0), 
-            epd['has_basepeak'], epd['has_molecularion'], 
+            num_matched_peaks,
+            quant_ion, mz,
+            '' if rtime in (None, '') else round(rtime/60, 2),
+            '' if ri is None else int(ri), '' if lib.RI is None else int(lib.RI), _ri_delta(ri, lib.RI, 0),
+            epd['has_basepeak'], epd['has_molecularion'],
             round(num_matched_peaks/lib.peaks.shape[0], 2) if lib.peaks.shape[0] else ''
-        ]]) + '\n' 
+        ]]) + '\n'
     with open(outfile, 'w') as O:
         O.write(s)
-    
+
 
 # ---------------------------------------------------------------------------
 #
@@ -816,17 +814,17 @@ def write_tsv_empCpd_anno(list_empCpds, dict_features, dict_lib_entries, outfile
 
 
 def annotate_user_featuretable(infile, parameters):
-    '''
-    
+    """
+
     Annotate a user supplied feature table. Used by asari subcommand `annotate`.
 
     Parameters
     ----------
     infile : str
-        input feature table filepath, tab delimited file with first row as header, 
+        input feature table filepath, tab delimited file with first row as header,
         first column m/z and 2nd column rtime.
     parameters : dict
-        parameter dictionary passed from main.py, 
+        parameter dictionary passed from main.py,
         which imports from default_parameters and updates the dict by user arguments.
     rtime_tolerance : int, optional, default: 2
         retention time tolerance to group adducts etc.
@@ -834,11 +832,11 @@ def annotate_user_featuretable(infile, parameters):
     Outputs
     -------
     _PreAnnotated_list_khipus.json
-    
+
     # currently redundant w/ --anno, but to be unified in next version.
-    '''
-    from khipu.extended import peaklist_to_khipu_list 
-    
+    """
+    from khipu.extended import peaklist_to_khipu_list
+
     mode = parameters['mode']
     if mode == 'pos':
         adduct_search_patterns = adduct_search_patterns_pos
@@ -848,41 +846,38 @@ def annotate_user_featuretable(infile, parameters):
     for f in list_features:
             f['representative_intensity'] = f['peak_area']
     list_khipus, all_assigned_fids = peaklist_to_khipu_list(
-                            list_features, 
-                            isotope_search_patterns=isotope_search_patterns, 
+                            list_features,
+                            isotope_search_patterns=isotope_search_patterns,
                             adduct_search_patterns=adduct_search_patterns,
-                            extended_adducts=extended_adducts, 
+                            extended_adducts=extended_adducts,
                             mz_tolerance_ppm=parameters['mz_tolerance_ppm'],
                             rt_tolerance=parameters['khipu_rtime_tolerance'],
                             mode=mode,
                             charges=[1, 2, 3],
                             )
     #  exporting JSON
-    json_output_file = os.path.join(parameters['outdir'], 
+    json_output_file = os.path.join(parameters['outdir'],
                                     parameters['project_name']+'_PreAnnotated_list_khipus.json')
     with open(json_output_file, 'w', encoding='utf-8') as f:
         json.dump(list_khipus, f, cls=NpEncoder, ensure_ascii=False, indent=2)
-        
-    
-    
 
 
 def annoate_by_standards(list_features, cpdLib):
+    """Match features to a library of compound standards by m/z and rtime."""
     matched = match_features.list_match_lcms_features(
         list_features, cpdLib,  mz_ppm=5,  rt_tolerance=30
     )
-    
+
     dict_f = {feature['id']: feature for feature in list_features}
     dict_lib = {feature['id']: feature for feature in cpdLib}
-    
-    
-    return matched 
 
+
+    return matched
 
 
 def get_concise_annotation(feature_id, matched_list, feature_dict, lib_dict):
-    '''Remove duplicate annotations for the same feature, and return the concise list of fields.
-    '''
+    """Remove duplicate annotations for the same feature, and return the concise list of fields.
+    """
     feature = feature_dict[feature_id]
     result = {
         'id': feature_id,
@@ -935,30 +930,26 @@ def get_concise_annotation(feature_id, matched_list, feature_dict, lib_dict):
 
 
 def export_combined_anno_table(matched, feature_dict, lib_dict, outfile):
-    header = ['id', 'mz', 'rtime', 'lib_id', 'lib_name', 'lib_mz', 'lib_rtime', 'lib_identifier',  
-            'lib_ion', 'lib_isotope', 'CSMF_ID', 'CSM_ion', 
+    """Export matched features with concise annotation to a tsv file."""
+    header = ['id', 'mz', 'rtime', 'lib_id', 'lib_name', 'lib_mz', 'lib_rtime', 'lib_identifier',
+            'lib_ion', 'lib_isotope', 'CSMF_ID', 'CSM_ion',
             'CSM_top_recommendation_name', 'CSM_top_recommendation_score',
             'CSM_HMDB']
     s = '\t'.join(header) + '\n'
     for feature_id, matched_list in matched.items():
         concise_info = get_concise_annotation(feature_id, matched_list, feature_dict, lib_dict)
         s += '\t'.join([str(concise_info[h]) for h in header]) + '\n'
-        
+
     with open(outfile, 'w') as f:
         f.write(s)
 
 def export_combined_anno_json(matched, feature_dict, lib_dict, outfile):
-    '''
-    '''
+    """Export matched features and library entries to a JSON file."""
     json_output = []
     for feature_id, matched_list in matched.items():
         json_output.append(
-            {feature_id: {'Feature': feature_dict[feature_id], 
+            {feature_id: {'Feature': feature_dict[feature_id],
                           'Matched_libs': [lib_dict[lib_id] for lib_id in matched_list]}}
         )
     with open(outfile, 'w') as f:
         json.dump(json_output, f, indent=4)
-
-
-
-

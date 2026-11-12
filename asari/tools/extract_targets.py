@@ -1,15 +1,13 @@
-# placeholder for targeted extraction of features
+"""Placeholder for targeted extraction of features."""
 
 
 from asari.tools.file_io import read_features_from_asari_table
 
 
-
-
-
 def export_targets(parameters, registry, sample_id, outfile):
+    """Export features matched to target m/z values. Placeholder, not functional."""
     # extract targeted m/z features
-    if 'target' in self.parameters and self.parameters['target']:  
+    if 'target' in self.parameters and self.parameters['target']:
         matched_list, _, target_unmapped = all_mass_paired_mapping(
             filtered_FeatureTable['mz'].to_list(), self.parameters['target'], self.parameters['mz_tolerance_ppm']
         )

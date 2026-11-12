@@ -1,21 +1,21 @@
-'''
+"""
 Various functions for different workflows, within main Asari process or standalone.
-- extracting MS2 spectra from mzML files  
+- extracting MS2 spectra from mzML files
 - matching MS2 to separate MS1 table
 - ddMS2 de novo processing
 
 Example use to matching the best to LC-MS1 features from asari:
 python3 get_ms2_data.py full_Feature_table.tsv \\
-    ../LCMS/ddMS2_hilicpos_files/ --rt_tol 30 \\ 
+    ../LCMS/ddMS2_hilicpos_files/ --rt_tol 30 \\
     --output_json ms2_hilicpos_asari_project_92125241.json > processing_hilicpos_ms2_log.txt
-'''
+"""
 
 import os
 import json
 import numpy as np
 import pymzml
 from scipy.cluster.hierarchy import linkage, fcluster
-from scipy.signal import find_peaks 
+from scipy.signal import find_peaks
 import statsmodels.api as statsmodel
 
 from asari.mass_functions import complete_mass_paired_mapping
@@ -23,13 +23,13 @@ from .file_io import read_features_from_asari_table
 
 
 def extract_all_spectra_form_file(infile, min_intensity=1000, MS2_peak_limit=50):
-    '''
-    Extract MS1 and MS2 spectra from mzML file, clean up and 
+    """
+    Extract MS1 and MS2 spectra from mzML file, clean up and
     return [list of MS1, list of MS2, other spectra].
-    
-    MS2_peak_limit : filter MS2 spectra to top N peaks. 
 
-    '''
+    MS2_peak_limit : filter MS2 spectra to top N peaks.
+
+    """
     ms1_spectra, ms2_spectra, others = [], [], []
     counter = 0
     ms_expt = pymzml.run.Reader(infile)
@@ -45,7 +45,7 @@ def extract_all_spectra_form_file(infile, min_intensity=1000, MS2_peak_limit=50)
                 if MS2_peak_limit:
                     peaks.sort(key=lambda x: x[1], reverse=True)
                     peaks = peaks[:MS2_peak_limit]
-                ms2_spectra.append({ 
+                ms2_spectra.append({
                         'id': 'sp'+str(counter),
                         'precursor_mz': precursor_mz,
                         'rtime': spec.scan_time_in_minutes() * 60,   # in seconds
@@ -73,14 +73,14 @@ def extract_all_spectra_form_file(infile, min_intensity=1000, MS2_peak_limit=50)
 
 
 def regroup_matches_per_file(results):
-    '''
-    Many spectra match to the same DB compound entry. 
+    """
+    Many spectra match to the same DB compound entry.
     cluster by DB compound, using INCHIKEY now; will check how complete INCHIKEY is later
-    
+
     return {"DB_record": {}, "matched_spectra": [(spid, mz, rtime, score, num_matched_peaks), ...]}
-    
+
     tally_db_dict is used to centralize "DB_record" to remove redundancy in records
-    '''
+    """
     new, tally_db_dict = {}, {}
     for R in results:
         k = R[0]['INCHIKEY']
@@ -91,22 +91,22 @@ def regroup_matches_per_file(results):
             new[k] = {
                 "DB_record": {'INCHIKEY': k, 'name': R[0]['NAME']},
                 "matched_spectra": [R[1:]]
-            }  
+            }
     return new, tally_db_dict
-    
+
 # to get MS1 match
 # Use top MS2 spectrum, find matches in mz, rt window with highest intensity
 def get_ms1_match_to_ms2cluster(db_matched_cluster, list_ms1_spectra, mz_tol_ppm=5, rt_tol=1):
-    '''
-    list_ms1_spectra can be loaded from json: 
+    """
+    list_ms1_spectra can be loaded from json:
     e.g. json.load(open(workdir+'SD_250708_097_MS1.json'))
-    
+
     db_matched_cluster = {
         'DB_record': {}, 'matched_spectra': [(), ...]
     }
-    
+
     return best_ms2_spec, best_ms1_peak
-    '''
+    """
     best_ms2_spec = sorted(db_matched_cluster['matched_spectra'], key=lambda x: x[3], reverse=True)[0]
     # spid, mz, rtime, score, num_matched_peaks
     filtered_ms1_spectrum = [sp for sp in list_ms1_spectra if abs(sp['rtime']-best_ms2_spec[2]) <= rt_tol]
@@ -120,12 +120,12 @@ def get_ms1_match_to_ms2cluster(db_matched_cluster, list_ms1_spectra, mz_tol_ppm
 
 
 def export_table_ms1match_results(resultDict, cpdDict, outfile):
-    '''
-    Table for best_ms1_peak_height per sample, per compound. 
-    
-    These are sample specific in the other JSON output: 
+    """
+    Table for best_ms1_peak_height per sample, per compound.
+
+    These are sample specific in the other JSON output:
     ['matched_spectra', 'best_ms2_spec', 'score', 'matched_peaks', 'best_ms1_mz', 'best_ms1_peak_height']
-    '''
+    """
     list_samples = list(resultDict.keys())
     number_samples = len(list_samples)
     header1 = ['NAME', 'INCHIKEY', 'precursor_mz', 'PRECURSORTYPE', 'SMILES', 'Num Peaks']
@@ -141,16 +141,16 @@ def export_table_ms1match_results(resultDict, cpdDict, outfile):
                 best_ms1_peak = cpd_in_sample['best_ms1_peak']
                 if best_ms1_peak:
                     part2[ii] = best_ms1_peak[1]
-            
+
         s += '\t'.join([
             str(x) for x in part1 + part2
         ]) + '\n'
     with open(outfile, 'w') as O:
         O.write(s)
-    
+
 #
 # ----------------------
-# 
+#
 
 def _normalize_spectrum(peaks):
     a = np.array(peaks, dtype=float)
@@ -239,36 +239,36 @@ def cluster_msms_spectra(list_ms2_spectra, similarity_function=None, mz_toleranc
 def find_track_kde_peaks(sorted_list_rtimes,
                                   distance, wlen=100, relative_height=0.1,
                               ):
-    '''
-    Run KDE and KDE peak detection for a large list. 
+    """
+    Run KDE and KDE peak detection for a large list.
     Default applied to a chromatogram (typically 200 ~ 2000 seconds).
 
-    This is used to find precursor features among redundant MS/MS spectra on a mass track. 
-    Not always feasible to find good elution peaks in LC-MS/MS data. 
+    This is used to find precursor features among redundant MS/MS spectra on a mass track.
+    Not always feasible to find good elution peaks in LC-MS/MS data.
 
     Returns list of rtimes of apex locations.
-    '''
+    """
     bandwidth = 0.5     # second
     kde = statsmodel.nonparametric.KDEUnivariate(sorted_list_rtimes)
-    kde.fit(bw=bandwidth) 
+    kde.fit(bw=bandwidth)
     threshold = relative_height * kde.density.max()
     prominence = 0.5 * threshold
-    peaks, properties = find_peaks(kde.density, 
-                                height=threshold, 
+    peaks, properties = find_peaks(kde.density,
+                                height=threshold,
                                 distance=distance,
                                 prominence=prominence,
                                 wlen=wlen,
-                                ) 
+                                )
     real_apexes = [kde.support[ii] for ii in peaks]
     return real_apexes
 
 
 def rt_cluster_msms(
-        list_ms2_spectra, similarity_function, 
+        list_ms2_spectra, similarity_function,
         rt_gap=5, mz_tolerance=0.05, distance_threshold=0.8,
         switch_list_size=100, kde_peak_window=1
         ):
-    '''
+    """
     Cluster MS/MS spectra first by RT proximity, then by cosine similarity within each RT group.
 
     list_ms2_spectra : [{precursor_mz: float, rtime: float, peaks: [(), ...]}, ...]
@@ -278,10 +278,10 @@ def rt_cluster_msms(
     kde_peak_window : window size to find representative spectrum around a KDE peak
 
     Returns list of representative spectra (one per cosine cluster).
-    '''
+    """
     if not list_ms2_spectra:
         return []
-    
+
     if len(list_ms2_spectra) == 1:
         list_ms2_spectra[0]['cluster_size'] = 1
         return list_ms2_spectra
@@ -313,7 +313,7 @@ def rt_cluster_msms(
                 # negative value in cluster_size indicates from KDE extraction, not similarity clustering
                 rep['cluster_size'] = -len(_group)
                 clustered_results.append(rep)
-    
+
     return clustered_results
 
 
@@ -353,7 +353,7 @@ def json_ms2_to_msp(records, outfile='test.msp'):
         for mz, intensity in peaks:
             lines.append(f"{mz:.4f} {intensity:.4f}")
         lines.append("")   # blank line between records
-        
+
     with open(outfile, 'w') as fh:
         fh.write('\n'.join(lines))
 
@@ -363,10 +363,10 @@ def json_ms2_to_msp(records, outfile='test.msp'):
 #
 
 def extract_ms2_from_file(infile, min_intensity=1000):
-    '''
+    """
     Extract ms2 spectra from mzML file, clean up and return as a list of spectra.
 
-    '''
+    """
     ms2_spectra = []
     ms_expt = pymzml.run.Reader(infile)
     for spec in ms_expt:
@@ -388,7 +388,7 @@ def extract_ms2_from_file(infile, min_intensity=1000):
     return ms2_spectra
 
 def get_top_n_ms2_spectra(ms2_spectra, n=5):
-    '''
+    """
     Get top n MS2 spectra based on the number of peaks.
 
     Parameters
@@ -402,7 +402,7 @@ def get_top_n_ms2_spectra(ms2_spectra, n=5):
     -------
     top_n_spectra : list
         A list of top n MS2 spectra.
-    '''
+    """
     if len(ms2_spectra) <= n:
         return ms2_spectra
     else:
@@ -410,7 +410,7 @@ def get_top_n_ms2_spectra(ms2_spectra, n=5):
         return ms2_spectra[:n]
 
 def get_top_n_peaks(spectrum, n=50):
-    '''
+    """
     Get top n peaks from a spectrum based on intensity.
 
     Parameters
@@ -424,15 +424,15 @@ def get_top_n_peaks(spectrum, n=50):
     -------
     top_n_peaks : list
         A list of top n (mz, intensity) tuples.
-    '''
+    """
     if len(spectrum) <= n:
         return spectrum
     else:
         spectrum = sorted(spectrum, key=lambda x: x[1], reverse=True)
-        return spectrum[:n] 
-    
+        return spectrum[:n]
+
 def get_best_ms2_spectrum(ms2_spectra):
-    '''
+    """
     Get the best MS2 spectrum based on the intensity of all peaks (better after filtering for top n).
 
     Parameters
@@ -444,17 +444,17 @@ def get_best_ms2_spectrum(ms2_spectra):
     -------
     best_spectrum : dict
         The best MS2 spectrum.
-    '''
+    """
     if not ms2_spectra:
         return None
     ms2_spectra = sorted(ms2_spectra, key=lambda x: sum(p[1] for p in x['peaks']), reverse=True)
     return ms2_spectra[0]
 
-# ~~~~~~~~~~ 
+# ~~~~~~~~~~
 
 def get_matched_ms2_ms1(LCMS1_features, list_ms2_spectra, rt_tol=30, ppm_tol=5):
-    '''
-    Get matched MS2 spectra for each LC-MS1 feature based on retention time and m/z tolerance. 
+    """
+    Get matched MS2 spectra for each LC-MS1 feature based on retention time and m/z tolerance.
     Similar to asari.tools.match_features.list_match_lcms_features
 
     Parameters
@@ -470,8 +470,8 @@ def get_matched_ms2_ms1(LCMS1_features, list_ms2_spectra, rt_tol=30, ppm_tol=5):
     -------
     features : list
         A list of AlignedFeature objects with matched MS2 spectra.
-    '''
-    mz_mapped = complete_mass_paired_mapping([f['mz'] for f in LCMS1_features], 
+    """
+    mz_mapped = complete_mass_paired_mapping([f['mz'] for f in LCMS1_features],
                                              [f['precursor_mz'] for f in list_ms2_spectra], std_ppm=ppm_tol)[0]
     matched = [x for x in mz_mapped if abs(LCMS1_features[x[0]]['rtime'] - list_ms2_spectra[x[1]]['rtime']) <= rt_tol]
     # select the best MS2 spectrum for each feature
@@ -489,11 +489,10 @@ def get_matched_ms2_ms1(LCMS1_features, list_ms2_spectra, rt_tol=30, ppm_tol=5):
 
     return result
 
-def match_ms2files_to_features(ms1_fulltable, list_ms2_files, 
-                               rt_tol=30, ppm_tol=5, output_json="matched_ms2_spectra.json"  
+def match_ms2files_to_features(ms1_fulltable, list_ms2_files,
+                               rt_tol=30, ppm_tol=5, output_json="matched_ms2_spectra.json"
                                ):
-    '''
-    '''
+    """Match MS2 spectra from multiple files to MS1 features, by rtime and precursor m/z."""
     LCMS_features = read_features_from_asari_table(open(ms1_fulltable).read())[1]
     # MS2 record is updated per file, to save memory
     master_dict = {}
@@ -510,7 +509,7 @@ def match_ms2files_to_features(ms1_fulltable, list_ms2_files,
                 new_count = master_dict[feature_id][1] + count
                 new_ms2 = get_best_ms2_spectrum([master_dict[feature_id][0], ms2])
                 master_dict[feature_id] = (new_ms2, new_count)
-    
+
     # trim
     for feature_id, pp in master_dict.items():
         master_dict[feature_id] = (get_top_n_peaks(pp[0], 20), pp[1])
@@ -518,9 +517,9 @@ def match_ms2files_to_features(ms1_fulltable, list_ms2_files,
     # export JSON
     with open(output_json, "w") as fout:
         json.dump(master_dict, fout, indent=2)
-    
+
     return master_dict
-    
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(
@@ -532,11 +531,10 @@ if __name__ == "__main__":
     parser.add_argument('--ppm_tol', type=float, default=5, help='m/z tolerance in ppm (default: 5).')
     parser.add_argument('--output_json', type=str, default="matched_ms2_spectra.json", help='Output JSON file to save matched MS2 spectra (default: matched_ms2_spectra.json).')
     args = parser.parse_args()
-    
+
     files = os.listdir(args.ms2_dir)
     ms2_files = [os.path.join(args.ms2_dir, f) for f in files if f.endswith(".mzML")]
 
     _d_ = match_ms2files_to_features(args.ms1_fulltable,
                                      ms2_files, rt_tol=args.rt_tol, ppm_tol=args.ppm_tol,
                                      output_json=args.output_json)
-    

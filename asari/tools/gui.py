@@ -1,9 +1,9 @@
-'''
+"""
 This was JMM's prototype.
-Desktop GUI or web GUI should be a separate package. 
-The asari core package should remain cloud-friendly, with minimal dependency on deployment. 
-Even matplotlib is optional. 
-'''
+Desktop GUI or web GUI should be a separate package.
+The asari core package should remain cloud-friendly, with minimal dependency on deployment.
+Even matplotlib is optional.
+"""
 
 import tkinter as tk
 from tkinter import scrolledtext, messagebox, filedialog
@@ -13,9 +13,11 @@ from asari.default_parameters import PARAMETERS
 from asari.main import SUBCOMMANDS, update_peak_detection_params, run_asari
 
 def run_program(params):
+    """Run asari with params."""
     run_asari(params)
 
 def select_directory(params):
+    """Select input directory by a dialog."""
     root = tk.Tk()
     root.withdraw()
     directory = filedialog.askdirectory(title="Select Input Directory")
@@ -24,17 +26,21 @@ def select_directory(params):
     return params
 
 class TextRedirector:
+    """Redirect text output to a tkinter text widget."""
     def __init__(self, text_widget):
         self.text_widget = text_widget
 
     def write(self, s):
+        """Write text to the widget."""
         self.text_widget.insert(tk.END, s)
         self.text_widget.see(tk.END)
 
     def flush(self):
+        """No-op, for file-like interface."""
         pass
 
 def run_program_thread(params, text_widget, continue_button):
+    """Run asari with output redirected to text_widget."""
     redirector = TextRedirector(text_widget)
     continue_button.config(state=tk.DISABLED)
     with redirect_stdout(redirector), redirect_stderr(redirector):
@@ -43,6 +49,7 @@ def run_program_thread(params, text_widget, continue_button):
 
 
 def start_program_gui(params):
+    """Start asari in a GUI window showing the output."""
     root = tk.Tk()
     root.title("Asari Processing")
 
@@ -57,6 +64,7 @@ def start_program_gui(params):
     return params
 
 def show_disclaimer():
+    """Show disclaimer; return True if accepted."""
     accepted = [False]
     def on_accept():
         accepted[0] = True
@@ -86,6 +94,7 @@ def show_disclaimer():
     return accepted[0]
 
 def create_ui(data):
+    """Show parameter form; return updated parameters."""
     result = {}
     def run_callback():
         nonlocal result
@@ -165,6 +174,7 @@ def create_ui(data):
     return result
 
 def create_selection_ui(options, data, key):
+    """Show options for data[key]; return updated data."""
     result = {}
     def set_value(value):
         nonlocal result
@@ -183,6 +193,7 @@ def create_selection_ui(options, data, key):
     return result
 
 def main_gui():
+    """Entry point of asari GUI."""
     if not show_disclaimer():
         return
     params = select_directory(PARAMETERS)
@@ -206,4 +217,3 @@ def main_gui():
 
 if __name__ == "__main__":
     main_gui()
-    

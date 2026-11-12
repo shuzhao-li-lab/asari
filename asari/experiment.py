@@ -1,3 +1,5 @@
+"""Experiment class, managing samples, composite map, annotation and export in a project."""
+
 import os
 import sys
 import json
@@ -23,20 +25,20 @@ if not sys.warnoptions:
 
 
 class ext_Experiment:
-    '''
+    """
     Similar to metDataModel.core.Experiment with preprocessing methods.
 
-    This encapsulates a set of LC-MS files using the same experimental method 
+    This encapsulates a set of LC-MS files using the same experimental method
     (chromatography and ionization) to be processed together.
 
     E.g., data from postive ESI and negative ESI should not in the same ext_Experiment instance.
 
     This class has annotation and export functions.
-    
+
     Default asari work flow is in `ext_Experiment.process_all`.
-    '''
+    """
     def __init__(self, sample_registry, parameters):
-        '''
+        """
         This is the overall container for all data in an experiment/project.
 
         Parameters
@@ -50,7 +52,7 @@ class ext_Experiment:
         Updates
         -------
         Major class attributes including self.number_of_samples, number_scans, reference_sample_id.
-        '''
+        """
         self.sample_registry = sample_registry
         self.valid_sample_ids = self.get_valid_sample_ids()
         self.number_of_samples = len(self.valid_sample_ids)
@@ -64,13 +66,13 @@ class ext_Experiment:
         self.check_isotope_ratio = self.parameters['check_isotope_ratio']
         self.database_mode = parameters['database_mode']
         self.reference_sample_id = self.get_reference_sample_id()
-        
+
     def get_reference_sample_id(self):
-        '''
+        """
         get_reference_sample_id either by user specification, or
         using the sample of most number_anchor_mz_pairs.
         This assumes the sample of most good m/z values has a good coverage of features.
-        '''
+        """
         if self.parameters['reference']:
             # match file name; k is sm['sample_id']
             for k,v in self.sample_registry.items():
@@ -90,36 +92,37 @@ class ext_Experiment:
             return ref['sample_id']
         else:
             return None
-        
+
     def get_valid_sample_ids(self):
-        '''
+        """
         Get valid sample ids, as some samples may not be extracted successfully.
-        '''
+        """
         return [k for k,v in self.sample_registry.items() if v['status:eic'] == 'passed']
 
     def determine_acquisition_order(self):
+        """Return (sample id, acquisition time) tuples, sorted by acquisition time."""
         sample_order_by_timestamp = [(k, v['acquisition_time']) for k,v in self.sample_registry.items()]
         try:
             # fix this better in future
             return sorted(sample_order_by_timestamp, key=lambda x: x[1])
         except:
             return sorted(sample_order_by_timestamp, key=lambda x: x[0])
-    
+
     def get_max_scan_number(self):
-        '''
+        """
         Return max scan number among samples, or None if no valid sample.
         self.sample_registry: a dict that maps sample IDs to sample data
-        '''
+        """
         if self.sample_registry:
             return max([self.sample_registry[k]['max_scan_number'] for k in self.valid_sample_ids]) + 1
         else:
             return None
 
     def process_all_LC(self):
-        '''
+        """
         This is the default asari workflow for LC-MS and GC-MS procssing; annotation is separate after processing.
-        
-        1. Build MassGrid, using either pairwise (small study) or clustering method. 
+
+        1. Build MassGrid, using either pairwise (small study) or clustering method.
            Choose one reference from all samples for the largest number of landmark m/z tracks.
         2. RT alignment via a LOWESS function, using selective landmark peaks.
         3. Build composite elution profile (composite_mass_tracks),
@@ -131,7 +134,7 @@ class ext_Experiment:
         Updates
         -------
         self.CMAP as instance of CompositeMap, and MassGrid, composite map and features within.
-        '''
+        """
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
         if not self.parameters['rt_align_on']:
@@ -140,31 +143,31 @@ class ext_Experiment:
         self.CMAP.global_peak_detection()
 
     def process_all_DIMS(self):
-        '''
+        """
         For DI-MS, no RT alignment or peak detection.
         Only MassGrid construction then report max intensity per mass track per sample.
-        
-        '''
+
+        """
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
         self.CMAP.get_DIMS_feature_table()
 
     def process_all_LCMSMS(self):
-        '''
-        The LC-MS/MS workflow constructs massGrid and CMAP as LC-MS processing, 
-        then assign all MS/MS spectra to mass tracks. 
-        The MS/MS spectra per mass track are clustered based on RT and similarity. 
-        
+        """
+        The LC-MS/MS workflow constructs massGrid and CMAP as LC-MS processing,
+        then assign all MS/MS spectra to mass tracks.
+        The MS/MS spectra per mass track are clustered based on RT and similarity.
+
         The MS1 data may be sparse in LC-MS/MS, limiting elution peak detection and resolution of close isomers.
-        Since MS/MS collection is not consistent cross samples,  
-        full integrated with MS1 data in the same experiment is not always feasible. 
+        Since MS/MS collection is not consistent cross samples,
+        full integrated with MS1 data in the same experiment is not always feasible.
         Even if we use MS1 peak height not area, MS1 and MS/MS features are not consistently measured cross samples.
-        Therefore, quantitative information cross samples is only usable for a subset of MS1 features. 
-        
+        Therefore, quantitative information cross samples is only usable for a subset of MS1 features.
+
         The MS1 feature table and MS/MS clusters are reported separately, sharing masstrack IDs.
-        The MS/MS clusters are searched against spectral libraries seprately and result can be used to annotate 
-        the MS1 feature table here or different acquisitions. 
-        '''
+        The MS/MS clusters are searched against spectral libraries seprately and result can be used to annotate
+        the MS1 feature table here or different acquisitions.
+        """
         self.CMAP = CompositeMap(self)
         self.CMAP.construct_mass_grid()
         if not self.parameters['rt_align_on']:
@@ -178,12 +181,12 @@ class ext_Experiment:
             mz_tolerance=self.parameters.get('ms2_mz_tolerance', 0.01),
             distance_threshold=self.parameters.get('ms2_distance_threshold', 0.8)
         )
-        # MS1 peaks 
+        # MS1 peaks
         self.CMAP.global_peak_detection()
 
 
     def export_all(self, diagnosis=False):
-        '''
+        """
         Export all files.
         Annotation of features to empirical compounds is done here.
 
@@ -191,7 +194,7 @@ class ext_Experiment:
         ----------
         diagnosis: bool, optional, default: True
             if true, export CMAP pickle for diagnosis and viz
-        '''
+        """
         if self.parameters['workflow'] in ["LC", "GC"]:
             self.CMAP.MassGrid.to_csv(
                 os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
@@ -203,7 +206,7 @@ class ext_Experiment:
             self.export_feature_tables()
             self.export_log()
             self.export_readme()
-            
+
         elif self.parameters['workflow'] == "DIMS":
             self.CMAP.MassGrid.to_csv(
                 os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
@@ -246,13 +249,13 @@ class ext_Experiment:
             self.export_readme()
 
     def export_CMAP_pickle(self):
-        '''
+        """
         Export main CMAP data and MassGrid to pickle, which can be used for visual data exploration.
 
         Included in exported pickle:{
             '_number_of_samples_': self.CMAP._number_of_samples_,
             'rt_length': self.CMAP.rt_length,
-            'rt_reference_landmarks': [p['apex'] 
+            'rt_reference_landmarks': [p['apex']
                                        for p in self.CMAP.good_reference_landmark_peaks],
             'rt_records': [sample.get_rt_calibration_records()
                                         for sample in self.all_samples
@@ -270,14 +273,14 @@ class ext_Experiment:
 
         Note
         ----
-            RT calibration is exported to include sample.reverse_rt_cal_dict, 
+            RT calibration is exported to include sample.reverse_rt_cal_dict,
             i.e. {key=reference scan number, value=sample specific scan number}.
             May add data throttle in the future. The file cmap.pickle can get big.
-        '''
+        """
         _export = {
             '_number_of_samples_': self.CMAP._number_of_samples_,
             'rt_length': self.CMAP.rt_length,
-            'rt_reference_landmarks': [p['apex'] 
+            'rt_reference_landmarks': [p['apex']
                                        for p in self.CMAP.good_reference_landmark_peaks],
             'rt_records': [sample.get_rt_calibration_records()
                                         for sample in self.all_samples
@@ -291,11 +294,11 @@ class ext_Experiment:
             pickle.dump(_export, f, pickle.HIGHEST_PROTOCOL)
 
     def export_feature_tables(self, _snr=2, _peak_shape=0.7, _cSelectivity=0.7):
-        '''
-        To export multiple features tables. 
-        Filtering parameters (_snr, _peak_shape, _cSelectivity) only 
+        """
+        To export multiple features tables.
+        Filtering parameters (_snr, _peak_shape, _cSelectivity) only
         apply to preferred table and unique_compound_table.
-        Full table is filtered by initial peak detection parameters, 
+        Full table is filtered by initial peak detection parameters,
         which contains lower values of snr and gaussian_shape.
 
         Parameters
@@ -310,25 +313,25 @@ class ext_Experiment:
         Outputs
         -------
         Multiple features tables under output directory:
-        1. preferred table under `outdir`, after quality filtering 
+        1. preferred table under `outdir`, after quality filtering
            by SNR, peak shape and chromatographic selectivity.
         2. full table under `outdir/export/`
         3. unique compound table under `outdir/export/`
-        4. dependent on `target` extract option, a targeted_extraction table under `outdir`. 
-        '''
+        4. dependent on `target` extract option, a targeted_extraction table under `outdir`.
+        """
         if self.parameters['drop_unaligned_samples']:
             good_samples = [sample.name for sample in self.all_samples if sample.is_rt_aligned]
         else:
             good_samples = [sample.name for sample in self.all_samples]
-        filtered_FeatureTable = self.CMAP.FeatureTable[good_samples]          # this fixes order of samples       
+        filtered_FeatureTable = self.CMAP.FeatureTable[good_samples]          # this fixes order of samples
         self.number_of_samples = number_of_samples = len(good_samples)
-        self.dropped_sample_names = [sample.name for sample in self.all_samples 
+        self.dropped_sample_names = [sample.name for sample in self.all_samples
                                      if sample.name not in good_samples]     # samples dropped due to alignment or quality
         # non zero counts
         count = filtered_FeatureTable[filtered_FeatureTable>1].count(axis='columns')
         self.CMAP.FeatureTable['detection_counts'] = count
 
-        use_cols = [ 'id_number', 'mz', 'rtime', 'rtime_left_base', 'rtime_right_base', 'parent_masstrack_id', 
+        use_cols = [ 'id_number', 'mz', 'rtime', 'rtime_left_base', 'rtime_right_base', 'parent_masstrack_id',
                     'peak_area', 'cSelectivity', 'goodness_fitting', 'snr', 'detection_counts' ] + good_samples
         filtered_FeatureTable = self.CMAP.FeatureTable[use_cols]
         filtered_FeatureTable['mz'] = filtered_FeatureTable['mz'].round(4)
@@ -354,7 +357,7 @@ class ext_Experiment:
         filtered_FeatureTable.to_csv(outfile, index=False, sep="\t")
         print("\nFiltered Feature table (%d x %d) was written to %s.\n" %(
                                 filtered_FeatureTable.shape[0], number_of_samples, outfile))
-        
+
         # todo - this should be made more robust in the future
         if self.parameters['anno'] and self.parameters['workflow'] != "GC":
             # in self.selected_unique_features: (empCpd id, neutral_formula, ion_relation)
@@ -363,20 +366,20 @@ class ext_Experiment:
             unique_compound_table.insert(3, "empCpd", [self.selected_unique_features[ii][0] for ii in unique_compound_table['id_number']])
             unique_compound_table.insert(4, "neutral_formula", [self.selected_unique_features[ii][1] for ii in unique_compound_table['id_number']])
             unique_compound_table.insert(5, "ion_relation", [self.selected_unique_features[ii][2] for ii in unique_compound_table['id_number']])
-            
+
             outfile = os.path.join(self.parameters['outdir'], 'export', 'unique_compound__'+self.parameters['output_feature_table'])
             unique_compound_table.to_csv(outfile, index=False, sep="\t")
             print("Unique compound table (%d x %d) was written to %s.\n" %(
                                 unique_compound_table.shape[0], number_of_samples, outfile))
 
     def add_retention_index(self, feature_table):
-        '''
+        """
         GC workflow: add a column 'RI' (Kovats retention index) right after 'detection_counts',
         so that sample columns start one column later (data_start_col=12 in gc_functions).
         RI is interpolated from feature rtime (seconds) by a lowess fit of the Kovats standards
         file parameters['kovats'] (columns: Kovats index, measured time in minutes).
         Features outside the range of the standards get the RI at the nearest end.
-        '''
+        """
         from .gc_functions import read_fit_KovatsIndex_rtime
         ri_model = read_fit_KovatsIndex_rtime(self.parameters['kovats'], frac=0.3)
         ri = np.interp(self.CMAP.FeatureTable.loc[feature_table.index, 'rtime'].values / 60,
@@ -387,10 +390,10 @@ class ext_Experiment:
         return feature_table
 
     def export_log(self):
-        '''
+        """
         Export project parameters to project.json,
         which is also used by asari viz.
-        '''
+        """
         self.parameters['number_of_samples'] = self.number_of_samples
         self.parameters['number_scans'] = self.number_scans
         # Record of dropped samples. Right place in log, wrong name in parameters
@@ -400,9 +403,9 @@ class ext_Experiment:
             json.dump(self.parameters, f, cls=NpEncoder, ensure_ascii=False, indent=2)
 
     def export_readme(self):
-        '''
+        """
         Export a REAME.txt file as simple instruction to end users.
-        '''
+        """
         outfile = os.path.join(self.parameters['outdir'], 'README.txt')
         with open(outfile, 'w', encoding='utf-8') as f:
             f.write(readme_doc_str)
@@ -413,7 +416,7 @@ class ext_Experiment:
     #
 
     def load_annotation_db(self, src='hmdb4'):
-        '''
+        """
         Load database of known compound using jms.dbStructures.knownCompoundDatabase.
         The compound tree is precomputed indexing.
         The `src` parameter is not used now, but placeholder to add more options later.
@@ -422,52 +425,50 @@ class ext_Experiment:
         ----------
         src: str, optional, default: hmdb4
             not used but can, in the future, dictate which database is used to generate annotations
-            
-                
-        To move annotation out of core package. 
-        
+
+
+        To move annotation out of core package.
+
         as for GC and LCMSMS
-                
-        
-        '''
+
+
+        """
         self.KCD = knownCompoundDatabase()
-        self.KCD.mass_indexed_compounds = pickle.load( 
+        self.KCD.mass_indexed_compounds = pickle.load(
             pkg_resources.open_binary(db, 'mass_indexed_compounds.pickle') )
-        self.KCD.emp_cpds_trees = pickle.load( 
+        self.KCD.emp_cpds_trees = pickle.load(
             pkg_resources.open_binary(db, 'emp_cpds_trees.pickle') )
 
     def db_mass_calibrate(self, required_calibrate_threshold=0.000002):
-        '''
+        """
         Use KCD.evaluate_mass_accuracy_ratio to check systematic mass shift,
         which is calculated as the average ppm difference between measured m/z and theoretical values.
-        If greater than required_calibrate_threshold (default 2 ppm), 
+        If greater than required_calibrate_threshold (default 2 ppm),
         calibrate m/z values for the whole experiment by updating self.CMAP.FeatureList.
 
         Parameters
         ---------
         required_calibrate_treshold: float, optional, default: 0.000002
-            if the mass shift exceeds this value, mass correction will be applied. 
+            if the mass shift exceeds this value, mass correction will be applied.
 
         Note
         ----
-        Data format in good_reference_landmark_peaks: 
+        Data format in good_reference_landmark_peaks:
         [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...],
         where ref_id_num is index number of mass track in MassGrid.
-        '''
-        mz_landmarks = [self.CMAP.MassGrid['mz'][p['ref_id_num']] 
+        """
+        mz_landmarks = [self.CMAP.MassGrid['mz'][p['ref_id_num']]
                         for p in self.CMAP.good_reference_landmark_peaks]
         mass_accuracy_ratio = self.KCD.evaluate_mass_accuracy_ratio(
             mz_landmarks, mode=self.mode, mz_tolerance_ppm=10)
         if mass_accuracy_ratio:
             if abs(mass_accuracy_ratio) > required_calibrate_threshold:
-                print("Mass shift is greater than %2.1f ppm. Correction applied." 
+                print("Mass shift is greater than %2.1f ppm. Correction applied."
                       %(required_calibrate_threshold*1000000))
                 _correction = mass_accuracy_ratio + 1
                 for F in self.CMAP.FeatureList:
                     F['mz'] = F['mz'] / _correction
                     F['mz_corrected_by_division'] = _correction
         else:
-            print("Mass accuracy check is skipped, too few mz_landmarks (%d) matched." 
+            print("Mass accuracy check is skipped, too few mz_landmarks (%d) matched."
                   %len(mz_landmarks))
-
-

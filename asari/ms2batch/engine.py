@@ -54,6 +54,7 @@ class SearchResult:
         return m
 
     def to_dataframe(self):
+        """Return hits as a pandas DataFrame."""
         import pandas as pd
         return pd.DataFrame({'query_idx': self.query_idx, 'library_idx': self.library_idx,
                              'score': self.score, 'n_matched': self.n_matched})

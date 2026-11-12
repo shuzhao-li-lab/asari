@@ -45,14 +45,12 @@ MS/MS spectra are ignored in default LC-MS workflow but handled by alternative w
 ### Raw data inspection and quality control
 Asari function `analyze` returns a summary on a single mzML file.
 
-The `tools.plot_scan_seq` module gives scan level visualization of a single mzML file.  
-
-Various tools will be added over time. Single-file QC works on a single mzML file; most QC functions work on the processed full feature table.
+The `tools.plot_scan_seq` module gives scan level visualization of a single mzML file. Various tools will be added over time. Single-file QC works on a single mzML file; most QC functions work on the processed full feature table.
 
 ### Annotation
 The design of asari is to spearate annotation from feature extraction. 
 
-Pre-annation, i.e., grouping ions to empirical compounds, is done using [Khipu](https://github.com/shuzhao-li-lab/khipu). 
+Deconvolution in LC-MS data is also called "pre-annation", i.e., grouping ions to empirical compounds, is done using [Khipu](https://github.com/shuzhao-li-lab/khipu). 
 
 Annotation typically involves compound libraries and databases. Please refer to specific workflows. 
 
@@ -68,11 +66,54 @@ Different workflows can be put together using different modules. We will continu
 The `asari` as a command can run in a terminal, followed by a subcommand for specific tasks.
 For help information: `asari -h`
 
-### Main usages
-
-To process all mzML files under directory mydir/projectx_dir (or use `--files` to specify input mzML files):
+To process all mzML files under directory mydir/projectx_dir (or use `--files` to specify input mzML files; default LC-MS workflow):
 
 `asari process --input mydir/projectx_dir`
+
+
+### Example use on GC-MS data
+
+GC-MS uses `--workflow GC` in three steps: `process` (feature extraction), optional `deconvolute` (grouping features into pseudospectra) and `annotate` (library search).
+
+**Retention index (RI).** Matching to libraries uses Kovats retention index. Provide alkane standards as a tab-separated file with a header row and two columns, Kovats index and measured retention time in minutes (example: `test/KovatsIndex_alkanestandards_cuimc.tsv`). RI is interpolated from feature retention time by a lowess fit to the standards; features eluting outside the standards get the RI of the nearest end.
+
+To process GC-MS data and add an `RI` column to the feature tables (right after `detection_counts`):
+
+```
+asari process -i mydir/gc_project --workflow GC --kovats KovatsIndex_alkanestandards.tsv
+```
+
+Feature tables that already have an RI column (named `RI`, `Retention Index`, `Kovats_RI`, etc.) do not need `--kovats` in the steps below. Otherwise, pass `--kovats` to `deconvolute` or `annotate`.
+
+To annotate a feature table by reverse search (default; recommended for high-resolution data). Library spectra are matched to features within m/z and RI windows:
+
+```
+asari annotate -i gc_project/export/full_Feature_table.tsv -o gc_project -j gc_anno \
+    --workflow GC --db my_GCMS_library.msp
+```
+
+To deconvolute a feature table into pseudospectra (`--deconvolution_algorithm`: `hcl`, the default, clustering by correlation across samples and RI; `adap`, a port of ADAP-GC; or `nmf`, as in MSHub). The results are written to JSON and MSP:
+
+```
+asari deconvolute -i gc_project/export/full_Feature_table.tsv -o gc_project -j gc_decon \
+    --workflow GC --deconvolution_algorithm adap
+```
+
+To annotate pseudospectra by forward search against a library. Use `--hires F` for unit-mass (low-resolution) data or libraries:
+
+```
+asari annotate -i gc_decon_denovo_pseudospectra.json -o gc_project -j gc_fwd \
+    --workflow GC --search_algorithm forward --db my_GCMS_library.msp
+```
+
+Forward search can also start from a feature table, which then runs deconvolution first (`--search_algorithm forward --deconvolution_algorithm nmf`).
+
+Notes:
+- `--db` takes MSP or JSON. Common MSP field-name variants are recognized; RI is read from `RI`, `Retention_index`, `Kovats` etc., or from `RETENTIONTIME` as in some GC libraries. Library entries without RI are not used. Without `--db`, the built-in `asari/db/gcms_corelib_20260930.msp` is used. A small low-resolution test library is at `asari/db/lowres_test_gcms.msp`.
+- Search parameters (`ms2_tolerance_in_da`, `ri_tolerance`, `score_cutoff_cosine`, `score_cutoff_entropy`, `corr_cutoff`) can be set in a parameter file (`-p`).
+- Annotation outputs: `empCpds_<project>.tsv` (one row per annotated compound), `Features_<project>.tsv` (one row per annotated feature), `Annotated_pseudospectra_<project>.json` and `.msp`, plus PDF mirror plots under `mirrorplots/`.
+
+### More examples
 
 To use LC-MS/MS workflow to produce feature tables and MS/MS clusters:
 
@@ -87,17 +128,6 @@ To search MS/MS agains a database:
 To pre-annotate LC-MS feature table then match to a database (default HMDB for now):
 
 `asari annotate -i /Users/lish/li.play/test16_v16_599432/preferred_Feature_table.tsv -o /Users/lish/li.play/test16_v16_599432/ -j LCMSanno --workflow LC --mode pos`
-
-To annotate GC-MS feature table using a custom database and alkane standards:
-
-`asari annotate -i project_311234834/export/full_Feature_table.tsv 
--o project_311234834 -j gc_annotation_311234834 
---kovats /Users/lish/li.proj/asari_project/GCHRMS/KovatsIndex_alkanestandards_cuimc.tsv 
---db /Users/lish/li.proj/asari_project/GCHRMS/Resources/GCHRMS_Database_251217.msp 
---workflow GC
-`
-
-### Various tools
 
 To launch a dashboard in your web browser after the project is processed into directory process_result_dir:
 
@@ -117,7 +147,7 @@ Please check documentation and demo notebooks for additional uses.
 
 ## Output
 
-A typical run of data processing may generatae a directory like this
+A typical run of LC-MS data processing may generatae a directory like this
 
     rsvstudy_asari_project_427105156
     ├── Annotated_empricalCompounds.json

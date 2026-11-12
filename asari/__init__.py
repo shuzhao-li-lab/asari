@@ -1,3 +1,5 @@
+"""Asari, trackable and scalable Python program for high-resolution metabolomics data processing."""
+
 __version__ = "1.19.1"
 
 from . import analyze
@@ -14,5 +16,5 @@ from . import peaks
 from . import samples
 from . import workflow
 
-# To make optional 
+# To make optional
 # from . import dashboard

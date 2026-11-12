@@ -1,7 +1,7 @@
-'''
-Functions to prepare Asari GC input file on Kovats indices.  
+"""
+Functions to prepare Asari GC input file on Kovats indices.
 
-Kovats index is 100 * (Alkane number). 
+Kovats index is 100 * (Alkane number).
 Example format is tab delimited .tsv file:
 (test/KovatsIndex_alkanestandards_cuimc.tsv)
 
@@ -9,14 +9,14 @@ Kovats_index	Measured_time(minutes)
 1000.0	2.69
 1000.0	2.69
 1000.0	2.7
-'''
+"""
 
-def get_index_from_tsv_batches(infile, 
-                               batch_start_col=5, 
+def get_index_from_tsv_batches(infile,
+                               batch_start_col=5,
                                outfile='KovatsIndex_alkanestandards.tsv',
                                sep='\t'):
-    '''
-    The alkane standards are usually measured per batch. 
+    """
+    The alkane standards are usually measured per batch.
     This function converts a typical table to Asari format of Kovats index.
     All columns after batch_start_col are assumed as retention time (min).
 
@@ -38,7 +38,7 @@ def get_index_from_tsv_batches(infile,
     Empty or non-numeric retention times are skipped.
     Output is written to outfile, sorted by Kovats index then by batch order.
     Returns outfile path, which can be used as `--kovats` input to asari.
-    '''
+    """
     import pandas as pd
 
     df = pd.read_csv(infile, sep=sep)
@@ -64,12 +64,12 @@ def get_index_from_tsv_batches(infile,
 
 
 def get_tsv_from_xlsx(infile, outfile=None, sheet_name=0):
-    '''
+    """
     Convert a sheet in an Excel file (.xlsx) to tab delimited .tsv file.
     Default is first sheet; outfile defaults to infile with .tsv extension.
     Requires openpyxl, which pandas uses to read .xlsx files.
     Returns outfile path.
-    '''
+    """
     import os
     import pandas as pd
 
@@ -86,11 +86,12 @@ def get_tsv_from_xlsx(infile, outfile=None, sheet_name=0):
     return outfile
 
 
-def get_index_from_xlsx_batches(infile, 
-                                batch_start_col=5, 
+def get_index_from_xlsx_batches(infile,
+                                batch_start_col=5,
                                 outfile='KovatsIndex_alkanestandards.tsv'):
+    """Get Kovats index table from an xlsx file of alkane standard batches."""
     return get_index_from_tsv_batches(
-        get_tsv_from_xlsx(infile), 
+        get_tsv_from_xlsx(infile),
         batch_start_col=batch_start_col,
         outfile=outfile,
         )
@@ -99,31 +100,31 @@ def get_index_from_xlsx_batches(infile,
 # -----------------------------------------------------------
 #
 def main():
-    '''
+    """
     Command line usage:
         python -m asari.tools.kovats 240806_Test_Batches_Alkanes.xlsx
         python -m asari.tools.kovats alkanes_batches.tsv -o KovatsIndex.tsv --batch_start_col 5
     Function is chosen by input file extension, .xlsx or .tsv.
-    '''
+    """
     import argparse
     parser = argparse.ArgumentParser(
         description='Convert alkane standards measured per batch to Asari Kovats index file (tsv).'
         )
     parser.add_argument('infile', help='Input table of alkane retention times per batch, .xlsx or .tsv.')
-    parser.add_argument('--batch_start_col', type=int, default=5, 
+    parser.add_argument('--batch_start_col', type=int, default=5,
                         help='0-based index of first column of retention times (default: 5).')
-    parser.add_argument('-o', '--outfile', type=str, default='KovatsIndex_alkanestandards.tsv', 
+    parser.add_argument('-o', '--outfile', type=str, default='KovatsIndex_alkanestandards.tsv',
                         help='Output tsv file (default: KovatsIndex_alkanestandards.tsv).')
     args = parser.parse_args()
 
     suffix = args.infile.lower().rsplit('.', 1)[-1]
     if suffix == 'xlsx':
-        get_index_from_xlsx_batches(args.infile, 
-                                    batch_start_col=args.batch_start_col, 
+        get_index_from_xlsx_batches(args.infile,
+                                    batch_start_col=args.batch_start_col,
                                     outfile=args.outfile)
     elif suffix == 'tsv':
-        get_index_from_tsv_batches(args.infile, 
-                                   batch_start_col=args.batch_start_col, 
+        get_index_from_tsv_batches(args.infile,
+                                   batch_start_col=args.batch_start_col,
                                    outfile=args.outfile)
     else:
         parser.error(f"Input file must be .xlsx or .tsv, got: {args.infile}")

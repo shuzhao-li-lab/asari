@@ -1,7 +1,9 @@
+"""Command line interface and subcommands of asari."""
+
 import argparse
 import multiprocessing as mp
 import os
-import json 
+import json
 import time
 from functools import partial
 import yaml
@@ -19,18 +21,19 @@ from .utils import build_boolean_dict
 
 booleandict = build_boolean_dict()
 SUBCOMMANDS = ["analyze", "process", "deconvolute", "annotate", "viz", "join", "list_workflows"]
-              # "xic", "extract", 
+              # "xic", "extract",
 
 def get_input_file_list(parameters):
-    '''
+    """
     Resolve the list of mzML input files, either from a text file of paths
     (parameters['files']) or by listing parameters['input'] directory.
-    '''
+    """
     if parameters.get('files'):
         return read_project_file(parameters['files'])
     return read_project_dir(parameters['input'])
 
 def process(parameters):
+    """Run subcommand `process` on input mzML files."""
     list_input_files = get_input_file_list(parameters)
     if not list_input_files:
         print("No valid mzML files are found :(")
@@ -38,19 +41,24 @@ def process(parameters):
         process_project(list_input_files, parameters)
 
 def deconvolute(parameters, args):
+    """Run subcommand `deconvolute`."""
     deconvolute_project(args.input, parameters=parameters)
 
 def analyze(parameters, args):
+    """Run subcommand `analyze` on a single mzML file."""
     analyze_single_sample(args.input, parameters=parameters)
 
 def annotate(parameters, args):
+    """Run subcommand `annotate`."""
     annotate_project(args.input, parameters=parameters)
 
 def join(parameters, args):
+    """Run subcommand `join` on multiple feature tables."""
     join_tables(args.input, parameters=parameters)
 
 def viz(parameters, args):
-    try:    
+    """Run subcommand `viz`, launching dashboard of a processed project."""
+    try:
         from .dashboard import read_project, dashboard
         datadir = args.input
         project_desc, cmap, epd, Ftable, Ptable = read_project(datadir)
@@ -63,16 +71,17 @@ def viz(parameters, args):
             dashboard(project_desc, cmap, epd, Ftable)
     except ImportError:
         print("Error loading Dashboard, likely missing libraries.")
-    
+
 
 def update_peak_detection_params(parameters, args=None):
+    """Update peak detection thresholds, by autoheight estimation or by CLI arguments."""
     if parameters['autoheight']:
         try:
             parameters['min_peak_height'] = estimate_min_peak_height(get_input_file_list(parameters), parameters)
             parameters['min_intensity_threshold'] = parameters['min_peak_height'] / 10
         except ValueError as err:
             print("Problems with input files: {0}. Back to default min_peak_height.".format(err))
-            
+
     elif args and args.min_peak_height:
         try:
             parameters['min_peak_height'] = float(args.min_peak_height)
@@ -98,10 +107,11 @@ def update_peak_detection_params(parameters, args=None):
         try:
             parameters['min_intensity_threshold'] = float(args.min_intensity_threshold)
         except ValueError as err:
-            print("Problems with specified min_intensity_threshold. Back to default min_intensity_threshold.")                    
+            print("Problems with specified min_intensity_threshold. Back to default min_intensity_threshold.")
     return parameters
 
 def update_params_from_CLI(parameters, args, debug_print=False):
+    """Update parameters from command line arguments, which take priority."""
     def __debug_print(debug_print, to_print):
         if debug_print:
             print(to_print)
@@ -112,7 +122,7 @@ def update_params_from_CLI(parameters, args, debug_print=False):
         raise Exception("No arguments provided.")
     if parameters is None:
         raise Exception("No parameters provided.")
-    
+
     # update parameters from user specified yaml or json file
     if args.parameters:
         content = open(args.parameters).read()
@@ -131,7 +141,7 @@ def update_params_from_CLI(parameters, args, debug_print=False):
         debug_print(to_print=f"Using default parameters")
 
     # update parameters from command line arguments
-        
+
     # set the ionization mode
     if args.mode:
         assert args.mode in {'pos', 'neg'}, "Mode must be either pos or neg."
@@ -139,7 +149,7 @@ def update_params_from_CLI(parameters, args, debug_print=False):
         debug_print(to_print=f"Setting mode to {parameters['mode']}")
     else:
         debug_print(to_print=f"Using default mode {parameters['mode']}")
-    
+
     # set the ppm
     if args.ppm:
         assert args.ppm > 0, "PPM must be greater than 0."
@@ -231,7 +241,7 @@ def update_params_from_CLI(parameters, args, debug_print=False):
         debug_print(to_print=f"Setting num_lowess_iterations to {parameters['num_lowess_iterations']}")
     else:
         debug_print(to_print=f"Using default num_lowess_iterations: {parameters['num_lowess_iterations']}")
-    
+
     # set autoheight
     if args.autoheight:
         parameters['autoheight'] = booleandict[args.autoheight]
@@ -333,7 +343,7 @@ def update_params_from_CLI(parameters, args, debug_print=False):
         debug_print(to_print=f"Setting table_for_viz to {parameters['table_for_viz']}")
     else:
         debug_print(to_print=f"Using default table_for_viz: {parameters['table_for_viz']}")
-    
+
     # set visualization max samples
     if args.vizualization_max_samples:
         parameters['vizualization_max_samples'] = args.vizualization_max_samples
@@ -354,31 +364,33 @@ def update_params_from_CLI(parameters, args, debug_print=False):
         if parameters.get('workflow') != 'GC':
             print(f"Warning: --kovats is only used in GC workflow; ignored for workflow {parameters.get('workflow')}.")
 
-    # 
+    #
     if args.run:
         parameters['run'] = args.run.rstrip()
         debug_print(to_print=f"Setting run to {parameters['run']}")
 
 
 def initialize_parameters(parameters, args):
+    """Add version and time stamp to parameters."""
     parameters['asari_version'] = __version__
     parameters['timestamp'] = time.strftime("%Y%m%d-%H%M%S")
 
 def build_parser():
-    # Since the default_parameters is used by default, we should not set default 
+    """Build the argument parser for asari command line."""
+    # Since the default_parameters is used by default, we should not set default
     # values in the CLI. This is good practice to avoid confusion or misconfiguration.
     # The CLI takes priority over an optional parameter file which takes priority over
     # any of the default_parameters.
 
     parser = argparse.ArgumentParser(description='asari, MS metabolomics data processing')
 
-    parser.add_argument('-v', '--version', action='version', version=__version__, 
+    parser.add_argument('-v', '--version', action='version', version=__version__,
             help='print version and exit')
     parser.add_argument('run', metavar='subcommand', type=str,
             help="one of the subcommands: " + ", ".join(SUBCOMMANDS))
     parser.add_argument('-m', '--mode', type=str,
             help='mode of ionization, pos or neg')
-    parser.add_argument('--ppm', type=int, 
+    parser.add_argument('--ppm', type=int,
             help='mass precision in ppm (part per million), same as mz_tolerance_ppm')
     parser.add_argument('-i', '--input', type=str,
             help='input directory of mzML files to process, or a single file to analyze')
@@ -386,7 +398,7 @@ def build_parser():
             help='output directory')
     parser.add_argument('-j', '--project', type=str,
             help='project name')
-    parser.add_argument('-p', '--parameters', type=str, 
+    parser.add_argument('-p', '--parameters', type=str,
             help='Custom paramter file in YAML. Use parameters.yaml as template.')
     parser.add_argument('-c', '--multicores', type=int,
             help='nunmber of CPU cores intented to use')
@@ -399,7 +411,7 @@ def build_parser():
     parser.add_argument('--deconvolution_algorithm', type=str,
                 choices=['hcl', 'adap', 'nmf'],
                 help=f"deconvolution algorithm for deconvolute and forward annotate (default: {PARAMETERS['deconvolution_algorithm']})")
-    
+
     parser.add_argument('--files', type=str,
             help='text file listing input mzML file paths, one per line; alternative to --input directory')
     parser.add_argument('--reference', type=str,
@@ -431,9 +443,9 @@ def build_parser():
     # diagnosis
     parser.add_argument('--diagnosis',
                 help='keep diagnosis and viz data after processing data')
-    parser.add_argument('--debug_rtime_align', 
+    parser.add_argument('--debug_rtime_align',
             help='Toggle on debug mode for retention alignment: output align figures and reference features.')
-    parser.add_argument('--drop_unaligned_samples', 
+    parser.add_argument('--drop_unaligned_samples',
             help='Drop samples that fail RT alignment from composite map., recommend true for data mining')
 
     parser.add_argument('--kovats', type=str,
@@ -446,21 +458,21 @@ def build_parser():
             help='High resolution or not for GC data')
     parser.add_argument('--denovo_limit', type=int,
             help='Feature numbers to consider in de novo construction of empCpds (deconvolution) on GC data')
-    
+
     parser.add_argument('--table_for_viz', type=str,
             help='Table to use for visualization, preferred or full')
     parser.add_argument('--vizualization_max_samples', type=int,
             help='Maximum number of samples to display in visualization')
     parser.add_argument('--workflow', type=str,
             help='Workflow to use, LC by default')
-    
+
     args = parser.parse_args()
     return args
 
 def run_asari(parameters, args=None):
-    '''
-    To run Subcommands.   
-    '''
+    """
+    To run Subcommands.
+    """
     if parameters['run'] == 'process':
         process(parameters)
     if parameters['run'] == 'deconvolute':
@@ -481,7 +493,7 @@ def run_asari(parameters, args=None):
         print(f"Expecting one of the subcommands: {SUBCOMMANDS}.")
 
 def validate_kovats_file(kovats_file):
-    '''Check that the Kovats standards file can be read and fitted, before long processing.'''
+    """Check that the Kovats standards file can be read and fitted, before long processing."""
     import pandas as pd
     assert os.path.isfile(kovats_file), f"Kovats standards file not found: {kovats_file}"
     kovats = pd.read_csv(kovats_file, sep='\t')
@@ -492,7 +504,7 @@ def validate_kovats_file(kovats_file):
 
 
 def main():
-    '''
+    """
     asari, Trackable and scalable Python program for high-resolution MS metabolomics data preprocessing.
 
         * analyze: analyze a single mzML file to print summary of statistics and recommended parameters.
@@ -508,8 +520,8 @@ def main():
     parameters : dict
         This dictionary contains a number of key value pairs that determine the behavior of various aspects
         of the asari processing. The parameters can be seen in default_parameters.py. Command line arguments
-        will override any defaults and any values provided in the parameters.json file. 
-    '''
+        will override any defaults and any values provided in the parameters.json file.
+    """
 
     print("\n\n~~~~~~~ Hello from Asari (%s) ~~~~~~~~~\n" %__version__)
 

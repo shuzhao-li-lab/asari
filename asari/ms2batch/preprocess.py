@@ -20,6 +20,7 @@ def spectrum_ids(offsets):
 
 
 def offsets_from_ids(spec, n_spectra):
+    """Offsets (n_spectra + 1) from sorted spectrum ids of peaks."""
     offsets = np.zeros(n_spectra + 1, dtype=np.int64)
     np.cumsum(np.bincount(spec, minlength=n_spectra), out=offsets[1:])
     return offsets

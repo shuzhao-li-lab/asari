@@ -1,14 +1,14 @@
-'''
+"""
 join as 1st class module, as it will be used to divide & conquer large studies.
 
-The mass alignment is same as landmark_guided_mapping; 
+The mass alignment is same as landmark_guided_mapping;
 RT alignment is as default LOESS.
 Merge feature tables and zero fill absent features in samples.
 Track input feature IDs and parent_masstrack_id; keep mapping record.
 
 Example use:
 python3 -m asari.main join -i /Users/lish/li.play/join_MT_files.txt -o /Users/lish/li.play/ -j test_join_mt01
-'''
+"""
 
 import os
 import time
@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 from scipy import interpolate
-from scipy.signal import find_peaks 
+from scipy.signal import find_peaks
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
@@ -31,39 +31,39 @@ from .tools.file_io import read_features_from_asari_table
 
 
 def join_tables(file_list_paths, parameters):
-    '''
+    """
     This joins data from multiple feature tables using the same LC/GC-MS method.
-    Batch correction of intensities should be performed after joining. 
+    Batch correction of intensities should be performed after joining.
 
     file_list_paths : a text file containing list of paths, one per line
     parameters : dict, containing parameters as typical Asari processing
 
     Treat each table as a virtual "sample".
-    Build a 'MassGrid' first by aligning masstracks btw tables; 
+    Build a 'MassGrid' first by aligning masstracks btw tables;
     RT alignment is performed on features that are high and unique per mass track.
     Elution peaks are reconstructed using Gaussian simulation, and peak detection is performed on the composite mass track.
-    Features on each composite mass track are mapped back to the original tables. 
+    Features on each composite mass track are mapped back to the original tables.
 
-    The IDs of mass tracks are not compatible with default Asari processing, 
-    because the latter uses positional indexes but this function reuses old IDs. 
+    The IDs of mass tracks are not compatible with default Asari processing,
+    because the latter uses positional indexes but this function reuses old IDs.
     Therefore, the sample-wise MassGrid building is standalone version here.
 
-    The landmark_guided_dict_mapping function has mass calibration, 
+    The landmark_guided_dict_mapping function has mass calibration,
     triggered by correction_tolerance_ppm (1 default).
 
     Format of composite feature is like:
-    {'id': 'F00000501m', 'mz': 284.2945, 'rtime': 1116.97, 'parent_masstrack_id': 107, 'height': 150503047, 'rtime_left_base': 1115.77, 'rtime_right_base': 1118.17, 
-    'members': {'3A5_H_full_Feature_table.tsv': [{'id': 'F388', 'mz': 284.2947, 'apex': 1116.94}], 
-    '2C19_H_full_Feature_table.tsv': [{'id': 'F366', 'mz': 284.2946, 'apex': 1116.55}], 
-    '2B6_H_full_Feature_table.tsv': [{'id': 'F360', 'mz': 284.2945, 'apex': 1116.81}], 
+    {'id': 'F00000501m', 'mz': 284.2945, 'rtime': 1116.97, 'parent_masstrack_id': 107, 'height': 150503047, 'rtime_left_base': 1115.77, 'rtime_right_base': 1118.17,
+    'members': {'3A5_H_full_Feature_table.tsv': [{'id': 'F388', 'mz': 284.2947, 'apex': 1116.94}],
+    '2C19_H_full_Feature_table.tsv': [{'id': 'F366', 'mz': 284.2946, 'apex': 1116.55}],
+    '2B6_H_full_Feature_table.tsv': [{'id': 'F360', 'mz': 284.2945, 'apex': 1116.81}],
     'WT_H_full_Feature_table.tsv': []}}
 
-    TO-DO: 
-    options to use standards-calibrated RT alignment or turn off. 
+    TO-DO:
+    options to use standards-calibrated RT alignment or turn off.
     E.g. environmental samples may not have consistent landmarks to align;
     GC RI can be applied per batch, no need to realign in join.
 
-    '''
+    """
     time_stamp = [str(x) for x in time.localtime()[1:6]]
     subdir = '_'.join(['join', parameters['project_name'], ''.join(time_stamp)])
     outdir = os.path.join(parameters['outdir'], subdir)
@@ -77,7 +77,7 @@ def join_tables(file_list_paths, parameters):
     tables.sort(key=lambda x: x['number_features'], reverse=True)
     for ii, table in enumerate(tables):
         anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(
-            table['sample_data']['list_mass_tracks'], 
+            table['sample_data']['list_mass_tracks'],
             mz_tolerance_ppm=parameters['mz_tolerance_ppm']
             )
         table['anchor_mz_pairs'] = anchor_mz_pairs
@@ -110,13 +110,13 @@ def join_tables(file_list_paths, parameters):
     # redo index
     REF_landmarks = [reverse_ref_dict[x] for x in MG._mz_landmarks_]
     print("Scan number is arbitrary in the `join` process. \nMassGrid alignment and composite peak detection are similar to raw data processing.\n")
-    
+
     for table in tables[1:]:
         print(f"Adding to MassGrid {table['input_file']}.")
         _N1 = len(REF_reference_mzdict)
         new_reference_map2 = {}
         # similar flow as MG.add_sample() but using dict as input
-        SM_mzdict = {x['id_number']: x['mz'] 
+        SM_mzdict = {x['id_number']: x['mz']
                      for x in table['sample_data']['list_mass_tracks']}
         mapped_pairs, dict2_unmapped, _r = landmark_guided_dict_mapping(
             REF_reference_mzdict, REF_landmarks, SM_mzdict, table['_mz_landmarks_']
@@ -128,7 +128,7 @@ def join_tables(file_list_paths, parameters):
             REF_reference_mzdict[_N1 + ii] = SM_mzdict[idx]
             new_reference_map2[_N1 + ii] = idx
             # update landmark m/z values using the new index numbers as part of new_reference_mzlist
-            # Not important to add more landmarks. 
+            # Not important to add more landmarks.
             # if idx in table['_mz_landmarks_']:
             #    REF_landmarks.append(_N1 + ii)
 
@@ -141,7 +141,7 @@ def join_tables(file_list_paths, parameters):
         NewGrid[ :MG.MassGrid.shape[0]] = MG.MassGrid       # replicate last grid
         NewGrid['mz'] = [REF_reference_mzdict[ii] for ii in range(new_num_rows)]    # update ref m/z list
         NewGrid[ table['name'] ] = [new_reference_map2.get(ii, None) for ii in range(new_num_rows)]   # update col of this sample
-        NewGrid[ table['name'] ] = NewGrid[ table['name'] ].astype('Int64') 
+        NewGrid[ table['name'] ] = NewGrid[ table['name'] ].astype('Int64')
         MG.MassGrid = NewGrid
 
     MG.MassGrid.to_csv(os.path.join(outdir, 'MassGrid.csv'))
@@ -188,10 +188,10 @@ def join_tables(file_list_paths, parameters):
         master_track2features[table['name']] = _d
 
     print("\nCombining features and detecting elution peaks on the composite mass tracks.\n\n")
-    
+
     #
     # def combined tracks, to merge tracks of close m/z values, by parameters['mz_tolerance_ppm'] (default 5 ppm)
-    # 
+    #
     operational_tracks, operational_tracks_mz = {}, {}
     mztracks = list(zip(MG.MassGrid['mz'].tolist(), MG.MassGrid.index))     # [(83.0603, 0), (84.0443, 1), ...]
     mztracks.sort()
@@ -206,7 +206,7 @@ def join_tables(file_list_paths, parameters):
             to_merge_clusters[ii] = [mztracks[a], mztracks[b]]
             _registered_[a] = ii
             _registered_[b] = ii
-    
+
     print(f"Number of composite mass tracks to merge due to close m/z values: {len(to_merge_clusters)}")
     for ii, track in enumerate(mztracks):           # track = (mz, index)
         if ii in _registered_:
@@ -217,7 +217,7 @@ def join_tables(file_list_paths, parameters):
                 operational_tracks[cluster_id] = [track[1]]
         else:
             operational_tracks[ii] = [track[1]]
-    
+
     # Update feature list; decide feature correspondence on each composite mass track
     new_feature_list = []
     names = [table['name'] for table in tables]
@@ -258,7 +258,7 @@ def join_tables(file_list_paths, parameters):
             elif len(members) == 0:
                 member_fields += ['', '', '']
             else:
-                member_fields += [','.join([x['id'] for x in members]), 
+                member_fields += [','.join([x['id'] for x in members]),
                                   members[0]['mz'], members[0]['apex']]
 
         s += '\t'.join([str(x) for x in [
@@ -268,7 +268,7 @@ def join_tables(file_list_paths, parameters):
     with open( os.path.join(outdir, 'asari_join_record.tsv'), 'w') as O:
         O.write(s)
 
-    # 
+    #
     # Join all data, i.e. Merge feature tables with sample/intensity values
     # fill 0s if feature not present in a table
     # merge if more than 1 features are from same table
@@ -281,7 +281,7 @@ def join_tables(file_list_paths, parameters):
         sample_columns += DATADICT[name]['id_number']   # 1st row actually has sample cols
         sample_numbers[name] = len(DATADICT[name]['id_number'])
 
-    use_cols = [ 'id', 'mz', 'rtime', 'rtime_left_base', 'rtime_right_base', 'parent_masstrack_id', 
+    use_cols = [ 'id', 'mz', 'rtime', 'rtime_left_base', 'rtime_right_base', 'parent_masstrack_id',
                     'height', 'cSelectivity', 'goodness_fitting', 'snr', 'detection_counts' ]
     s = '\t'.join(use_cols  + sample_columns) + '\n'
     for feat in new_feature_list:
@@ -305,20 +305,21 @@ def join_tables(file_list_paths, parameters):
         json.dump(parameters, f, ensure_ascii=False, indent=2)
 
     with open(os.path.join(outdir, 'failed_features.log'), 'w') as O:
-        O.write('\n'.join([str(f) for f in empty_features]))    
+        O.write('\n'.join([str(f) for f in empty_features]))
 
 
 def join_split_features(list_str_intensities):
+    """Sum intensities of split features, as lists of strings."""
     data = np.zeros(len(list_str_intensities[0])).astype(int)
     for L in list_str_intensities:
         data += np.array(L).astype(int)
     return [str(x) for x in data]
 
 def extract_sample_data_dict(filepath, data_start_col=11):
-    '''
+    """
     filepath : Table in Asari format, which has no empty field.
     return data in str, as conversion is only needed occassionally.
-    '''
+    """
     d = {}
     for row in open(filepath).readlines():
         a = row.rstrip().split('\t')
@@ -327,17 +328,17 @@ def extract_sample_data_dict(filepath, data_start_col=11):
 
 
 def reformat_composite_feature_list(new_feature_list, table_names):
-    '''
+    """
     Example composite feature:
-    {'mz': 284.2945, 'parent_masstrack_id': 107, 'rtime': 1116.97, 'height': 150503047, 'rtime_left_base': 1115.77, 'rtime_right_base': 1118.17, 
-    'members': [{'id_number': 'F388', 'id': 'F388', 'mz': 284.2947, 'rtime': 1116.94, 'apex': 1116.94, 'rtime_left_base': 1115.37, 'rtime_right_base': 1118.52, 'parent_masstrack_id': 139, 'peak_area': 75869861.0, 'cSelectivity': 0.64, 'goodness_fitting': 0.94, 'snr': 3.0, 'detection_counts': 9, 'source': '/Users/sli/play/join_test/DnCl_pellets_3A5_H_full_Feature_table.tsv'}, 
-    {'id_number': 'F366', 'id': 'F366', 'mz': 284.2946, 'rtime': 1116.8590394349912, 'apex': 1116.55, 'rtime_left_base': 1114.97, 'rtime_right_base': 1118.12, 'parent_masstrack_id': 128, 'peak_area': 72230862.0, 'cSelectivity': 0.62, 'goodness_fitting': 0.95, 'snr': 3.0, 'detection_counts': 9, 'source': '/Users/sli/play/join_test/DnCl_pellets_2C19_H_full_Feature_table.tsv'}, 
+    {'mz': 284.2945, 'parent_masstrack_id': 107, 'rtime': 1116.97, 'height': 150503047, 'rtime_left_base': 1115.77, 'rtime_right_base': 1118.17,
+    'members': [{'id_number': 'F388', 'id': 'F388', 'mz': 284.2947, 'rtime': 1116.94, 'apex': 1116.94, 'rtime_left_base': 1115.37, 'rtime_right_base': 1118.52, 'parent_masstrack_id': 139, 'peak_area': 75869861.0, 'cSelectivity': 0.64, 'goodness_fitting': 0.94, 'snr': 3.0, 'detection_counts': 9, 'source': '/Users/sli/play/join_test/DnCl_pellets_3A5_H_full_Feature_table.tsv'},
+    {'id_number': 'F366', 'id': 'F366', 'mz': 284.2946, 'rtime': 1116.8590394349912, 'apex': 1116.55, 'rtime_left_base': 1114.97, 'rtime_right_base': 1118.12, 'parent_masstrack_id': 128, 'peak_area': 72230862.0, 'cSelectivity': 0.62, 'goodness_fitting': 0.95, 'snr': 3.0, 'detection_counts': 9, 'source': '/Users/sli/play/join_test/DnCl_pellets_2C19_H_full_Feature_table.tsv'},
     {'id_number': 'F360', 'id': 'F360', 'mz': 284.2945, 'rtime': 1116.9675010942542, 'apex': 1116.81, 'rtime_left_base': 1115.23, 'rtime_right_base': 1118.39, 'parent_masstrack_id': 127, 'peak_area': 67566816.0, 'cSelectivity': 0.54, 'goodness_fitting': 0.92, 'snr': 3.0, 'detection_counts': 9, 'source': '/Users/sli/play/join_test/DnCl_pellets_2B6_H_full_Feature_table.tsv'}]}
-    '''
+    """
     # parent_masstrack_id	peak_area	cSelectivity	goodness_fitting	snr	detection_counts
     def shorten(feature):
         return {
-            'id': feature['id'], 'mz': feature['mz'], 'apex': feature['apex'], 
+            'id': feature['id'], 'mz': feature['mz'], 'apex': feature['apex'],
         }
     new, empty_features = [], []
     for ii, feat in enumerate(new_feature_list):
@@ -367,46 +368,46 @@ def reformat_composite_feature_list(new_feature_list, table_names):
 
 
 def consolidate_track_features(dict_sample_features, parameters, id_number, mz, scan_time=0.1):
-    '''
+    """
     Combining signals from multiple samples on the same mass track, and detect elution peaks on the composite mass track.
-    
+
     dict_sample_features : groups of features from each sample (table) on same mass track
     scan_time : interval used to resample peak shape (seconds)
 
     E.g.,
-    {'3A5_H_full_Feature_table.tsv': [{'id_number': 'F25109', 'id': 'F25109', 'mz': 583.5966, 'rtime': 1221.2, 
-    'apex': 1221.2, 'rtime_left_base': 1198.36, 'rtime_right_base': 1244.05, 'parent_masstrack_id': 8030, 'peak_area': 1083540630.0, 'cSelectivity': 1.0, 'goodness_fitting': 0.98, 'snr': 106.0, 'detection_counts': 9}, 
-                        {'id_number': 'F25110', 'id': 'F25110', 'mz': 583.5966, 'rtime': 1323.5, 
-                        'apex': 1323.5, 'rtime_left_base': 1308.92, 'rtime_right_base': 1323.89, 'parent_masstrack_id': 8030, 'peak_area': 15210424.0, 'cSelectivity': 0.68, 'goodness_fitting': 0.58, 'snr': 7.0, 'detection_counts': 9}], 
-    '2C19_H_full_Feature_table.tsv': [{'id_number': 'F23241', 'id': 'F23241', 'mz': 583.5964, 'rtime': 1220.358334439543, 
-    'apex': 1220.15, 'rtime_left_base': 1219.89, 'rtime_right_base': 1221.47, 'parent_masstrack_id': 7661, 'peak_area': 160745369.0, 'cSelectivity': 0.19, 'goodness_fitting': 0.66, 'snr': 8.0, 'detection_counts': 9}, 
-                        {'id_number': 'F23242', 'id': 'F23242', 'mz': 583.5964, 'rtime': 1321.0629938933155, 
-                        'apex': 1320.87, 'rtime_left_base': 1320.48, 'rtime_right_base': 1321.66, 'parent_masstrack_id': 7661, 'peak_area': 1622804.0, 'cSelectivity': 0.03, 'goodness_fitting': 0.73, 'snr': 5.0, 'detection_counts': 9}], 
-    '2B6_H_full_Feature_table.tsv': [{'id_number': 'F23969', 'id': 'F23969', 'mz': 583.5963, 'rtime': 1219.4791091268726, 
-    'apex': 1219.23, 'rtime_left_base': 1218.84, 'rtime_right_base': 1219.89, 'parent_masstrack_id': 7579, 'peak_area': 189816475.0, 'cSelectivity': 0.15, 'goodness_fitting': 0.56, 'snr': 8.0, 'detection_counts': 9}, 
-                        {'id_number': 'F23970', 'id': 'F23970', 'mz': 583.5963, 'rtime': 1220.9179464905783, 
-                        'apex': 1220.68, 'rtime_left_base': 1220.68, 'rtime_right_base': 1220.68, 'parent_masstrack_id': 7579, 'peak_area': 85019880.0, 'cSelectivity': 0.13, 'goodness_fitting': 0.89, 'snr': 7.0, 'detection_counts': 9}], 
-    'WT_H_full_Feature_table.tsv': [{'id_number': 'F22899', 'id': 'F22899', 'mz': 583.5964, 'rtime': 1223.5767717154906, 
-    'apex': 1223.57, 'rtime_left_base': 1223.04, 'rtime_right_base': 1225.14, 'parent_masstrack_id': 7830, 'peak_area': 157757246.0, 'cSelectivity': 0.23, 'goodness_fitting': 0.76, 'snr': 5.0, 'detection_counts': 9}, 
-                        {'id_number': 'F22900', 'id': 'F22900', 'mz': 583.5964, 'rtime': 1320.4266479964485, 
+    {'3A5_H_full_Feature_table.tsv': [{'id_number': 'F25109', 'id': 'F25109', 'mz': 583.5966, 'rtime': 1221.2,
+    'apex': 1221.2, 'rtime_left_base': 1198.36, 'rtime_right_base': 1244.05, 'parent_masstrack_id': 8030, 'peak_area': 1083540630.0, 'cSelectivity': 1.0, 'goodness_fitting': 0.98, 'snr': 106.0, 'detection_counts': 9},
+                        {'id_number': 'F25110', 'id': 'F25110', 'mz': 583.5966, 'rtime': 1323.5,
+                        'apex': 1323.5, 'rtime_left_base': 1308.92, 'rtime_right_base': 1323.89, 'parent_masstrack_id': 8030, 'peak_area': 15210424.0, 'cSelectivity': 0.68, 'goodness_fitting': 0.58, 'snr': 7.0, 'detection_counts': 9}],
+    '2C19_H_full_Feature_table.tsv': [{'id_number': 'F23241', 'id': 'F23241', 'mz': 583.5964, 'rtime': 1220.358334439543,
+    'apex': 1220.15, 'rtime_left_base': 1219.89, 'rtime_right_base': 1221.47, 'parent_masstrack_id': 7661, 'peak_area': 160745369.0, 'cSelectivity': 0.19, 'goodness_fitting': 0.66, 'snr': 8.0, 'detection_counts': 9},
+                        {'id_number': 'F23242', 'id': 'F23242', 'mz': 583.5964, 'rtime': 1321.0629938933155,
+                        'apex': 1320.87, 'rtime_left_base': 1320.48, 'rtime_right_base': 1321.66, 'parent_masstrack_id': 7661, 'peak_area': 1622804.0, 'cSelectivity': 0.03, 'goodness_fitting': 0.73, 'snr': 5.0, 'detection_counts': 9}],
+    '2B6_H_full_Feature_table.tsv': [{'id_number': 'F23969', 'id': 'F23969', 'mz': 583.5963, 'rtime': 1219.4791091268726,
+    'apex': 1219.23, 'rtime_left_base': 1218.84, 'rtime_right_base': 1219.89, 'parent_masstrack_id': 7579, 'peak_area': 189816475.0, 'cSelectivity': 0.15, 'goodness_fitting': 0.56, 'snr': 8.0, 'detection_counts': 9},
+                        {'id_number': 'F23970', 'id': 'F23970', 'mz': 583.5963, 'rtime': 1220.9179464905783,
+                        'apex': 1220.68, 'rtime_left_base': 1220.68, 'rtime_right_base': 1220.68, 'parent_masstrack_id': 7579, 'peak_area': 85019880.0, 'cSelectivity': 0.13, 'goodness_fitting': 0.89, 'snr': 7.0, 'detection_counts': 9}],
+    'WT_H_full_Feature_table.tsv': [{'id_number': 'F22899', 'id': 'F22899', 'mz': 583.5964, 'rtime': 1223.5767717154906,
+    'apex': 1223.57, 'rtime_left_base': 1223.04, 'rtime_right_base': 1225.14, 'parent_masstrack_id': 7830, 'peak_area': 157757246.0, 'cSelectivity': 0.23, 'goodness_fitting': 0.76, 'snr': 5.0, 'detection_counts': 9},
+                        {'id_number': 'F22900', 'id': 'F22900', 'mz': 583.5964, 'rtime': 1320.4266479964485,
                         'apex': 1320.35, 'rtime_left_base': 1319.17, 'rtime_right_base': 1320.61, 'parent_masstrack_id': 7830, 'peak_area': 1890897.0, 'cSelectivity': 0.04, 'goodness_fitting': 0.64, 'snr': 6.0, 'detection_counts': 9}]}
 
     From the above examples:
-    a) RT calibration did not shift much of original values, e.g. 2B6_H was  1219.23 & 1220.68                  
+    a) RT calibration did not shift much of original values, e.g. 2B6_H was  1219.23 & 1220.68
     b) Most tables have two distinct features around 1221 and 1321
-    c) Split features exist, e.g. 2B6_H was  1219.23 & 1220.68 (if chromatography isn't good enough, not a problem of the software).    
+    c) Split features exist, e.g. 2B6_H was  1219.23 & 1220.68 (if chromatography isn't good enough, not a problem of the software).
 
-    We use the Composite Mass Track and elution peak detection as in LC-MS Asari to combine data. 
-    Elution peaks per feature are constructed using Gaussian simulation 
-    (e.g. parameters - 'apex': 1320.87, 'rtime_left_base': 1320.48, 'rtime_right_base': 1321.66, 'peak_area': 1622804.0). 
-    Composite Mass Track is sum of individual tracks. The method should take care of sporatic split features. 
-    Results should include like {consensus_feature: 
+    We use the Composite Mass Track and elution peak detection as in LC-MS Asari to combine data.
+    Elution peaks per feature are constructed using Gaussian simulation
+    (e.g. parameters - 'apex': 1320.87, 'rtime_left_base': 1320.48, 'rtime_right_base': 1321.66, 'peak_area': 1622804.0).
+    Composite Mass Track is sum of individual tracks. The method should take care of sporatic split features.
+    Results should include like {consensus_feature:
     track_mz, rtime, {table_name: [{'id_number': 'F25109', 'id': 'F25109', 'mz': 583.5966, 'rtime': 1221.2, 'peak_area': 1083540630.0,}, ], }
-    }. 
-    The returned composite features keep SNR as max value. 
-    
+    }.
+    The returned composite features keep SNR as max value.
+
     returns list of new consolidated consensus features, with mapping to input features
-    '''
+    """
     # determine rtime range
     all_features = []
     for name, list_features in dict_sample_features.items():
@@ -417,7 +418,7 @@ def consolidate_track_features(dict_sample_features, parameters, id_number, mz, 
     if not all_features:
         return []
     else:
-        left_base = min([feat['rtime_left_base'] for feat in all_features]) 
+        left_base = min([feat['rtime_left_base'] for feat in all_features])
         right_base = max([feat['rtime_right_base'] for feat in all_features])
         padding = max(0.2 * (right_base - left_base), 10)           # avoid 0 or too small value
         # time points sampled on track
@@ -431,7 +432,7 @@ def consolidate_track_features(dict_sample_features, parameters, id_number, mz, 
                 # This simulates a peak using Gaussian function
                 sigma = 0.33 * max([feat['rtime']-feat['rtime_left_base'],  feat['rtime_right_base']-feat['rtime']])
                 peak_height = feat['peak_area'] / np.sqrt(2 * np.pi * sigma**2)
-                peak_data = peak_height * np.exp(-(list_rtime - feat['rtime'])**2/(2*sigma**2)) 
+                peak_data = peak_height * np.exp(-(list_rtime - feat['rtime'])**2/(2*sigma**2))
                 composite_mass_track += peak_data
 
             # detection of elution peaks on composite_mass_track
@@ -446,13 +447,13 @@ def consolidate_track_features(dict_sample_features, parameters, id_number, mz, 
             composite_mass_track = composite_mass_track * scaling_factor
             composite_mass_track = np.where(composite_mass_track > LOW, composite_mass_track, 0)
 
-            peaks, properties = find_peaks(composite_mass_track, 
-                                            height=min_peak_height, 
+            peaks, properties = find_peaks(composite_mass_track,
+                                            height=min_peak_height,
                                             distance=min_fwhm,
                                             prominence=min_prominence_threshold,
-                                            width=min_fwhm, 
+                                            width=min_fwhm,
                                             wlen=wlen,
-                                            ) 
+                                            )
             new_peaks = []
             for ii in range(peaks.size):
                 new_peaks.append({
@@ -472,13 +473,14 @@ def consolidate_track_features(dict_sample_features, parameters, id_number, mz, 
 
 
 def get_features_in_range(peak, all_features):
+    """Return features with rtime within the base range of peak."""
     return [feat for feat in all_features if peak['rtime_left_base'] < feat['rtime'] < peak['rtime_right_base']]
 
 
 def collect_rt_calibration_features(list_features, min_area, min_snr=10):
-    '''
+    """
     Get features that are high and unique per mass track, used to align rtime.
-    '''
+    """
     selected = [f for f in list_features if f['peak_area']>min_area and f['snr']>min_snr]
     parent_masstrack_ids = [f['parent_masstrack_id'] for f in selected]
     track_counts = {x: parent_masstrack_ids.count(x) for x in parent_masstrack_ids}
@@ -487,10 +489,10 @@ def collect_rt_calibration_features(list_features, min_area, min_snr=10):
 
 
 def verify_path_list(file_list_paths, filename_contains='Feature_table.tsv', dir_contains='export/'):
-    '''
+    """
     file_list_paths : a text file containing list of paths, one per line
     If not specified, assume full_Feature_table.tsv from Asari is to be used.
-    '''
+    """
     new = []
     for line in open(file_list_paths).read().splitlines():
         if line.strip():
@@ -503,11 +505,11 @@ def verify_path_list(file_list_paths, filename_contains='Feature_table.tsv', dir
     return new
 
 def read_table_to_json(feature_table_file):
-    '''
+    """
     Parse feature_table_file to internal format with list_features and list_mass_tracks.
 
     list_mass_tracks: [{ 'id_number': ii,  'mz': xic[0], ...]
-    '''
+    """
     num_samples, L = read_features_from_asari_table(open(feature_table_file).read())
     mass_tracks = {f['parent_masstrack_id']: f['mz'] for f in L}
     list_mass_tracks = [{'id_number': int(k), 'mz': v} for k,v in mass_tracks.items()]

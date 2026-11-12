@@ -1,3 +1,5 @@
+"""Conversion of raw files to mzML."""
+
 import os
 import subprocess
 import multiprocessing as mp
@@ -7,10 +9,11 @@ from zipfile import ZipFile
 from .utils import bulk_process
 
 class mzMLconverter:
+    """Convert Thermo .RAW files to mzML using ThermoRawFileParser."""
     versions = {
         "1.4.5": "https://github.com/compomics/ThermoRawFileParser/releases/download/v1.4.5/ThermoRawFileParser1.4.5.zip"
     }
-    
+
     installed = {
     }
 
@@ -46,6 +49,7 @@ class mzMLconverter:
 
     @staticmethod
     def install_converter(version="1.4.5"):
+        """Download and extract ThermoRawFileParser; return its path."""
         if mzMLconverter.installed.get(version, None) is None:
             converter_release_url = mzMLconverter.versions[version]
             local_zip_path = os.path.join(os.path.dirname(__file__), f"ThermoRawFileParser{version}.zip")
@@ -77,15 +81,17 @@ class mzMLconverter:
                     if os.path.exists(local_zip_path):
                         os.remove(local_zip_path)
         else:
-            return mzMLconverter.installed[version] 
-        
+            return mzMLconverter.installed[version]
+
     @staticmethod
     def uninstall_converter(version="1.4.5"):
+        """Remove an installed ThermoRawFileParser."""
         if mzMLconverter.installed.get(version, False):
             os.remove(mzMLconverter.installed[version])
             mzMLconverter.installed.pop(version)
-    
+
     def bulk_convert(self, raw_files):
+        """Convert a list of raw files to mzML."""
         conversion_commands = [" ".join([x.replace("INPUT", file) for x in self.command_template]) for file in raw_files]
         conversion_commands = [x.replace("OUTPUT", os.path.dirname(file)) for (x, file) in zip(conversion_commands, raw_files)]
         results = bulk_process(os.system, conversion_commands, self.dask_ip)

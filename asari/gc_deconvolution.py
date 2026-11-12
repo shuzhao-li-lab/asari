@@ -1,4 +1,4 @@
-'''
+"""
 Functions for spectral deconvolution of GC-MS data.
 
 1) Clustering method, default in Asari. Use `--deconvolution_algorithm hcl`.
@@ -25,7 +25,7 @@ The ADAP defaults in mzMine (window 0.2 min, RT tolerance 0.05 min) are converte
 Inputs: list_features in asari JSON notion (from read_feature_table or
 asari.tools.file_io.read_features_from_asari_table, plus 'RI'), and
 feature_dataframe of sample intensities indexed by feature ID (sample columns only).
-'''
+"""
 
 from typing import NamedTuple
 import heapq
@@ -37,7 +37,7 @@ from scipy.optimize import nnls
 from scipy.signal import find_peaks
 from scipy.spatial.distance import pdist
 
-from .gc_functions import * 
+from .gc_functions import *
 
 # requires sklearn for nmf method
 
@@ -47,13 +47,13 @@ from .gc_functions import *
 # ---------------------------------------------------------------------------
 
 def feature_sigmas(features, shape='gaussian', min_sigma=0.1):
-    '''
+    """
     Gaussian standard deviations from feature boundaries.
     gaussian (asari.join):  sigma = 0.33 * max(rtime - left_base, right_base - rtime)
     bigaussian:             left/right sigmas = 0.33 * each half width
     Returns (sigma_left, sigma_right) arrays; equal for 'gaussian'.
     min_sigma guards zero-width features (seen in asari tables).
-    '''
+    """
     rt = np.array([f['rtime'] for f in features], float)
     left = rt - np.array([f['rtime_left_base'] for f in features], float)
     right = np.array([f['rtime_right_base'] for f in features], float) - rt
@@ -66,12 +66,12 @@ def feature_sigmas(features, shape='gaussian', min_sigma=0.1):
 
 
 def simulate_eics(rt_grid, apex, sigma_left, sigma_right, areas, truncate=4.0):
-    '''
+    """
     Simulate EICs on rt_grid as Gaussian (or bi-Gaussian) peaks of given areas.
     peak_height = area / (sqrt(2*pi) * mean(sigma)), as asari.join for the symmetric case.
     Signal beyond `truncate` sigmas is set to 0, so simulated EICs have finite support like real peaks.
     Returns array (len(rt_grid), n_features).
-    '''
+    """
     t = np.asarray(rt_grid, float)[:, None]
     apex = np.asarray(apex, float)[None, :]
     sl = np.asarray(sigma_left, float)[None, :]
@@ -90,8 +90,8 @@ def simulate_eics(rt_grid, apex, sigma_left, sigma_right, areas, truncate=4.0):
 
 
 def ri_penalty_function(abs_ri_delta, min_delta=1, max_delta=100):
-    '''Penalty by RI distance, using a 1-side sigmoid function. Vectorized; accepts scalars or arrays.
-    '''
+    """Penalty by RI distance, using a 1-side sigmoid function. Vectorized; accepts scalars or arrays.
+    """
     d = np.asarray(abs_ri_delta, dtype=float)
     out = 2 / (1 + np.exp(np.e * d / max_delta))
     out = np.where(d < min_delta, 1.0, out)
@@ -100,7 +100,7 @@ def ri_penalty_function(abs_ri_delta, min_delta=1, max_delta=100):
 
 
 def _standardize_rows(M):
-    '''Center and L2-normalize rows so that Pearson r = dot product. Constant rows become 0.'''
+    """Center and L2-normalize rows so that Pearson r = dot product. Constant rows become 0."""
     M = np.asarray(M, dtype=float)
     M = M - M.mean(axis=1, keepdims=True)
     norm = np.sqrt((M * M).sum(axis=1, keepdims=True))
@@ -119,7 +119,7 @@ def get_clusters_by_ri_hcl(
     linkage_method='ward',
     verbose=True,
     ):
-    '''
+    """
     Using RI (retention index) coupled hierarchical clustering (hcl) to find feature clusters.
     - the RI penalty matrix is computed vectorized (was an O(n^2) Python loop);
     - zero-variance features (NaN correlation) get distance 1 instead of breaking linkage;
@@ -129,7 +129,7 @@ def get_clusters_by_ri_hcl(
                     sorted by combined peak area, descending order.
     dict_features : dictionary of features, feature IDs as keys.
     Returns metClus, metClusDict.
-    '''
+    """
     if limit_fearture_num:
         feature_dataframe_sorted = feature_dataframe_sorted.iloc[:limit_fearture_num, :]
     n = feature_dataframe_sorted.shape[0]
@@ -156,8 +156,8 @@ def get_clusters_by_ri_hcl(
 
 
 def _split_by_ri(cluster, all_ri, pos, max_span):
-    '''Split a cluster (list of feature IDs) so that each piece spans <= max_span in RI,
-    by complete linkage on RI. Pieces with fewer than 2 features are dropped.'''
+    """Split a cluster (list of feature IDs) so that each piece spans <= max_span in RI,
+    by complete linkage on RI. Pieces with fewer than 2 features are dropped."""
     ri = all_ri[[pos[f] for f in cluster]]
     if np.ptp(ri) <= max_span:
         return [cluster]
@@ -169,6 +169,7 @@ def _split_by_ri(cluster, all_ri, pos, max_span):
 
 
 def format_fcluster_to_pseudospectrum(selected_features, seed_feature, annotation=''):
+    """Format a cluster of features as a PseudoSpectrum, using seed_feature for id, rtime and RI."""
     return PseudoSpectrum(
         seed_feature['id_number'],
         seed_feature['rtime'],
@@ -198,7 +199,7 @@ def iterative_build_pseudospectra_by_hcl(
     linkage_method='ward',
     verbose=True,
     ):
-    '''
+    """
     Build pseudospectra from list_features_sorted iteratively until reaching max_core_features
     (no more than 90% of all features):
     - take the top step_size remaining features, RI-penalized correlation HCL (get_clusters_by_ri_hcl);
@@ -225,7 +226,7 @@ def iterative_build_pseudospectra_by_hcl(
     hcl_distance_cut : parameter to cut linkage tree in HCL.
         Smaller values give tighter clusters, which are desired since they are extended after this step.
     returns list_pseudospectra, core_features
-    '''
+    """
     core_features = set(init_core_features or ())
     list_pseudospectra = []
     max_core_features = min(max_core_features, 0.9 * len(list_features_sorted))  # safeguard
@@ -304,7 +305,7 @@ _HWHM_OVER_STD = np.sqrt(2 * np.log(2.0))
 
 
 def _merge_intervals_complete_linkage(starts, ends, max_width):
-    '''
+    """
     Complete-linkage clustering of peak intervals with ADAP distance
         d(p1, p2) = max(p1.end - p2.start, p2.end - p1.start),
     cut at max_width. Between clusters, complete linkage gives
@@ -312,7 +313,7 @@ def _merge_intervals_complete_linkage(starts, ends, max_width):
     For 1-D intervals, merges are taken between neighbours in midpoint order
     (a heap of adjacent pairs), which avoids the O(n^2) distance matrix.
     Returns list of index arrays.
-    '''
+    """
     n = len(starts)
     if n == 0:
         return []
@@ -356,12 +357,12 @@ def _merge_intervals_complete_linkage(starts, ends, max_width):
 
 def _adap_rt_windows(starts, ends, apex, areas, sig_l, sig_r, max_width, scan_time,
                      min_window_peaks=_ADAP_MIN_WINDOW_PEAKS + 1, truncate=4.0):
-    '''
+    """
     RetTimeClusterer.execute: pre-cluster peaks by gaps; split clusters wider than max_width
     by complete linkage; move boundaries between overlapping adjacent windows to the TIC minimum;
     reassign peaks by apex and keep windows with >= min_window_peaks peaks.
     Returns list of (start, end, peak_indices).
-    '''
+    """
     order = np.argsort(starts, kind='stable')
     clusters = []
     current, cur_max = [], -np.inf
@@ -423,20 +424,20 @@ def _adap_rt_windows(starts, ends, apex, areas, sig_l, sig_r, max_width, scan_ti
 
 
 def _upper_median(x):
-    '''Median as in BiGaussianDetector.median: sorted()[n // 2].'''
+    """Median as in BiGaussianDetector.median: sorted()[n // 2]."""
     x = np.sort(np.asarray(x))
     return x[x.size // 2]
 
 
 def _adap_bigaussians(apex, hwhm_left, hwhm_right, heights, ret_time_tolerance,
                       intensity_factor=0.0, min_cluster_size=1):
-    '''
+    """
     BiGaussianDetector: filter peaks by height > intensity_factor * max height;
     complete-linkage clustering of apex retention times cut at ret_time_tolerance;
     each cluster (>= min_cluster_size peaks) -> bi-Gaussian with median apex and median
     left/right half widths at half maximum, sigma = HWHM / sqrt(2 ln 2).
     Returns list of (center, sigma_left, sigma_right).
-    '''
+    """
     keep = heights > intensity_factor * heights.max()
     apex, hwhm_left, hwhm_right = apex[keep], hwhm_left[keep], hwhm_right[keep]
     if apex.size == 0:
@@ -467,10 +468,10 @@ def _bigaussian(t, center, sl, sr):
 
 
 def _constrain_components(W):
-    '''
+    """
     ModifiedUpdateRule: make each component (column) unimodal, set the baseline (last column)
     to 1, and scale each column to max 1.
-    '''
+    """
     W = np.maximum(W, 0.0)
     for j in range(W.shape[1] - 1):
         w = W[:, j]
@@ -485,10 +486,10 @@ def _constrain_components(W):
 
 
 def _als_factorization(X, W, H, max_iter=500, tol=1e-6):
-    '''
+    """
     Alternating least squares X ~ W H with non-negativity, W constrained by _constrain_components
     (javanmf AlternatingLeastSquaresMatrixFactorization with ComponentConstraint in ADAP).
-    '''
+    """
     prev = np.inf
     norm_x = np.linalg.norm(X) or 1.0
     for _ in range(max_iter):
@@ -504,14 +505,14 @@ def _als_factorization(X, W, H, max_iter=500, tol=1e-6):
 
 def _adap_decompose_window(t, X_peaks, peak_params, X_all, ret_time_tolerance,
                            intensity_factor, min_cluster_size, max_iter, tol):
-    '''
+    """
     ComponentSelector.execute for one window.
     X_peaks : simulated EICs (time x peaks) of peaks with apex in the window.
     peak_params : (apex, hwhm_left, hwhm_right) arrays for those peaks.
     X_all : simulated EICs (time x chromatograms) of all features with signal in the window.
     Returns (components, spectra): components (time x k) scaled to max 1, and
     spectra (k x chromatograms) of NNLS coefficients (heights).
-    '''
+    """
     apex, hl, hr = peak_params
     heights = X_peaks.max(axis=0)
     bgs = _adap_bigaussians(apex, hl, hr, heights, ret_time_tolerance, intensity_factor, min_cluster_size)
@@ -562,7 +563,7 @@ def adap_gc_deconvolution(
     tol=1e-6,
     verbose=True,
     ):
-    '''
+    """
     ADAP-GC 4.0 deconvolution (clustering-assisted multivariate curve resolution) on simulated EICs.
 
     Steps (dulab.adap.workflow.decomposition):
@@ -586,7 +587,7 @@ def adap_gc_deconvolution(
     "best peak"); rtime is the component apex.
 
     returns list_pseudospectra, core_features
-    '''
+    """
     feats = list(list_features)
     if intensity_column is not None:
         col = feature_dataframe[intensity_column]
@@ -658,8 +659,8 @@ def adap_gc_deconvolution(
 
 
 def _pseudospectrum_ri(rtime, ri_model, base_feature):
-    '''RI for a pseudospectrum: from ri_model at rtime if given,
-    else the base feature's own RI (e.g. from a feature table with an RI column), else None.'''
+    """RI for a pseudospectrum: from ri_model at rtime if given,
+    else the base feature's own RI (e.g. from a feature table with an RI column), else None."""
     if ri_model is not None:
         return rtime_to_ri(rtime, ri_model)
     ri = base_feature.get('RI')
@@ -667,7 +668,7 @@ def _pseudospectrum_ri(rtime, ri_model, base_feature):
 
 
 def _make_pseudospectrum(base_id, rtime, ri, members, intensities, used_ids, annotation=''):
-    '''Build PseudoSpectrum; ids are made unique by suffix if a base feature is reused.'''
+    """Build PseudoSpectrum; ids are made unique by suffix if a base feature is reused."""
     n = used_ids.get(base_id, 0)
     used_ids[base_id] = n + 1
     ps_id = base_id if n == 0 else f"{base_id}_{n + 1}"
@@ -686,7 +687,7 @@ def _make_pseudospectrum(base_id, rtime, ri, members, intensities, used_ids, ann
 # ---------------------------------------------------------------------------
 
 def median_threshold(X):
-    '''As in MSHub: median + 3 * MAD.'''
+    """As in MSHub: median + 3 * MAD."""
     md = np.median(X)
     MAD = np.median(np.abs(np.subtract(X, md))) * 1.4826
     return md + 3 * MAD
@@ -694,7 +695,7 @@ def median_threshold(X):
 
 def _mshub_rt_groups(features, intensity_matrix, rt_tol='auto', bin_width=0.1,
                      weighted_density=False, smooth=False):
-    '''
+    """
     MSHub cluster_rts_kernel: histogram of peak apex RTs over all samples, local maxima with
     minimal separation rt_tol, maxima above max(median_threshold * 0.05, 5) define common RTs;
     each feature is assigned to its nearest common RT if within rt_tol, otherwise left out.
@@ -704,7 +705,7 @@ def _mshub_rt_groups(features, intensity_matrix, rt_tol='auto', bin_width=0.1,
     rt_tol='auto' is median peak width / 5, as in MSHub.
     smooth: optional Gaussian smoothing of the histogram (sigma = rt_tol / 2), not in MSHub.
     Returns (crt array, list of feature index arrays).
-    '''
+    """
     rt = np.array([f['rtime'] for f in features], float)
     if rt_tol == 'auto':
         widths = np.array([f['rtime_right_base'] - f['rtime_left_base'] for f in features], float)
@@ -735,12 +736,12 @@ def _mshub_rt_groups(features, intensity_matrix, rt_tol='auto', bin_width=0.1,
 
 
 def _mshub_adaptive_nmf(X, max_components=10, min_var_gain=5.0, max_iter=500, random_state=0):
-    '''
+    """
     MSHub deconvolve_peaks: increase NMF components (init 'nndsvd') while the cumulative
     explained variance, round(100 * (1 - ||X - WH||^2 / ||X||^2)), gains >= min_var_gain;
     stop at the component limit or if the gain stops decreasing (equal consecutive gains).
     Returns W, H, n_components.
-    '''
+    """
     from sklearn.decomposition import NMF
     import warnings
     from sklearn.exceptions import ConvergenceWarning
@@ -805,7 +806,7 @@ def nmf_deconvolution(
     random_state=0,
     verbose=True,
     ):
-    '''
+    """
     NMF deconvolution after MSHub (peakdetect.deconvolve_peaks), on simulated EICs.
 
     1. Features are grouped by apex RT (MSHub kernel/histogram grouping, _mshub_rt_groups).
@@ -827,7 +828,7 @@ def nmf_deconvolution(
     of members if use_time_profiles=False).
 
     returns list_pseudospectra, core_features
-    '''
+    """
     feats = list(list_features)
     ids = [f['id'] for f in feats]
     I_all = feature_dataframe.loc[ids, :].values.astype(float)   # features x samples
@@ -887,4 +888,3 @@ def nmf_deconvolution(
             core_features.update(f['id'] for f in members)
 
     return list_pseudospectra, core_features
-

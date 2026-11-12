@@ -1,3 +1,5 @@
+"""MS/MS spectral search by flash entropy similarity."""
+
 import json
 import numpy as np
 from tqdm import tqdm
@@ -14,13 +16,13 @@ param = {
 
 
 def clean_list_ms2spectra(list_ms2_spectra, entropy_search, params={}):
-    '''
+    """
     Clean experimental MS2 spectra for searching.
 
     Parameters
     ----------
     list_ms2_spectra : list
-        A list of MS2 spectra. 
+        A list of MS2 spectra.
         Precursor peaks may be already removed in my preprocessing step (offset 1).
     entropy_search : EntropySearch object
         The EntropySearch object containing the MS2 database.
@@ -31,12 +33,12 @@ def clean_list_ms2spectra(list_ms2_spectra, entropy_search, params={}):
     -------
     cleaned_spectra : list
         A list of cleaned MS2 spectra.
-    '''
+    """
     cleaned_spectra = []
     for sp in list_ms2_spectra:
         precursor_mz = sp['precursor_mz']
         peaks = np.array(sp['peaks'])
-        cleaned_peaks = entropy_search.clean_spectrum_for_search(precursor_mz, peaks, 
+        cleaned_peaks = entropy_search.clean_spectrum_for_search(precursor_mz, peaks,
                                         precursor_ions_removal_da=params['precursor_mz_offset'])
         if len(cleaned_peaks) > 0:
             cleaned_spectra.append(
@@ -45,7 +47,7 @@ def clean_list_ms2spectra(list_ms2_spectra, entropy_search, params={}):
     return cleaned_spectra
 
 def search_ms2_spectra(cleaned_spectra, entropy_search, params={}):
-    '''
+    """
     Search MS2 spectra against the database.
 
     Parameters
@@ -60,7 +62,7 @@ def search_ms2_spectra(cleaned_spectra, entropy_search, params={}):
     Returns
     -------
     results : list of best matched database entries.
-    '''
+    """
     results = []
     for precursor_mz, peaks, rtime, spid in tqdm(cleaned_spectra, desc="Searching MS2 spectra"):
         similarity, matched_num = entropy_search.identity_search(precursor_mz=precursor_mz, peaks=peaks,
@@ -72,13 +74,13 @@ def search_ms2_spectra(cleaned_spectra, entropy_search, params={}):
             matched_entry = entropy_search[best_idx]
             _ = matched_entry.pop('peaks') # np.array hard to JSON serialize
             # DB_entry, spid, mz, rtime, score, num_matched_peaks
-            results.append((matched_entry, spid, precursor_mz, rtime, 
+            results.append((matched_entry, spid, precursor_mz, rtime,
                             float(similarity[best_idx]), int(matched_num[best_idx])
                             ))
     return results
 
 def get_cleaned_experimental_ms2(dict_ms2_spectra, entropy_search, params={}):
-    '''
+    """
     Clean MS1 matched experimental MS2 spectra for searching.
 
     Parameters
@@ -95,12 +97,12 @@ def get_cleaned_experimental_ms2(dict_ms2_spectra, entropy_search, params={}):
     -------
     cleaned_spectra : list
         A list of cleaned MS2 spectra.
-    '''
+    """
     cleaned_spectra = []
     for k, sp in dict_ms2_spectra.items():
         precursor_mz = sp[0]['precursor_mz']
         peaks = np.array(sp[0]['peaks'])
-        cleaned_peaks = entropy_search.clean_spectrum_for_search(precursor_mz, peaks, 
+        cleaned_peaks = entropy_search.clean_spectrum_for_search(precursor_mz, peaks,
                                         precursor_ions_removal_da=params['precursor_mz_offset'])
         if len(cleaned_peaks) > 0:
             cleaned_spectra.append(
@@ -109,7 +111,7 @@ def get_cleaned_experimental_ms2(dict_ms2_spectra, entropy_search, params={}):
     return cleaned_spectra
 
 def search_ms1matchedms2_spectra(cleaned_spectra, entropy_search, params={}):
-    '''
+    """
     Search MS2 spectra against the database.
 
     Parameters
@@ -125,7 +127,7 @@ def search_ms1matchedms2_spectra(cleaned_spectra, entropy_search, params={}):
     -------
     results : dict
         A dictionary of search results. Keys are feature IDs, values are best matched database entries.
-    '''
+    """
     results = {}
     for feature_id, precursor_mz, peaks in tqdm(cleaned_spectra, desc="Searching MS2 spectra"):
         similarity, matched_num = entropy_search.identity_search(precursor_mz=precursor_mz, peaks=peaks,
@@ -141,7 +143,7 @@ def search_ms1matchedms2_spectra(cleaned_spectra, entropy_search, params={}):
 
 #
 #  ---
-# 
+#
 
 if __name__ == "__main__":
     '''
@@ -150,7 +152,7 @@ if __name__ == "__main__":
     --db_pickle publicMSMSpos.pkl \
     --output_json matched_hilicpos_asari_project_92125241.json
     '''
-    
+
     import argparse
     parser = argparse.ArgumentParser(description='Search MS2 spectra against database.')
     parser.add_argument('--ms2_json', type=str, default='extracted_ms2_spectra.json', help='Input JSON file containing extracted MS2 spectra.')
@@ -174,4 +176,3 @@ if __name__ == "__main__":
     json.dump(results, open(args.output_json, 'w'), indent=2)
 
     print(f"Total {len(results)} MS2 spectra matched to database entries.")
-

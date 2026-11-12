@@ -13,6 +13,7 @@ from . import SpectralIndex, read_spectra, search
 
 
 def main(argv=None):
+    """Command line interface of ms2batch."""
     parser = argparse.ArgumentParser(prog='ms2batch', description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)

@@ -1,7 +1,7 @@
-'''
-Convert Asari LC-MS/MS result files to GNPS2 compatible formats. 
-convert_asari_featuretable_gnps is based on Joshua Mitchell notebook. 
-'''
+"""
+Convert Asari LC-MS/MS result files to GNPS2 compatible formats.
+convert_asari_featuretable_gnps is based on Joshua Mitchell notebook.
+"""
 
 import pandas as pd
 
@@ -93,7 +93,7 @@ if __name__ == "__main__":
     parser.add_argument('ms2_msp', help='MSP file containing MS2 spectra.')
     parser.add_argument('--output', type=str, default="converted_gnps", help='Output file name.')
     args = parser.parse_args()
-    
+
     if '.csv' in args.output:
         outfile_ms1 = args.output
     else:

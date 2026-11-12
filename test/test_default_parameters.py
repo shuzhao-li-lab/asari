@@ -10,11 +10,16 @@ class TestDefaultParameters(unittest.TestCase):
     def test_outdir(self):
         self.assertEqual(PARAMETERS['outdir'], 'output')
 
-    def test_pickle(self):
-        self.assertFalse(PARAMETERS['pickle'])
+    def test_keep_intermediates(self):
+        self.assertFalse(PARAMETERS['keep_intermediates'])
 
     def test_database_mode(self):
-        self.assertEqual(PARAMETERS['database_mode'], 'auto')
+        self.assertEqual(PARAMETERS['database_mode'], 'ondisk')
+
+    def test_algorithms(self):
+        self.assertEqual(PARAMETERS['search_algorithm'], 'reverse')
+        self.assertEqual(PARAMETERS['score_algorithm'], 'cosine')
+        self.assertEqual(PARAMETERS['deconvolution_algorithm'], 'hcl')
 
     def test_multicores(self):
         self.assertEqual(PARAMETERS['multicores'], 4)

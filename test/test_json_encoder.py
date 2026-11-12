@@ -1,7 +1,7 @@
 import json
 import numpy as np
 import unittest
-from asari.json_encoder import NpEncoder
+from asari.utils import NpEncoder
 
 class TestNpEncoder(unittest.TestCase):
     def test_encode_np_integer(self):

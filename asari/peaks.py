@@ -1,10 +1,10 @@
-'''
+"""
 Functions for elution peak detection and evaluation.
-'''
+"""
 import numpy as np
 
-from scipy.signal import detrend, find_peaks 
-from scipy.optimize import curve_fit 
+from scipy.signal import detrend, find_peaks
+from scipy.optimize import curve_fit
 
 from .chromatograms import (smooth_moving_average, smooth_lowess)
 from .utils import bulk_process
@@ -14,49 +14,49 @@ from .utils import bulk_process
 # -----------------------------------------------------------------------------
 
 def batch_deep_detect_elution_peaks(list_mass_tracks, number_of_scans, parameters):
-    '''
+    """
     Performs elution peak detection of a list of mass tracks via multiprocessing.
-    
+
     Parameters
     ----------
     list_mass_tracks : list[tuple]
-        list of mass tracks. 
+        list of mass tracks.
         Asari uses this on composite mass tracks in full experiment.
         But this can be generic mass tracks.
     number_of_scans : int
         number of scans, usually corresponding to maximum number in RT.
     parameters :  dict
-        parameter dictionary passed from main.py, 
+        parameter dictionary passed from main.py,
         which imports from default_parameters and updates the dict by user arguments.
 
     Returns
     -------
-    FeatureList : 
+    FeatureList :
         a list of JSON elution peaks.
 
     See also
     --------
     stats_detect_elution_peaks
-    '''
+    """
     iters = iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters)
     results = bulk_process(stats_detect_elution_peaks, iters, jobs_per_worker=parameters['multicores']) #, dask_ip=parameters['dask_ip'])
     return [item for sublist in results for item in sublist]
 
 
 def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters):
-    '''
+    """
     Generate iterables for multiprocess.starmap for running elution peak detection.
 
     Parameters
     ----------
     list_mass_tracks : list[tuple]
-        list of mass tracks. 
+        list of mass tracks.
         Asari uses this on composite mass tracks in full experiment.
         But this can be generic mass tracks.
     number_of_scans : int
         number of scans, usually corresponding to maximum number in RT.
     parameters :  dict
-        parameter dictionary passed from main.py, 
+        parameter dictionary passed from main.py,
         which imports from default_parameters and updates the dict by user arguments.
     shared_list : list
         list object used to pass data btw multiple processing.
@@ -65,9 +65,9 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
     -------
     A list of iterative parameters
         [(mass_track, number_of_scans, min_peak_height, min_fwhm, min_prominence_threshold,
-        wlen, snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold, 
+        wlen, snr, peakshape, min_prominence_ratio, iteration, min_intensity_threshold,
         shared_list), ...]
-    '''
+    """
     return [(t, number_of_scans, parameters) for t in list_mass_tracks if np.any(t['intensity'] > parameters['min_intensity_threshold'])]
 
 # -----------------------------------------------------------------------------
@@ -75,8 +75,8 @@ def iter_peak_detection_parameters(list_mass_tracks, number_of_scans, parameters
 # -----------------------------------------------------------------------------
 
 def stats_detect_elution_peaks(job):
-    '''
-    Statistics guided peak detection. 
+    """
+    Statistics guided peak detection.
     This is the main method in asari for detecting elution peaks on a mass track.
 
     Parameters
@@ -92,16 +92,16 @@ def stats_detect_elution_peaks(job):
     min_prominence_threshold : float
         as in main parameters, default min_peak_height/3.
     wlen : int
-        window size for evaluating prominence in peaks. 
+        window size for evaluating prominence in peaks.
         Important to resolve clustered narrow peaks. Default 25 scans.
     snr: float
-        minimal signal to noise ratio required for a peak. 
+        minimal signal to noise ratio required for a peak.
     peakshape : float
         parameters['gaussian_shape'], minimal shape score required for a peak.
     min_prominence_ratio : float
         require ratio of prominence relative to peak height, default 0.05.
     iteration : int
-        not used in this function but possible to add iteration on high intensity ROIs 
+        not used in this function but possible to add iteration on high intensity ROIs
         if peaks are not detected 1st round.
     min_intensity_threshold : float
         as in main parameters.
@@ -117,18 +117,18 @@ def stats_detect_elution_peaks(job):
     ----
     The mass_track is first cleaned: rescale, detrend, smooth and subtract baseline if needed.
     The track wide noise_level is estimated on stdev of bottom quartile values.
-    ROIs are then separated by a filter (i.e. baseline + noise level) on each mass track. 
-    Gap allowed for 2 scans in constructing ROIs. Actually in composite mass track - 
+    ROIs are then separated by a filter (i.e. baseline + noise level) on each mass track.
+    Gap allowed for 2 scans in constructing ROIs. Actually in composite mass track -
     gaps should not exist after combining many samples.
-    The advantages of separating ROI are 1) better performance of long LC runs, 
-    2) big peaks are less likely to shallow over small peaks, 
+    The advantages of separating ROI are 1) better performance of long LC runs,
+    2) big peaks are less likely to shallow over small peaks,
     and 3) recalculate min_prominence_threshold.
 
-    Prominence requirement is critical to peak detection. 
+    Prominence requirement is critical to peak detection.
     It is dynamically determined based on the noise level in a region.
     The peakshape is calculated on cleaned mass track.
     SNR is computed on local noise (average of up to 100 nonpeak data points on each side of a peak).
-    '''
+    """
     mass_track, number_of_scans, parameters = job
 
     min_peak_height = parameters['min_peak_height']
@@ -144,10 +144,10 @@ def stats_detect_elution_peaks(job):
     list_json_peaks, list_peaks = [], []
     list_scans = np.arange(number_of_scans)
     _baseline_, noise_level, scaling_factor, min_peak_height, list_intensity = audit_mass_track(
-                mass_track['intensity'], min_fwhm, min_intensity_threshold, 
+                mass_track['intensity'], min_fwhm, min_intensity_threshold,
                 min_peak_height, min_peak_ratio
                 )
-    
+
     # # get ROIs by separation/filtering with noise_level, allowing 2 gap
     __selected_scans__ = list_scans[list_intensity > noise_level]
     if __selected_scans__.any():
@@ -167,8 +167,8 @@ def stats_detect_elution_peaks(job):
                 if len(R) < 3 * min_fwhm:       # extend if too short - help narrow peaks
                     R = extend_ROI(R, number_of_scans)
                 list_intensity_roi = list_intensity[R]
-                peaks = detect_evaluate_peaks_on_roi( 
-                            list_intensity_roi, R, 
+                peaks = detect_evaluate_peaks_on_roi(
+                            list_intensity_roi, R,
                             min_peak_height, min_peak_ratio, min_fwhm, min_prominence_threshold, wlen,
                             snr, peakshape, min_prominence_ratio, noise_level
                     )
@@ -184,28 +184,28 @@ def stats_detect_elution_peaks(job):
                 peak['parent_masstrack_id'] = mass_track['id_number']
                 peak['mz'] = mass_track['mz']
                 peak['height'] = scaling_factor * peak['height'] + _baseline_
-                __height = min(peak['height'], 1e100)        # cap upper limit and avoid INF 
+                __height = min(peak['height'], 1e100)        # cap upper limit and avoid INF
                 peak['snr'] = int(__height/compute_noise_by_flanks(
-                                    peak, mass_track['intensity'], noise_data_points, 
-                                    min_intensity_threshold, noise_level)) 
+                                    peak, mass_track['intensity'], noise_data_points,
+                                    min_intensity_threshold, noise_level))
                 if peak['snr'] >= snr:
                     peak['height'] = int(peak['height'])
                     list_peaks.append(peak)
     return list_peaks
 
-def compute_noise_by_flanks(peak, 
-                            list_intensity, 
-                            noise_data_points, 
-                            min_intensity_threshold, 
+def compute_noise_by_flanks(peak,
+                            list_intensity,
+                            noise_data_points,
+                            min_intensity_threshold,
                             old_noise_level):
-    '''
-    Compute noise level by averaging the adjacent nonpeak data points, 
+    """
+    Compute noise level by averaging the adjacent nonpeak data points,
     used for SNR (signal-to-noise ratio) calculation.
 
     Parameters
     ----------
     peak : dict
-        an elution peak in JSON format, e.g. 
+        an elution peak in JSON format, e.g.
         {'id_number': k, 'mz': mz, 'apex': x, 'left_base': xx, 'right_base': yy}
     list_intensity : list
         list of intensity of an ROI.
@@ -219,7 +219,7 @@ def compute_noise_by_flanks(peak,
 
     Returns
     -------
-    Noise level as a float number. 
+    Noise level as a float number.
     If the computed noise level is lower than min_intensity_threshold, the latter is used.
     If this fails to get usable data points, returns the old_noise_level.
 
@@ -227,7 +227,7 @@ def compute_noise_by_flanks(peak,
     ----
     The default window size is 100 scans on each side of a peak, offset by 30 as padding.
     Future version should infer these parameters based on global data distribution.
-    '''
+    """
     padding, N = 30, 100          # number of half data points to use
     noise_data_points = sorted(noise_data_points + [peak['apex']])
     center = noise_data_points.index(peak['apex'])
@@ -238,13 +238,13 @@ def compute_noise_by_flanks(peak,
     else:
         return old_noise_level
 
-def audit_mass_track(list_intensity, 
-                     min_fwhm, 
-                     min_intensity_threshold, 
-                     min_peak_height, 
+def audit_mass_track(list_intensity,
+                     min_fwhm,
+                     min_intensity_threshold,
+                     min_peak_height,
                      min_peak_ratio
                      ):
-    '''
+    """
     Get statistical summary on a mass track (list_intensity), then
     rescale, detrend, smooth and subtract baseline if needed.
     All scans in a mass track have intensity values, positive or 0s.
@@ -275,33 +275,33 @@ def audit_mass_track(list_intensity,
         new prominence value, overwriting with noise_level if it is
         greater than the initial min_prominence_threshold.
     list_intensity : list[np.integer]
-        list of intensity values after being cleaned up here 
+        list of intensity values after being cleaned up here
         (also subtracted by baseline).
-    
+
     Note
     ----
-    If the max intensity of a mass track is higher that a preset ceiling (1E8), 
+    If the max intensity of a mass track is higher that a preset ceiling (1E8),
     the mass track is rescaled under the preset ceiling for the purpose of peak detection.
     After peak detection, the peak height is scaled back using the same scaling factor.
 
-    If the median intensity on a mass track is below the preset min_intensity_threshold 
-    (default 1e3 for Orbitrap data), this is a low-intensity track. 
+    If the median intensity on a mass track is below the preset min_intensity_threshold
+    (default 1e3 for Orbitrap data), this is a low-intensity track.
     Both baseline level and noise level are set to min_intensity_threshold.
 
-    If over half the data points are above min_intensity_threshold and the median intensity 
-    is heigher than 10 times of preset min_peak_height (default 1e5 for Orbitrap data), 
-    detrend (scipy.signal.detrend) is performed on the mass track. 
+    If over half the data points are above min_intensity_threshold and the median intensity
+    is heigher than 10 times of preset min_peak_height (default 1e5 for Orbitrap data),
+    detrend (scipy.signal.detrend) is performed on the mass track.
 
-    If a track is not low-intensity, the bottom signals are taken as intensity values 
-    below the lower quartile plus min_intensity_threshold. The constant of 
-    min_intensity_threshold makes this method stable, even when zeros dominate the track. 
-    Here, the baseline level and noise level are assigned as the mean and 
+    If a track is not low-intensity, the bottom signals are taken as intensity values
+    below the lower quartile plus min_intensity_threshold. The constant of
+    min_intensity_threshold makes this method stable, even when zeros dominate the track.
+    Here, the baseline level and noise level are assigned as the mean and
     standard deviation of the bottom signals, respectively.
 
-    Smoothing (chromatograms.smooth_moving_average) is applied when the noise level 
-    is higher than 1% of max intensity and max intensity is lower than 10 times of the 
-    preset min_peak_height, or scaling occurred. 
-    '''
+    Smoothing (chromatograms.smooth_moving_average) is applied when the noise level
+    is higher than 1% of max intensity and max intensity is lower than 10 times of the
+    preset min_peak_height, or scaling occurred.
+    """
     scaling_factor, LOW, HIGH = 1, min_intensity_threshold, 1E8
     _baseline_, noise_level = LOW, LOW                     # will not change on a clean track
     max_intensity = list_intensity.max()
@@ -309,34 +309,34 @@ def audit_mass_track(list_intensity,
         scaling_factor = max_intensity/HIGH
         list_intensity = list_intensity/scaling_factor
         max_intensity = HIGH
-        
+
     median_intensity = np.median(list_intensity)
-    if median_intensity > LOW: 
+    if median_intensity > LOW:
         LL = list_intensity[list_intensity > LOW]
         if len(LL) > len(list_intensity) * 0.5 and median_intensity > 10 * min_peak_height:
             list_intensity = detrend(list_intensity)        # detrend
         bottom_x_perc = list_intensity[list_intensity < LOW + np.quantile(list_intensity, 0.25)]
         _baseline_, noise_level = bottom_x_perc.mean(), bottom_x_perc.std()
-        
+
     _baseline_, noise_level = max(_baseline_, LOW), max(noise_level, LOW)
     # decision on smoothing, when noisy or too high
     if scaling_factor > 1 or max_intensity > 1000 * min_peak_height:
         list_intensity = smooth_moving_average(list_intensity, size=min_fwhm * 3)
-    elif 100 * noise_level > max_intensity or max_intensity < 10 * min_peak_height:      
+    elif 100 * noise_level > max_intensity or max_intensity < 10 * min_peak_height:
         list_intensity = smooth_moving_average(list_intensity, size=min_fwhm + 2)
-        
+
     list_intensity = list_intensity - _baseline_
     # adapt min_peak_height per ROI
     min_peak_height = max(min_peak_height, max_intensity * min_peak_ratio) - _baseline_
 
-    return _baseline_, noise_level, scaling_factor, min_peak_height, list_intensity 
+    return _baseline_, noise_level, scaling_factor, min_peak_height, list_intensity
 
-def detect_evaluate_peaks_on_roi(list_intensity_roi, rt_numbers_roi, 
+def detect_evaluate_peaks_on_roi(list_intensity_roi, rt_numbers_roi,
                     min_peak_height, min_peak_ratio, min_fwhm, min_prominence_threshold, wlen,
                     snr, peakshape, min_prominence_ratio,
                     noise_level,
                     ):
-    '''
+    """
     Return list of peaks based on detection in ROI.
     An ROI is a segment on a masstrack, defined by list_intensity_roi and rt_numbers_roi.
     ROIs are extracted from a masstrack by filtering out low-intensity regions.
@@ -356,13 +356,13 @@ def detect_evaluate_peaks_on_roi(list_intensity_roi, rt_numbers_roi,
     min_prominence_threshold : float
         as in main parameters, default min_peak_height/3.
     wlen : int
-        window size for evaluating prominence in peaks. 
+        window size for evaluating prominence in peaks.
         Important to resolve clustered narrow peaks. Default 25 scans.
     snr: float
         minimal signal to noise ratio required for a peak. Not used here.
-    peakshape : float 
+    peakshape : float
         parameters['gaussian_shape'], minimal shape score required for a peak.
-    min_prominence_ratio : float 
+    min_prominence_ratio : float
         require ratio of prominence relative to peak height, default 0.05.
     noise_level : float
         estimated noise level on the mass track.
@@ -370,34 +370,34 @@ def detect_evaluate_peaks_on_roi(list_intensity_roi, rt_numbers_roi,
     Returns
     -------
     A list of peaks in JSON format.
-    '''
+    """
     list_peaks = []
     max_intensity = list_intensity_roi.max()
     # ROI dependent prominence, different from full mass track
-    min_prominence_threshold = max(min_prominence_threshold, 
+    min_prominence_threshold = max(min_prominence_threshold,
                                    max_intensity * min_prominence_ratio,
                                    0.33 * min_peak_height,
                                    2 * noise_level
                                     )
-    
-    peaks, properties = find_peaks(list_intensity_roi, 
-                                    height=min_peak_height, 
+
+    peaks, properties = find_peaks(list_intensity_roi,
+                                    height=min_peak_height,
                                     distance=min_fwhm,
                                     prominence=min_prominence_threshold,
-                                    width=min_fwhm, 
+                                    width=min_fwhm,
                                     wlen=wlen,
-                                    ) 
+                                    )
     # Relax wlen if no peak is found on this ROI
     if peaks.size == 0 and len(list_intensity_roi) > wlen:
-        peaks, properties = find_peaks(list_intensity_roi, height=min_peak_height, 
-                                    distance=min_fwhm, prominence=min_prominence_threshold, width=min_fwhm, 
+        peaks, properties = find_peaks(list_intensity_roi, height=min_peak_height,
+                                    distance=min_fwhm, prominence=min_prominence_threshold, width=min_fwhm,
                                     wlen=None,
-                                    ) 
-    
+                                    )
+
     for ii in range(peaks.size):
         if properties['right_bases'][ii] - properties['left_bases'][ii] >= min_fwhm + 2:
             _jpeak = evaluate_roi_peak_json_(
-                ii, list_intensity_roi, rt_numbers_roi, 
+                ii, list_intensity_roi, rt_numbers_roi,
                 peaks, properties, peakshape, min_fwhm
                 )
             if _jpeak:
@@ -405,18 +405,18 @@ def detect_evaluate_peaks_on_roi(list_intensity_roi, rt_numbers_roi,
 
     return check_overlap_peaks(list_peaks)
 
-def evaluate_roi_peak_json_(ii, 
-                            list_intensity_roi, rt_numbers_roi, 
+def evaluate_roi_peak_json_(ii,
+                            list_intensity_roi, rt_numbers_roi,
                             peaks, properties, peakshape, min_fwhm
                             ):
-    '''
+    """
     Return the ii-th peak in peaks with basic properties assigned in a JSON dictionary.
 
     Parameters
     ----------
     ii : int
-        the ii-th peak to use in peaks. 
-    list_intensity : list[np.integer]   
+        the ii-th peak to use in peaks.
+    list_intensity : list[np.integer]
         list of intensity values from a mass track.
     rt_numbers_roi : list[int]
         scan numbers that define the ROI.
@@ -428,31 +428,31 @@ def evaluate_roi_peak_json_(ii,
         parameters['gaussian_shape'], minimal shape score required for a peak.
     min_fwhm : float
         taken as half of min_timepoints in main parameters.
-    
+
     Note
     ----
     This handles the conversion btw indices of ROI and indices of mass_track.
-    The peak shape is evluated here on a Gaussian model.  
+    The peak shape is evluated here on a Gaussian model.
     The left, right bases are constrained by N*stdev in the fitted model, mostly to ignore long tails,
     which can be optimized in the future.
-    '''
+    """
     left_index, right_index = properties['left_bases'][ii], \
         properties['right_bases'][ii]   # index positions on ROI
     goodness_fitting, sigma = evaluate_gaussian_peak_on_intensity_list(list_intensity_roi,
                 properties['peak_heights'][ii], peaks[ii], left_index, right_index)
     if goodness_fitting > peakshape:
-        _halfwidth = int(max(abs(sigma), min_fwhm) * 6)     
+        _halfwidth = int(max(abs(sigma), min_fwhm) * 6)
         # sigma needs to be greater than min_fwhm
         _L, _R = peaks[ii] - _halfwidth, peaks[ii] + _halfwidth
         left_index, right_index = max(left_index, _L), min(right_index, _R)
         left_base, right_base = rt_numbers_roi[left_index], rt_numbers_roi[right_index]
-        peak_area = int( list_intensity_roi[left_index: right_index+1].sum() ) 
+        peak_area = int( list_intensity_roi[left_index: right_index+1].sum() )
         return {
-                'apex': rt_numbers_roi[peaks[ii]], 
+                'apex': rt_numbers_roi[peaks[ii]],
                 'peak_area': peak_area,
                 'height': int(properties['peak_heights'][ii]),
                 'left_base': left_base,
-                'right_base': right_base, 
+                'right_base': right_base,
                 'goodness_fitting': goodness_fitting,
         }
     else:
@@ -460,7 +460,7 @@ def evaluate_roi_peak_json_(ii,
 
 
 def __peaks_cSelectivity_stats_(__list_intensity, _jpeaks):
-    '''
+    """
     Compute cSelectivity values for all peaks found on a mass track.
 
     Parameters
@@ -477,7 +477,7 @@ def __peaks_cSelectivity_stats_(__list_intensity, _jpeaks):
     set_peak_datapoints : set
         a set of data points that belong to any peak.
         Later used for SNR calculation, which exclues these data points.
-    '''
+    """
     set_peak_datapoints = []
     for peak in _jpeaks:
             set_peak_datapoints += list(range(peak['left_base'], peak['right_base']+1))
@@ -489,12 +489,12 @@ def __peaks_cSelectivity_stats_(__list_intensity, _jpeaks):
         _threshold = 0.5 * _jpeaks[ii]['height']
         _peak_datapoints_level = _peak_datapoints[_peak_datapoints > _threshold].size
         _background_level = __list_intensity[__list_intensity > _threshold].size
-        if _background_level >= _peak_datapoints_level > 0:                  
+        if _background_level >= _peak_datapoints_level > 0:
             # to rule out artifact from smooth_lowess
             list_cSelectivity.append(_peak_datapoints_level / _background_level)
         else:
             list_cSelectivity.append( 0 )
-            
+
     return list_cSelectivity, set_peak_datapoints
 
 
@@ -521,7 +521,7 @@ def gaussian_function__(x, a, mu, sigma):
     -------
     A computed float value
     """
-    return a*np.exp(-(x-mu)**2/(2*sigma**2)) 
+    return a*np.exp(-(x-mu)**2/(2*sigma**2))
 
 def goodness_fitting__(y_orignal, y_fitted):
     """
@@ -530,9 +530,9 @@ def goodness_fitting__(y_orignal, y_fitted):
     return 1 - (np.sum((y_fitted-y_orignal)**2) / np.sum((y_orignal-np.mean(y_orignal))**2))
 
 def evaluate_gaussian_peak_on_intensity_list(intensity_list, height, apex, left, right):
-    '''
+    """
     Use Gaussian models to fit peaks, R^2 as goodness of fitting.
-    
+
     Parameters
     ----------
     intensity_list : int[np.integer]
@@ -555,12 +555,12 @@ def evaluate_gaussian_peak_on_intensity_list(intensity_list, height, apex, left,
     The parameters height, apex, left, right are relevant to intensity_list.
     When intensity_list is of ROI, these parameters are not referring to full mass track.
 
-    Very high peaks in LC-MS tend to get high fitness scores, 
+    Very high peaks in LC-MS tend to get high fitness scores,
     but inaccurate estimation of parameters, e.g. the predicted peaks too narrow.
     Could consider re-weighted methods (e.g. by np.sqrt) for very high data points.
 
     Peak shapes may be more Voigt or bigaussian, but the impact on fitting result is negligible.
-    '''
+    """
     goodness_fitting = 0
     xx = np.arange(left, right+1, 1)
     yy = intensity_list[xx]
@@ -578,9 +578,9 @@ def evaluate_gaussian_peak_on_intensity_list(intensity_list, height, apex, left,
 
 
 def get_gaussian_peakarea_on_intensity_list(intensity_list, left, right):
-    '''
+    """
     Use Gaussian model to fit peak and return peak area.
-    
+
     Parameters
     ----------
     intensity_list : list[np.integer]
@@ -597,7 +597,7 @@ def get_gaussian_peakarea_on_intensity_list(intensity_list, left, right):
     Returns
     -------
     peak area, float value as gaussian integral.
-    '''
+    """
     right = min(right, len(intensity_list))                # check boundary
     xx = np.arange(left, right, 1)
     yy = intensity_list[xx]
@@ -609,14 +609,14 @@ def get_gaussian_peakarea_on_intensity_list(intensity_list, left, right):
         area = a * np.sqrt(2 * np.pi * sigma**2)
     # failure to fit
     except (RuntimeError, ValueError, TypeError):
-        # fitting errors 
+        # fitting errors
         area = 0
 
     return area
 
 
 def gaussian_peak_height(peak_area, mu, sigma):
-    '''
+    """
     Compute the height of a Gaussian-shaped peak from its integral area,
     center position, and standard deviation. Inverse of the area formula
     used in get_gaussian_peakarea_on_intensity_list.
@@ -637,15 +637,15 @@ def gaussian_peak_height(peak_area, mu, sigma):
     height : float
         peak height (a in gaussian_function__),
         derived from area = a * sqrt(2 * pi * sigma**2).
-    '''
+    """
     return peak_area / np.sqrt(2 * np.pi * sigma**2)
 
 
 def lowess_smooth_track(list_intensity, number_of_scans):
-    '''
+    """
     To smooth data using LOWESS before peak detection. For testing.
-    Smoothing will reduce the height of narrow peaks in CMAP, but not on the reported values,  
-    because peak area is extracted from each sample after. 
+    Smoothing will reduce the height of narrow peaks in CMAP, but not on the reported values,
+    because peak area is extracted from each sample after.
     The likely slight expansion of peak bases can add to robustness.
     smooth_moving_average is preferred for most data. LOWESS is not good for small peaks.
 
@@ -659,21 +659,21 @@ def lowess_smooth_track(list_intensity, number_of_scans):
     Returns
     -------
     The smoothed intensities of the mass tracks as smoothed by LOWESS.
-    '''
+    """
     _frac_ = 0.05
     if number_of_scans < 200:
         _frac_ = min(10.0/number_of_scans, 0.8)
     return np.array( smooth_lowess(list_intensity, frac=_frac_) )
 
 
-def quick_detect_unique_elution_peak(intensity_track, 
-                            min_peak_height=100000, 
-                            min_fwhm=3, 
+def quick_detect_unique_elution_peak(intensity_track,
+                            min_peak_height=100000,
+                            min_fwhm=3,
                             min_prominence_threshold_ratio=0.2
                             ):
-    '''
+    """
     Quick peak detection, only looking for a high peak with high prominence.
-    This can be used for quick check on good peaks, 
+    This can be used for quick check on good peaks,
     or selecting landmarks for alignment purposes.
 
     Parameters
@@ -690,25 +690,25 @@ def quick_detect_unique_elution_peak(intensity_track,
     Returns
     -------
     A qualified peaks in ``{'apex' : xx, }`` format or None.
-    '''
+    """
     max_intensity = intensity_track.max()
     prominence = min_prominence_threshold_ratio * max_intensity
     unique_peak = None
     if max_intensity > min_peak_height:
         peaks, properties = find_peaks(
-            intensity_track, height=min_peak_height, width=min_fwhm, 
+            intensity_track, height=min_peak_height, width=min_fwhm,
             prominence=prominence
-            ) 
+            )
         if peaks.size == 1:
             unique_peak = {
-                'apex': peaks[0], 
+                'apex': peaks[0],
                 'height': properties['peak_heights'][0], # not used now
             }
     return unique_peak
 
 def check_overlap_peaks(list_peaks):
-    '''
-    Check overlap btw a list of JSON peaks, 
+    """
+    Check overlap btw a list of JSON peaks,
     already ordered by RT from find_peaks. Overlap usually from splitting.
 
     Parameters
@@ -719,7 +719,7 @@ def check_overlap_peaks(list_peaks):
     Returns
     -------
     A list of unique peaks in JSON format.
-    '''
+    """
     if len(list_peaks) < 2:
         return list_peaks
     else:
@@ -735,11 +735,11 @@ def check_overlap_peaks(list_peaks):
         new = []
         for C in clusters:
             new += cleanup_peak_cluster(C)
-            
+
         return new
 
 def _check_overlap(peak1, peak2):
-    '''
+    """
     Check if overlap btw (peak1, peak2) exceeds 3 scans. Returns True or False.
 
     Parameters
@@ -752,20 +752,20 @@ def _check_overlap(peak1, peak2):
     Returns
     -------
     True if overlap exceeds three scans else False
-    '''
+    """
     tuple1, tuple2 = (peak1['left_base'], peak1['right_base']), (
         peak2['left_base'], peak2['right_base'])
     left_peak, right_peak = tuple1, tuple2
     if tuple1[1] > tuple2[1]:
         left_peak, right_peak = tuple2, tuple1
     overlap = max(0, left_peak[1] - right_peak[0])
-    if overlap > 3: 
+    if overlap > 3:
         return True
     else:
         return False
 
 def _merge_peak_cluster(cluster_peaks):
-    '''
+    """
     Merge overlap reported peaks that stem from unclear separation.
     If two true peaks overlap, find_peak should estabish their boundary at the valley,
     and the reported peak bases should not overlap by N scans.
@@ -780,7 +780,7 @@ def _merge_peak_cluster(cluster_peaks):
     Returns
     -------
     A merged peak by extending bases, inheritting other attributes from largest peak.
-    '''
+    """
     if len(cluster_peaks) == 1:
         return cluster_peaks[0]
     else:
@@ -792,10 +792,10 @@ def _merge_peak_cluster(cluster_peaks):
         return largest
 
 def cleanup_peak_cluster(cluster_peaks):
-    '''
+    """
     Safeguards peak boundaries when reporting overlap peaks.
     If this contains 3 or more peaks (indicating split in noisy data), merge them.
-    scipy.find_peaks sometimes report two overlap peak: one small and the other joined 
+    scipy.find_peaks sometimes report two overlap peak: one small and the other joined
     with the small peak. Mostly already controlled by wlen parameter.
     Used by `check_overlap_peaks`.
 
@@ -807,7 +807,7 @@ def cleanup_peak_cluster(cluster_peaks):
     Returns
     ------
     list of peaks after cleanup.
-    '''
+    """
     if len(cluster_peaks) == 1:
         return cluster_peaks
     elif len(cluster_peaks) == 2:
@@ -829,7 +829,7 @@ def cleanup_peak_cluster(cluster_peaks):
         return [_merge_peak_cluster(cluster_peaks)]
 
 def extend_ROI(ROI, number_of_scans):
-    '''
+    """
     Add 3 datapoints to each end if ROI is too short (< 3*min_fwhm),
     so that peak detection does not run into boundary issues.
 
@@ -839,8 +839,8 @@ def extend_ROI(ROI, number_of_scans):
         rerpesenting a region of interest
     number_of_scans: int
         the number of scans an ROI must possess, if an ROI has fewer scans, 3 datapoints will be added
-        
-    '''
+
+    """
     left = [x for x in [ROI[0]-3, ROI[0]-2, ROI[0]-1] if x >=0]
     # todo - should we add *up to* 3 datapoints instead of 3 datapoints in the case that the difference is less than 3?
     right = [x for x in [ROI[-1]+1, ROI[-1]+2, ROI[-1]+3] if x < number_of_scans]

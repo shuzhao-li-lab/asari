@@ -1,33 +1,35 @@
+"""Default parameters of asari."""
+
 # Here are default values of parameters. Please do NOT modify unless necesssary.
-# 
-# One can specify parameters via 
+#
+# One can specify parameters via
 # 1) custom parameters.yaml
 # 2) commandline arguments
 # Priority is: commandline overwriting parameters.yaml overwriting this file.
 #
-# Default values of others should be acceptable for most studies. Really, 
-# only ionization mode (default pos) and ppm of mz_tolerance (defulat 5) may need attention, 
+# Default values of others should be acceptable for most studies. Really,
+# only ionization mode (default pos) and ppm of mz_tolerance (defulat 5) may need attention,
 # but they should be given via commandline arguments.
-# 
+#
 PARAMETERS = {
     'project_name': 'asari_project',
-    'workflow': 'LC',                   # 'LC', 'GC', 'DIMS', ... 
+    'workflow': 'LC',                   # 'LC', 'GC', 'DIMS', ...
     'search_algorithm': 'reverse',      # annotate: 'reverse', 'forward', 'mz', 'rtmz', 'csm'
     'score_algorithm': 'cosine',        # spectral similarity: 'cosine', 'entropy'
     'deconvolution_algorithm': 'hcl',   # deconvolute / forward annotate: 'hcl', 'adap', 'nmf'
     'diagnosis': False,                   # to keep cache files for viz
 
     'outdir': 'output',
-    'keep_intermediates': False,        # if true, keep on-disk intermediates       
+    'keep_intermediates': False,        # if true, keep on-disk intermediates
     'reuse_intermediates': None,        # if provided as a path, reuse intermediates  with same basename as input mzML files to skip extraction.
-    'database_mode': 'ondisk',          # `auto` determined on sample number 
-                                        # 'ondisk', 'memory' (run in memory, only small studies), 
+    'database_mode': 'ondisk',          # `auto` determined on sample number
+                                        # 'ondisk', 'memory' (run in memory, only small studies),
     'multicores': 4,                    # number of cores allowed in parallel processing
-    
+
     # mass parameters
     'mode': 'pos',                      # ionization mode
     'mass_range': (50, 2000),
-    'mz_tolerance_ppm': 5,              # ppm, high selectivity meaning no overlap neighbors to confuse; 
+    'mz_tolerance_ppm': 5,              # ppm, high selectivity meaning no overlap neighbors to confuse;
                                         # Low selectivity regions will be still inspected to determine the true number of features
     'correction_tolerance_ppm': 1,      # ppm cutoff for deciding to run mass calibration, for correcting mass accuracy in MS1
 
@@ -38,7 +40,7 @@ PARAMETERS = {
     'min_peak_height': 100000,          # minimal peak height.
     'min_peak_ratio': 0.001,            # minimal ratio of a peak of the max height of its ROI, relevant to small peaks next to big ones.
     'wlen': 25,                         # window size for evaluating prominence in peaks. Important to resolve clustered narrow peaks.
-    'autoheight': False,                # min_peak_height can be estimated automatically by setting autoheight on in CLI  
+    'autoheight': False,                # min_peak_height can be estimated automatically by setting autoheight on in CLI
     'gaussian_shape': 0.5,              # min cutoff of goodness of fitting to Gauss model
     'peak_area': 'sum',                 # `sum` for simple sum, `auc` for area under the curve, `gauss` for gaussian
 
@@ -49,13 +51,13 @@ PARAMETERS = {
 
     # retention time alignment
     'reference': None,
-    'rt_align_method': 'lowess',        # 'lowess', 'tolerance', or to implement           
+    'rt_align_method': 'lowess',        # 'lowess', 'tolerance', or to implement
     'rt_align_on': True,                # False to bypass retention time alignment
     'debug_rtime_align': False,         # to plot RT alignment diagnostics
     'drop_unaligned_samples': False,    # Drop samples that fail RT alignment from composite map
-    'rtime_tolerance': 50,              # feature rtime shift threshold under 10 seconds; or 10% of rtime   
+    'rtime_tolerance': 50,              # feature rtime shift threshold under 10 seconds; or 10% of rtime
     'cal_min_peak_height': 100000,      # minimal peak height required for peaks used for RT calibration
-    'peak_number_rt_calibration': 20,   # minimal number of selected high-quality peaks required for RT calibration. 
+    'peak_number_rt_calibration': 20,   # minimal number of selected high-quality peaks required for RT calibration.
                                         # Samples with fewer selected peaks are dropped out.
     'max_retention_shift': None,        # landmark peak pairs with a scan number delta greater than this are not used for RT calibration
     'num_lowess_iterations': 3,         # number of lowess iterations to perform for RT calibration, higher values take longer but less sensitive to outliers
@@ -65,11 +67,11 @@ PARAMETERS = {
     'ms2_tolerance_in_ppm': 10,           # ppm tolerance, for matching MS2 spectra to database
     'ms2_tolerance_in_da': 0.005,        # da tolerance, for matching MS2 spectra to database
     'ri_tolerance': 30,                  # retention index tolerance in matching features
-    'score_cutoff_cosine': 0.4,          # cutoff for cosine similarity score for MS2 matching 
+    'score_cutoff_cosine': 0.4,          # cutoff for cosine similarity score for MS2 matching
     'score_cutoff_entropy': 0.4,         # cutoff for entropy similarity score for MS2 matching
     'corr_cutoff': 0.6,                  # cutoff for correlation between feature intensity to base peak intensity across samples
     'max_ri_delta': 100,                 # maximal retention index delta between candidate annotations
-    'do_mirror_plot': True,              # whether to generate mirror plot for  annotation results 
+    'do_mirror_plot': True,              # whether to generate mirror plot for  annotation results
     'max_core_features': 20000,          # to limit the number of features to annotate, as low-intensity features are of less interest
     # 'denovo': False,                     # toggle to run de novo construction of empirical compounds (deconvolution)
     'hires': True,                       # high resolution data; else use unit mz for search (GC)
@@ -80,7 +82,7 @@ PARAMETERS = {
 
     'check_isotope_ratio': False,
     'khipu_rtime_tolerance': 2,          # in seconds, for khipu annotation grouping of features into empirical compounds, to update
-    
+
     # default output names
     'output_feature_table': 'Feature_table.tsv',
     'mass_grid_mapping': "_mass_grid_mapping.csv",
@@ -90,22 +92,20 @@ PARAMETERS = {
     # dashboard parameters
     'table_for_viz': 'preferred',
     'vizualization_max_samples': 20,
-    # 
-    'compress': False,       # not use compress option. "join" solves the problem by splitting job  
+    #
+    'compress': False,       # not use compress option. "join" solves the problem by splitting job
     'sample_metadata': None,            # path to sample metadata file, can be used in future to guide alignment and annotation
 
-    # Not using now 
-    # 'target': None,                     # target mz values for extraction     
+    # Not using now
+    # 'target': None,                     # target mz values for extraction
     # 'single_file_qc_reports': False,    # if True, generate QC reports for each file, needs spikeins provided or defaults are used.
     # 'spikeins': None,
     # 'convert_raw': False,               # if True, convert raw files to mzML, requires mono installed
     # 'dask_ip': None,                    # IP address for dask distributed computing, to implement
     # 'retention_index_standards': None,  # path to retention index standards, needed for 'GC' workflow. Replaced by kovats.
-    
+
     }
 
-
-    
 
 #
 # From khipu.utils. Placed here so that people can customize within asari.
@@ -114,17 +114,17 @@ PROTON = 1.00727646677
 electron = 0.000549
 
 # avoid confusing adducts in initial search, e.g. H, H2O
-adduct_search_patterns = adduct_search_patterns_pos = [  
+adduct_search_patterns = adduct_search_patterns_pos = [
                             # initial patterns are relative to M+H+
                             (21.98194, 'Na/H'),
                             (41.026549, 'ACN'),     # Acetonitrile
                             (67.987424, 'NaCOOH'),
                             (37.955882, 'K/H'),
                             ]
-adduct_search_patterns_neg = [  
+adduct_search_patterns_neg = [
                             (21.98194, 'Na/H'), (67.987424, 'NaCOOH'),
                             (82.0030, 'C2HF3'),
-                            (1.99566, 'F <-> OH'), 
+                            (1.99566, 'F <-> OH'),
                             (41.026549, 'ACN'),
                             (37.955882, 'K/H'),
                             ]

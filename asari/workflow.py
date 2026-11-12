@@ -1,24 +1,24 @@
-'''
+"""
 ext_Experiment is the container for whole project data.
 sample_registry is the dict to track sample information and status,
 outside class to facilitate multiprocessing.
-Heavy lifting is in constructors.CompositeMap, 
+Heavy lifting is in constructors.CompositeMap,
     which contains MassGrid for correspondence, and FeatureList from feature/peak detection.
 
 To-do: rename to process.py
 
 
-'''
+"""
 import time
 import os
 import pickle
 
-import json_tricks as json 
+import json_tricks as json
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
 
 from .mass_functions import all_mass_paired_mapping
 from .experiment import ext_Experiment
-from .chromatograms import extract_massTracks_ 
+from .chromatograms import extract_massTracks_
 from .utils import bulk_process
 
 
@@ -27,9 +27,9 @@ from .utils import bulk_process
 # -----------------------------------------------------------------------------
 
 def workflow_setup(list_input_files, parameters):
-    '''
+    """
     This defines the main work flow in processing a list of LC-MS files,
-    '''
+    """
     sample_registry = register_samples(list_input_files)
     if parameters['database_mode'] == 'auto':
         if len(list_input_files) <= parameters['project_sample_number_small']:
@@ -57,8 +57,8 @@ def workflow_setup(list_input_files, parameters):
     return EE
 
 def process_project(list_input_files, parameters):
-    '''
-    This defines the main work flow in processing a list of LC-MS files, 
+    """
+    This defines the main work flow in processing a list of LC-MS files,
     creates the output folder with a time stamp, and uses sample registry to coordinate parallel processing.
     The project data are tracked in experiment.ext_Experiment class.
 
@@ -67,13 +67,13 @@ def process_project(list_input_files, parameters):
     list_input_files : list[str]
         list of centroided mzML filepaths from LC-MS metabolomics. Usually found in a folder.
     parameters : dict
-        parameter dictionary passed from main.py, 
+        parameter dictionary passed from main.py,
         which imports from default_parameters and updates the dict by user arguments.
 
     Outputs
     -------
     A local folder with asari processing result, e.g::
-    
+
         rsvstudy_asari_project_427105156
         ├── Annotated_empricalCompounds.json
         ├── Feature_annotation.tsv
@@ -87,10 +87,10 @@ def process_project(list_input_files, parameters):
         │   ├── ...
         ├── preferred_Feature_table.tsv
         └── project.json
-        
+
 
     The pickle folder is removed after the processing by default.
-    '''
+    """
     EE = workflow_setup(list_input_files, parameters)
     # mass track extraction per file is done in workflow_setup
     print(f'Processing Experiment Using {parameters["workflow"]} Workflow...')
@@ -104,29 +104,28 @@ def process_project(list_input_files, parameters):
             # to add kovats RI
 
 
-
             pass
-        
+
     elif parameters['workflow'] == "DIMS":
         EE.process_all_DIMS()
-        
+
     elif parameters['workflow'] == "LCMSMS":
         EE.process_all_LCMSMS()
 
     elif parameters['workflow'] == "MSMS":
         print("Workflow to be implemented. Error 200.")
-        
+
     else:
         print("Workflow not supported. Error 100.")
-        
-    EE.export_all(diagnosis=parameters['diagnosis']) 
-    
+
+    EE.export_all(diagnosis=parameters['diagnosis'])
+
     if parameters['database_mode'] != 'memory':
         remove_intermediate_pickles(parameters)
 
 
 def read_project_dir(directory, file_pattern='.mzML'):
-    '''
+    """
     This reads centroided LC-MS files from directory.
     Returns a list of files that match file_pattern.
 
@@ -141,17 +140,17 @@ def read_project_dir(directory, file_pattern='.mzML'):
     ------
     list of paths to files containing the file_pattern
 
-    '''
+    """
     print("Working on ~~ %s ~~ \n\n" %directory)
     return [os.path.join(directory, f) for f in os.listdir(directory) if file_pattern in f]
 
 def read_project_file(project_file, file_pattern='.mzML'):
-    '''
+    """
     This reads centroided LC-MS files from a file list.
     Returns a list of files that match file_pattern.
 
-    This is useful for running Asari across filesystems, 
-    or when another tool needs to request Asari processing but 
+    This is useful for running Asari across filesystems,
+    or when another tool needs to request Asari processing but
     we need to read the files in place.
 
     Parameters
@@ -165,13 +164,13 @@ def read_project_file(project_file, file_pattern='.mzML'):
     ------
     list of paths to files containing the file_pattern
 
-    '''
+    """
     print("Working on ~~ %s ~~ \n\n" %project_file)
     with open(project_file) as project_filehandle:
         return [os.path.abspath(l.strip()) for l in project_filehandle.readlines() if file_pattern in l]
 
 def register_samples(list_input_files):
-    '''
+    """
     Establish sample_id here, return sample_registry as a dictionary.
 
     Parameters
@@ -182,12 +181,12 @@ def register_samples(list_input_files):
     Return
     ------
     sample_registry, a dictionary of integer sample id's to filepaths
-    '''
+    """
     return {ii : {'sample_id': ii, 'input_file': file} for ii, file in enumerate(list_input_files)}
 
 
 def create_export_folders(parameters, time_stamp=None):
-    '''
+    """
     Creates local directory for storing temporary files and output result.
     A time stamp is added to directory name to avoid overwriting existing projects.
 
@@ -197,7 +196,7 @@ def create_export_folders(parameters, time_stamp=None):
         passed from main.py to get outdir and project_name
     time_stamp: str
         a time_stamp string to prevent overwriting existing projects
-    '''
+    """
     if time_stamp is None:
         parameters['outdir'] = '_'.join([parameters['outdir'], parameters['project_name'], parameters['time_stamp_for_dir']])
     else:
@@ -219,14 +218,14 @@ def create_export_folders(parameters, time_stamp=None):
 
 
 def remove_intermediate_pickles(parameters):
-    '''
-    Remove all temporary files under pickle/ to free up disk space. 
+    """
+    Remove all temporary files under pickle/ to free up disk space.
 
     Parameters
     ----------
     paramaters: dict
         passed from main.py to get tmp_pickle_dir
-    '''
+    """
     assert parameters['reuse_intermediates'] is None, "Cannot remove when reuse_intermediates is set."
     print("Removing temporary pickle files...")
     for f in os.listdir(parameters['tmp_pickle_dir']):
@@ -241,16 +240,16 @@ def remove_intermediate_pickles(parameters):
 # Mass track (EIC) extraction, multi-core parralization via multiprocessing
 
 def make_iter_parameters(sample_registry, parameters):
-    '''
+    """
     Generate iterables for multiprocess.starmap for getting sample mass tracks.
 
     Parameters
     ----------
     sample_registry : dict
-        dictionary like {'sample_id': ii, 'input_file': file}, 
+        dictionary like {'sample_id': ii, 'input_file': file},
         generated by register_samples.
     parameters : dict
-        parameter dictionary passed from main.py, 
+        parameter dictionary passed from main.py,
         which imports from default_parameters and updates the dict by user arguments.
     shared_dict : dict
         dictionary object used to pass data btw multiple processing.
@@ -258,17 +257,17 @@ def make_iter_parameters(sample_registry, parameters):
     Returns
     -------
     A list of iterative parameters, e.g.
-    [('sample_id', input_file, mode, mz_tolerance_ppm, min_intensity, min_timepoints, 
+    [('sample_id', input_file, mode, mz_tolerance_ppm, min_intensity, min_timepoints,
     min_peak_height, output_file, shared_dict), ...]
-    '''
+    """
 
-    # todo - this should just pass parameters maybe? 
+    # todo - this should just pass parameters maybe?
     iters = []
     for sample in sample_registry.values():
         outfile = os.path.join(parameters['outdir'], 'pickle', os.path.basename(sample['input_file']).replace('.mzML', '')+'.pickle')
         iters.append((
-            sample['sample_id'], 
-            sample['input_file'], 
+            sample['sample_id'],
+            sample['input_file'],
             outfile,
             parameters
             )
@@ -276,16 +275,16 @@ def make_iter_parameters(sample_registry, parameters):
     return iters
 
 def batch_EIC_from_samples_(sample_registry, parameters):
-    '''
+    """
     Batch extraction of mass tracks from samples via multiprocessing.
-    
+
     Parameters
     ----------
     sample_registry : dict
-        dictionary like {'sample_id': ii, 'input_file': file}, 
+        dictionary like {'sample_id': ii, 'input_file': file},
         generated by register_samples.
     parameters : dict
-        parameter dictionary passed from main.py, 
+        parameter dictionary passed from main.py,
         which imports from default_parameters and updates the dict by user arguments.
 
     Returns
@@ -296,30 +295,30 @@ def batch_EIC_from_samples_(sample_registry, parameters):
     See also
     --------
     single_sample_EICs_
-    '''
+    """
     sample_data = {}
-    for sample_datum in bulk_process(single_sample_EICs_, 
-                                     make_iter_parameters(sample_registry, parameters), 
-                                     # dask_ip=parameters['dask_ip'], 
+    for sample_datum in bulk_process(single_sample_EICs_,
+                                     make_iter_parameters(sample_registry, parameters),
+                                     # dask_ip=parameters['dask_ip'],
                                      jobs_per_worker=parameters['multicores']):
         sample_data.update(sample_datum)
     return sample_data
 
 def single_sample_EICs_(job):
-    '''
+    """
     Extraction of mass tracks from a single sample. Used by multiprocessing in batch_EIC_from_samples_.
     `shared_dict` is used to pass back information, thus critical. Designed here as
-    sample_id: 
+    sample_id:
         ('status:mzml_parsing', 'status:eic', outfile,
         max_scan_number, list_scan_numbers, list_retention_time,
         track_mzs,
-        number_anchor_mz_pairs, anchor_mz_pairs, 
+        number_anchor_mz_pairs, anchor_mz_pairs,
         dict({mass tracks}) )
 
     track_mzs or anchor_mz_pairs are used later for aligning m/z tracks.
 
-    list of scans starts from 0. 
-    
+    list of scans starts from 0.
+
     `anchor_mz_pairs` are defined as m/z pairs that match to 13C/12C pattern.
     More anchors mean better coverage of features, helpful to select reference sample.
 
@@ -330,7 +329,7 @@ def single_sample_EICs_(job):
     infile : str
         input mzML filepath, passed from sample_registry by make_iter_parameters.
     ion_mode: str
-        from parameter dictionary, marks if acquisition was in positive or negative mode 
+        from parameter dictionary, marks if acquisition was in positive or negative mode
     database_mode: str
         from parameter dictionary, marks if intermediatesare kept on disk or in memory
     mz_tolerance_ppm: float
@@ -355,28 +354,28 @@ def single_sample_EICs_(job):
     See also
     --------
     batch_EIC_from_samples_, make_iter_parameters
-    '''
+    """
     #todo, maybe job should be a dict or something, else, we can just pass the parameters right?
 
     sample_id, infile, outfile, parameters = job
-    try:                
+    try:
         new = {
-            'sample_id': sample_id, 
-            'input_file': infile, 
-            'ion_mode': parameters['mode'], 
+            'sample_id': sample_id,
+            'input_file': infile,
+            'ion_mode': parameters['mode'],
             'list_mass_tracks': []
-            }        
-        xdict = extract_massTracks_(infile, 
-                    mz_tolerance_ppm=parameters['mz_tolerance_ppm'], 
-                    min_intensity=parameters['min_intensity_threshold'], 
-                    min_timepoints=parameters['min_timepoints'], 
+            }
+        xdict = extract_massTracks_(infile,
+                    mz_tolerance_ppm=parameters['mz_tolerance_ppm'],
+                    min_intensity=parameters['min_intensity_threshold'],
+                    min_timepoints=parameters['min_timepoints'],
                     min_peak_height=parameters['min_peak_height'])
         # only audit composite mass tracks that are used for elution peak detection, not here
-        
+
         track_mzs = [(t[0], ii) for ii, t in enumerate(xdict['tracks'])]    # (mz, id_number)
         # append MS/MS data to tracks by precursor_mz
         mz_mapped, list1_unmapped, list2_unmapped = all_mass_paired_mapping(
-            [x[0] for x in track_mzs], 
+            [x[0] for x in track_mzs],
             [spec['precursor_mz'] for spec in xdict['ms2_spectra']],
             std_ppm=parameters['mz_tolerance_ppm']
             )
@@ -386,45 +385,45 @@ def single_sample_EICs_(job):
                 mz_mapped_dict[ii].append(xdict['ms2_spectra'][jj])
             else:
                 mz_mapped_dict[ii] = [xdict['ms2_spectra'][jj]]
-        
-        new['list_mass_tracks'] = [{'id_number': ii, 'mz': t[0], 'intensity': t[1], 
+
+        new['list_mass_tracks'] = [{'id_number': ii, 'mz': t[0], 'intensity': t[1],
                                     'ms2_spectra': mz_mapped_dict.get(ii, [])
                 } for ii, t in enumerate(xdict['tracks'])]
-        
+
         print("Extracted %s to %d mass tracks (%d MS2 spectra)." %(
             os.path.basename(infile), len(xdict['tracks']), len(xdict['ms2_spectra'])))
 
-        anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(new['list_mass_tracks'], 
+        anchor_mz_pairs = find_mzdiff_pairs_from_masstracks(new['list_mass_tracks'],
                                                             mz_tolerance_ppm=parameters['mz_tolerance_ppm'])
         # find_mzdiff_pairs_from_masstracks is not too sensitive to massTrack format
         new.update({
             'anchor_mz_pairs': anchor_mz_pairs,
             'number_anchor_mz_pairs': len(anchor_mz_pairs),
-            # 'xdict': xdict,     # storage duplication 
+            # 'xdict': xdict,     # storage duplication
             'track_mzs': track_mzs,
             'max_scan_number': max(xdict['rt_numbers']),
             'acquisition_time': xdict['acquisition_time']
         })
 
-        # removed ''compress'' option. "join" solves the problem by splitting job   
+        # removed ''compress'' option. "join" solves the problem by splitting job
         data_filepath = outfile
         if parameters['database_mode'] == 'ondisk':
             data_filepath = outfile
             with open(outfile, 'wb') as f:
                 pickle.dump(new, f, pickle.HIGHEST_PROTOCOL)
 
-        return {sample_id: ('passed', 
-                            'passed', 
+        return {sample_id: ('passed',
+                            'passed',
                             data_filepath,
-                            new['max_scan_number'], 
-                            xdict['rt_numbers'], 
+                            new['max_scan_number'],
+                            xdict['rt_numbers'],
                             xdict['rt_times'],
                             new['track_mzs'],
-                            new['number_anchor_mz_pairs'], 
+                            new['number_anchor_mz_pairs'],
                             anchor_mz_pairs,
-                            new['acquisition_time'], 
-                            new if parameters['database_mode'] == 'memory' else {}, 
-                            parameters['compress'])} 
+                            new['acquisition_time'],
+                            new if parameters['database_mode'] == 'memory' else {},
+                            parameters['compress'])}
     except Exception as e:
         print("Failed to extract %s: %s" % (os.path.basename(infile), e))
         return {sample_id: ('failed', # status:mzml_parsing
@@ -443,30 +442,30 @@ def single_sample_EICs_(job):
 
 
 # phasing out:
-    
+
 # -----------------------------------------------------------------------------
 # main workflow for `xic`
 # -----------------------------------------------------------------------------
 
 def process_xics(list_input_files, parameters):
-    '''
-    Get XICs (aka EICs or mass tracks) from a folder of centroid mzML files 
+    """
+    Get XICs (aka EICs or mass tracks) from a folder of centroid mzML files
     and store in local pickle files.
 
     Parameters
     ----------
     list_input_files : list[str]
-        list of centroided mzML filepaths from LC-MS metabolomics. 
+        list of centroided mzML filepaths from LC-MS metabolomics.
         Usually found in a folder.
     parameters : dict
-        parameter dictionary passed from main.py, 
+        parameter dictionary passed from main.py,
         which imports from default_parameters and updates the dict by user arguments.
 
     Outputs
     -------
-    A local folder with asari extracted XICs (aka EICs or mass tracks), 
+    A local folder with asari extracted XICs (aka EICs or mass tracks),
     without full processing, in pickle files.
-    '''
+    """
     parameters['database_mode'] = 'ondisk'
     time_stamp = ''.join([str(x) for x in time.localtime()[1:6]])
     create_export_folders(parameters, time_stamp)
@@ -479,9 +478,9 @@ def process_xics(list_input_files, parameters):
 # -----------------------------------------------------------------------------
 
 def get_mz_list(infile):
-    '''
+    """
     Get a list of m/z valuies from infile, to be used as targets to extract from LC-MS features.
-    Currently, `extract` is a short cut function - asari still processes full feature tables, 
+    Currently, `extract` is a short cut function - asari still processes full feature tables,
     then searchs for the given targets.
 
     Parameters
@@ -493,6 +492,6 @@ def get_mz_list(infile):
     Returns
     -------
     A list of m/z values.
-    '''
+    """
     lines = open(infile).read().splitlines()[1:]
     return [float(x.split('\t')[0].split(",")[0]) for x in lines]

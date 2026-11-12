@@ -101,6 +101,7 @@ class SpectralIndex:
     @classmethod
     def from_arrays(cls, peaks_list, precursor_mz=None, metadata=None, fragment_index=True,
                     clean=True, **params):
+        """Build an index from a list of peak arrays, with optional precursor m/z and metadata."""
         unknown = set(params) - set(DEFAULT_PARAMS)
         if unknown:
             raise TypeError(f'unknown parameters: {sorted(unknown)}')
@@ -165,6 +166,7 @@ class SpectralIndex:
     # --------------------------------------------------------------- file i/o
 
     def save(self, path):
+        """Save index to an uncompressed .npz file."""
         arrays = {name: getattr(self, name) for name in ARRAY_DTYPES if getattr(self, name) is not None}
         header = np.frombuffer(json.dumps(self.header).encode('utf-8'), dtype=np.uint8)
         with open(path, 'wb') as f:
@@ -196,6 +198,7 @@ class SpectralIndex:
 
     @property
     def n_peaks(self):
+        """Total number of peaks."""
         return int(self.offsets[-1])
 
     def peaks(self, i):

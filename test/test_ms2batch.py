@@ -1,17 +1,18 @@
 """
-Tests for ms2batch. Run with pytest, or directly:  PYTHONPATH=. python3 tests/test_ms2batch.py
+Tests for asari.ms2batch. Run with pytest, unittest, or directly:  PYTHONPATH=. python3 test/test_ms2batch.py
 """
 
 import io
+import unittest
 import os
 import tempfile
 import zipfile
 
 import numpy as np
 
-from ms2batch import SpectralIndex, search, read_msp
-from ms2batch import engine
-from ms2batch.preprocess import clean_spectra, centroid_spectrum, entropy_weight
+from asari.ms2batch import SpectralIndex, search, read_msp
+from asari.ms2batch import engine
+from asari.ms2batch.preprocess import clean_spectra, centroid_spectrum, entropy_weight
 
 rng = np.random.default_rng(1)
 
@@ -229,6 +230,12 @@ def test_read_msp():
     assert [x['name'] for x in s] == ['A', 'B']
     assert s[0]['precursor_mz'] == 150.5 and s[1]['precursor_mz'] == 200.0
     np.testing.assert_allclose(s[0]['peaks'], [[50.1, 10], [60.2, 20]], rtol=1e-6)
+
+
+def load_tests(loader, tests, pattern):
+    '''Run the test_ functions under unittest discovery as well.'''
+    return unittest.TestSuite(unittest.FunctionTestCase(v) for k, v in sorted(globals().items())
+                              if k.startswith('test_') and callable(v))
 
 
 if __name__ == '__main__':
