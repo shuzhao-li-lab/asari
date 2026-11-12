@@ -77,13 +77,10 @@ Output
 A typical run on disk may generatae a directory like this
 
     rsvstudy_asari_project_427105156
-    ├── Annotated_empricalCompounds.json
-    ├── Feature_annotation.tsv
     ├── export
     │   ├── _mass_grid_mapping.csv
     │   ├── cmap.pickle
-    │   ├── full_Feature_table.tsv
-    │   └── unique_compound__Feature_table.tsv
+    │   └── full_Feature_table.tsv
     ├── pickle
     │   ├── Blank_20210803_003.pickle
     │   ├── ...

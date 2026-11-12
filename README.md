@@ -149,16 +149,13 @@ Please check documentation and demo notebooks for additional uses.
 
 ## Output
 
-A typical run of LC-MS data processing may generatae a directory like this
+A typical run of LC-MS data processing creates a project directory `<project_name>_<time stamp>` under the output directory (`-o`, default `output`). E.g. `-o mydir -j rsvstudy` may generate `mydir/rsvstudy_427105156` like this
 
-    rsvstudy_asari_project_427105156
-    ├── Annotated_empricalCompounds.json
-    ├── Feature_annotation.tsv
+    rsvstudy_427105156
     ├── export
     │   ├── _mass_grid_mapping.csv
     │   ├── cmap.pickle
-    │   ├── full_Feature_table.tsv
-    │   └── unique_compound__Feature_table.tsv
+    │   └── full_Feature_table.tsv
     ├── pickle
     │   ├── Blank_20210803_003.pickle
     │   ├── ...

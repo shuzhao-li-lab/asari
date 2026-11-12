@@ -3,6 +3,7 @@
 import argparse
 import multiprocessing as mp
 import os
+import sys
 import json
 import time
 from functools import partial
@@ -21,6 +22,18 @@ from .utils import build_boolean_dict
 
 booleandict = build_boolean_dict()
 SUBCOMMANDS = ["analyze", "process", "deconvolute", "annotate", "viz", "join", "list_workflows"]
+WORKFLOWS = {
+    'LC': 'LC-MS (default). process: feature extraction; annotate: pre-annotation of feature table '
+          '(khipu, isotopes/adducts) and match to a compound database (HMDB default).',
+    'GC': 'GC-MS. process (optional --kovats to add RI column); deconvolute (--deconvolution_algorithm '
+          'hcl, adap or nmf) into pseudospectra; annotate (--search_algorithm reverse or forward) '
+          'against an MSP/JSON spectral library (--db, --hires).',
+    'LCMSMS': 'LC-MS/MS (DDA). process: MS1 feature table plus MS/MS spectra on mass tracks, '
+              'clustered by default (--cluster_ms2 F to export per input file); '
+              'annotate: search MS/MS against a pre-indexed library (--db).',
+    'DIMS': 'Direct infusion MS. process: MassGrid only, no RT alignment or peak detection; '
+            'reports max intensity per mass track per sample.',
+}
               # "xic", "extract",
 
 def get_input_file_list(parameters):
@@ -30,6 +43,8 @@ def get_input_file_list(parameters):
     """
     if parameters.get('files'):
         return read_project_file(parameters['files'])
+    if not parameters.get('input'):
+        sys.exit("Error: no input given. Use -i for a directory of mzML files, or --files for a list of file paths.")
     return read_project_dir(parameters['input'])
 
 def process(parameters):
@@ -55,6 +70,14 @@ def annotate(parameters, args):
 def join(parameters, args):
     """Run subcommand `join` on multiple feature tables."""
     join_tables(args.input, parameters=parameters)
+
+def list_workflows(parameters=None, args=None):
+    """Run subcommand `list_workflows`: print available workflows (use with --workflow)."""
+    print("Available workflows (use with --workflow):\n")
+    for name, description in WORKFLOWS.items():
+        print(f"  {name:<8}{description}\n")
+    if parameters:
+        print(f"Default workflow: {parameters.get('workflow', 'LC')}")
 
 def viz(parameters, args):
     """Run subcommand `viz`, launching dashboard of a processed project."""
@@ -168,6 +191,8 @@ def update_params_from_CLI(parameters, args, debug_print=False):
             parameters['input'] = os.path.dirname(args.input)
             debug_print(to_print=f"Input determined to be file")
             debug_print(to_print=f"Setting input to {parameters['input']}")
+        else:
+            sys.exit(f"Error: input (-i) not found: {args.input}")
 
     # set the input file list, an alternative to --input directory listing
     if args.files:
@@ -358,7 +383,7 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     #
     if args.workflow:
         parameters['workflow'] = args.workflow
-        assert parameters['workflow'] in {'LC', 'GC', 'DIMS', 'LCMSMS'}, "Workflow must be either LC, GC, LCMSMS or DIMS."
+        assert parameters['workflow'] in WORKFLOWS, "Workflow must be one of %s." %', '.join(WORKFLOWS)
         debug_print(to_print=f"Setting workflow to {parameters['workflow']}")
     else:
         debug_print(to_print=f"Using default workflow: {parameters['workflow']}")
@@ -441,8 +466,6 @@ def build_parser():
             help='peak area calculation, sum, auc or gauss for area under the curve')
     #parser.add_argument('--keep_intermediates', type=bool,
     #        help='keep all intermediate files, ondisk mode only.')
-    #parser.add_argument('--anno',
-    #        help='perform default annotation after processing data')
     # diagnosis
     parser.add_argument('--diagnosis',
                 help='keep diagnosis and viz data after processing data')
@@ -481,7 +504,7 @@ def run_asari(parameters, args=None):
     """
     if parameters['run'] == 'process':
         process(parameters)
-    if parameters['run'] == 'deconvolute':
+    elif parameters['run'] == 'deconvolute':
         deconvolute(parameters, args)
     elif parameters['run'] == 'analyze':
         # analyze a single sample file to get descriptions
@@ -495,6 +518,8 @@ def run_asari(parameters, args=None):
     elif parameters['run'] == 'viz':
         # launch data dashboard
         viz(parameters, args)
+    elif parameters['run'] == 'list_workflows':
+        list_workflows(parameters, args)
     else:
         print(f"Expecting one of the subcommands: {SUBCOMMANDS}.")
 

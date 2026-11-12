@@ -85,7 +85,6 @@ PARAMETERS = {
     'lcmsms_ms2_tolerance_in_da': 0.01,  # da tolerance for MS/MS peak matching in LCMSMS annotation
 
     # for LC annotation, to update
-    'anno': False,                       # to pre-annotate features; to phase out after 1.19
 
     'check_isotope_ratio': False,
     'khipu_rtime_tolerance': 2,          # in seconds, for khipu annotation grouping of features into empirical compounds, to update

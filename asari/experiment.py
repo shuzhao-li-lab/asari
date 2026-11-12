@@ -335,8 +335,7 @@ class ext_Experiment:
     def export_feature_tables(self, _snr=2, _peak_shape=0.7, _cSelectivity=0.7):
         """
         To export multiple features tables.
-        Filtering parameters (_snr, _peak_shape, _cSelectivity) only
-        apply to preferred table and unique_compound_table.
+        Filtering parameters (_snr, _peak_shape, _cSelectivity) only apply to preferred table.
         Full table is filtered by initial peak detection parameters,
         which contains lower values of snr and gaussian_shape.
 
@@ -355,8 +354,6 @@ class ext_Experiment:
         1. preferred table under `outdir`, after quality filtering
            by SNR, peak shape and chromatographic selectivity.
         2. full table under `outdir/export/`
-        3. unique compound table under `outdir/export/`
-        4. dependent on `target` extract option, a targeted_extraction table under `outdir`.
         """
         if self.parameters['drop_unaligned_samples']:
             good_samples = [sample.name for sample in self.all_samples if sample.is_rt_aligned]
@@ -372,7 +369,9 @@ class ext_Experiment:
 
         use_cols = [ 'id_number', 'mz', 'rtime', 'rtime_left_base', 'rtime_right_base', 'parent_masstrack_id',
                     'peak_area', 'cSelectivity', 'goodness_fitting', 'snr', 'detection_counts' ] + good_samples
-        filtered_FeatureTable = self.CMAP.FeatureTable[use_cols]
+        filtered_FeatureTable = self.CMAP.FeatureTable[use_cols].copy()
+        # sample intensities as integers, to save disk space in .tsv
+        filtered_FeatureTable[good_samples] = filtered_FeatureTable[good_samples].fillna(0).round().astype(np.int64)
         filtered_FeatureTable['mz'] = filtered_FeatureTable['mz'].round(4)
         filtered_FeatureTable['rtime'] = filtered_FeatureTable['rtime'].round(2)
         filtered_FeatureTable['rtime_left_base'] = filtered_FeatureTable['rtime_left_base'].round(2)
@@ -397,19 +396,6 @@ class ext_Experiment:
         print("\nFiltered Feature table (%d x %d) was written to %s.\n" %(
                                 filtered_FeatureTable.shape[0], number_of_samples, outfile))
 
-        # todo - this should be made more robust in the future
-        if self.parameters['anno'] and self.parameters['workflow'] != "GC":
-            # in self.selected_unique_features: (empCpd id, neutral_formula, ion_relation)
-            sel = [ii for ii in filtered_FeatureTable.index if filtered_FeatureTable['id_number'][ii] in self.selected_unique_features.keys()]
-            unique_compound_table = filtered_FeatureTable.loc[sel, :]
-            unique_compound_table.insert(3, "empCpd", [self.selected_unique_features[ii][0] for ii in unique_compound_table['id_number']])
-            unique_compound_table.insert(4, "neutral_formula", [self.selected_unique_features[ii][1] for ii in unique_compound_table['id_number']])
-            unique_compound_table.insert(5, "ion_relation", [self.selected_unique_features[ii][2] for ii in unique_compound_table['id_number']])
-
-            outfile = os.path.join(self.parameters['outdir'], 'export', 'unique_compound__'+self.parameters['output_feature_table'])
-            unique_compound_table.to_csv(outfile, index=False, sep="\t")
-            print("Unique compound table (%d x %d) was written to %s.\n" %(
-                                unique_compound_table.shape[0], number_of_samples, outfile))
 
     def add_retention_index(self, feature_table):
         """
@@ -477,37 +463,3 @@ class ext_Experiment:
             pkg_resources.open_binary(db, 'mass_indexed_compounds.pickle') )
         self.KCD.emp_cpds_trees = pickle.load(
             pkg_resources.open_binary(db, 'emp_cpds_trees.pickle') )
-
-    def db_mass_calibrate(self, required_calibrate_threshold=0.000002):
-        """
-        Use KCD.evaluate_mass_accuracy_ratio to check systematic mass shift,
-        which is calculated as the average ppm difference between measured m/z and theoretical values.
-        If greater than required_calibrate_threshold (default 2 ppm),
-        calibrate m/z values for the whole experiment by updating self.CMAP.FeatureList.
-
-        Parameters
-        ---------
-        required_calibrate_treshold: float, optional, default: 0.000002
-            if the mass shift exceeds this value, mass correction will be applied.
-
-        Note
-        ----
-        Data format in good_reference_landmark_peaks:
-        [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...],
-        where ref_id_num is index number of mass track in MassGrid.
-        """
-        mz_landmarks = [self.CMAP.MassGrid['mz'][p['ref_id_num']]
-                        for p in self.CMAP.good_reference_landmark_peaks]
-        mass_accuracy_ratio = self.KCD.evaluate_mass_accuracy_ratio(
-            mz_landmarks, mode=self.mode, mz_tolerance_ppm=10)
-        if mass_accuracy_ratio:
-            if abs(mass_accuracy_ratio) > required_calibrate_threshold:
-                print("Mass shift is greater than %2.1f ppm. Correction applied."
-                      %(required_calibrate_threshold*1000000))
-                _correction = mass_accuracy_ratio + 1
-                for F in self.CMAP.FeatureList:
-                    F['mz'] = F['mz'] / _correction
-                    F['mz_corrected_by_division'] = _correction
-        else:
-            print("Mass accuracy check is skipped, too few mz_landmarks (%d) matched."
-                  %len(mz_landmarks))

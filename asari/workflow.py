@@ -75,13 +75,10 @@ def process_project(list_input_files, parameters):
     A local folder with asari processing result, e.g::
 
         rsvstudy_asari_project_427105156
-        ├── Annotated_empricalCompounds.json
-        ├── Feature_annotation.tsv
         ├── export
         │   ├── _mass_grid_mapping.csv
         │   ├── cmap.pickle
-        │   ├── full_Feature_table.tsv
-        │   └── unique_compound__Feature_table.tsv
+        │   └── full_Feature_table.tsv
         ├── pickle
         │   ├── Blank_20210803_003.pickle
         │   ├── ...
@@ -185,7 +182,8 @@ def register_samples(list_input_files):
 def create_export_folders(parameters, time_stamp=None):
     """
     Creates local directory for storing temporary files and output result.
-    A time stamp is added to directory name to avoid overwriting existing projects.
+    The project directory is created under parameters['outdir'], as <project_name>_<time_stamp>;
+    the time stamp avoids overwriting existing projects. parameters['outdir'] is updated to it.
 
     Parameters
     ----------
@@ -195,9 +193,8 @@ def create_export_folders(parameters, time_stamp=None):
         a time_stamp string to prevent overwriting existing projects
     """
     if time_stamp is None:
-        parameters['outdir'] = '_'.join([parameters['outdir'], parameters['project_name'], parameters['time_stamp_for_dir']])
-    else:
-        parameters['outdir'] = '_'.join([parameters['outdir'], parameters['project_name'], time_stamp])
+        time_stamp = parameters['time_stamp_for_dir']
+    parameters['outdir'] = os.path.join(parameters['outdir'], '_'.join([parameters['project_name'], time_stamp]))
 
     os.makedirs(parameters['outdir'])
     # add additional subdirectories here.

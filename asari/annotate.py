@@ -407,41 +407,6 @@ class LCMS_Annotation:
 
         print("\nAnnotation of %d Empirical compounds was written to %s.\n\n" %(len(dict_empCpds), outfile))
 
-    def select_unique_compound_features(self, dict_empCpds):
-        """
-        Get unique feature by highest composite peak area per empirical compound.
-        One may consider alternatives to select the peak representing an empirical compound,
-        e.g. by SNR or M+H, M-H ions. This is can be done separately on the exported files.
-
-        Parameters
-        ----------
-        dict_empCpds : dict
-            dictionary of empirical compounds, using interim_id as key, as seen in JMS.
-
-        Not used now.
-
-
-        """
-        self.selected_unique_features = {}
-        for interim_id, V in dict_empCpds.items():
-            if len(V['MS1_pseudo_Spectra']) == 1:
-                self.selected_unique_features[V['MS1_pseudo_Spectra'][0]['id_number']] = (
-                        # empCpd id, neutral_formula, ion_relation
-                        interim_id, V['neutral_formula'], 'singleton'
-                )
-            else:
-                try:
-                    all_peaks = sorted([(peak['peak_area'], peak['goodness_fitting'], peak)
-                                        for peak in V['MS1_pseudo_Spectra']],
-                                        reverse=True)
-                    best_peak = all_peaks[0][2]
-                except TypeError:
-                    best_peak = V['MS1_pseudo_Spectra'][0]
-                self.selected_unique_features[best_peak['id_number']] = (
-                    # empCpd id, neutral_formula, ion_relation (will change not always anchor)
-                    interim_id, V['neutral_formula'], best_peak.get('ion_relation', '')
-                )
-
 
 #
 # ---------------------------------------------------------------------------
