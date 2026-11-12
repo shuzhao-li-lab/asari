@@ -2,6 +2,7 @@
 Functions for subcommand `viz`
 """
 import os
+import glob
 import html
 import bisect
 import pickle
@@ -9,7 +10,7 @@ import json
 import numpy as np
 import pandas as pd
 
-import hvplot.pandas
+# import hvplot.pandas
 import panel as pn
 import holoviews as hv
 
@@ -481,14 +482,6 @@ def build_dashboard(project_desc, cmap, Ftable, table_name='full'):
         display_frag,
     )
 
-    disclaimer = pn.pane.HTML('''<p>Dangerous data. Use at your own risk.</p>
-    <p>Asari source code is hosted at <a href="https://github.com/shuzhao-li/asari" target="_blank">https://github.com/shuzhao-li/asari</a>.
-    Feel free to contribute, use GitHub Issues to report bugs and request features.</p>
-    ''')
-
-    params_text = '; '.join(f"{k}: {v}" for k, v in project_desc.items())
-    project_params = pn.pane.HTML("<h2>Project Parameters</h2><p>" + html.escape(params_text) + "</p>")
-
     template = pn.template.FastListTemplate(
         site = "Asari Dashboard",
         title = project_desc["project_name"],
@@ -497,12 +490,22 @@ def build_dashboard(project_desc, cmap, Ftable, table_name='full'):
                 feature_browser,
                 mz_browser,
                 frag_browser,
-                project_params,
-                disclaimer,
-                ],
+                ] + get_footer_sections(project_desc),
         )
 
     return template
+
+
+def get_footer_sections(project_desc):
+    """Last two sections of all dashboards: Run Record (project.json as text) and disclaimer."""
+    disclaimer = pn.pane.HTML('''<p>Dangerous data. Use at your own risk.</p>
+    <p>Asari source code is hosted at <a href="https://github.com/shuzhao-li/asari" target="_blank">https://github.com/shuzhao-li/asari</a>.
+    Feel free to contribute, use GitHub Issues to report bugs and request features.</p>
+    ''')
+
+    params_text = '; '.join(f"{k}: {v}" for k, v in project_desc.items())
+    project_params = pn.pane.HTML("<h2>Run Record</h2><p>" + html.escape(params_text) + " (Some values are default and not applicable to this workflow.) </p>")
+    return [project_params, disclaimer]
 
 
 def dashboard(project_desc, cmap, Ftable, table_name='full'):
@@ -511,6 +514,325 @@ def dashboard(project_desc, cmap, Ftable, table_name='full'):
     """
     print("//*Asari dashboard*//   Press Control-C to exit.")
     pn.serve(build_dashboard(project_desc, cmap, Ftable, table_name))
+
+
+#
+# -----------------------------------------------------------------------------
+# Dashboard for annotation results (run == 'annotate'): MS/MS spectra or GC pseudospectra
+# -----------------------------------------------------------------------------
+
+ANNOTATION_FILE_PATTERNS = ['Annotated_pseudospectra_*.json',     # GC
+                            '*_MS2_annotation.json']              # LCMSMS, MSMS
+
+
+def read_project_desc(datadir):
+    """Read project.json in datadir, which determines the dashboard workflow by 'run'."""
+    infile = os.path.join(os.path.abspath(datadir), 'project.json')
+    if not os.path.exists(infile):
+        raise FileNotFoundError(f"{infile} not found. Input to viz should be an asari project directory.")
+    return json.load(open(infile))
+
+
+def _float_or_none(x):
+    try:
+        x = float(x)
+        return None if np.isnan(x) else x
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_annotation_record(entry, index):
+    """
+    Convert an annotated GC pseudospectrum (empCpd) or annotated MS/MS spectrum to a common record:
+    index, id, query_id, name, mz, rtime, RI, cosine_score, entropy_score, num_matched_peaks,
+    query_peaks, lib_peaks, info (dict for display).
+    """
+    if 'database_entry' in entry:
+        # LCMSMS / MSMS, from annotate_lcmsms
+        db_entry = entry.get('database_entry', {})
+        record = {
+            'id': entry.get('spid'),
+            'query_id': entry.get('spid'),
+            'name': db_entry.get('NAME', entry.get('database_key', '')),
+            'mz': _float_or_none(entry.get('mz')),
+            'rtime': _float_or_none(entry.get('rtime')),
+            'RI': None,
+            'cosine_score': _float_or_none(entry.get('cosine_score')),
+            'entropy_score': _float_or_none(entry.get('entropy_score')),
+            'num_matched_peaks': entry.get('number_matched_peaks'),
+            'query_peaks': entry.get('peaks', []),
+            'lib_peaks': entry.get('peaks_in_lib', []),
+        }
+        info = {k: entry.get(k) for k in ['spid', 'mz', 'rtime', 'entropy_score', 'cosine_score',
+                                         'number_matched_peaks', 'database_key']}
+        info.update({k: v for k, v in db_entry.items() if not isinstance(v, (list, dict))})
+    else:
+        # GC empCpd, from GCMS_Annotation.export
+        record = {
+            'id': entry.get('id'),
+            'query_id': entry.get('pseudospectrum_id', entry.get('quant_ion')),
+            'name': entry.get('name', ''),
+            'mz': _float_or_none(entry.get('quant_ion_mz')),
+            'rtime': _float_or_none(entry.get('rtime')),
+            'RI': _float_or_none(entry.get('RI')),
+            'cosine_score': _float_or_none(entry.get('cosine_score')),
+            'entropy_score': _float_or_none(entry.get('entropy_score')),
+            'num_matched_peaks': entry.get('num_matched_peaks'),
+            'query_peaks': entry.get('peaks_as_features') or entry.get('peaks') or [],
+            'lib_peaks': entry.get('peaks_in_lib', []),
+        }
+        info = {k: v for k, v in entry.items()
+                if k not in ('features', 'peaks_as_features', 'peaks_in_lib', 'peaks')}
+        info['number_of_features'] = len(entry.get('features') or [])
+    record['index'] = index
+    record['info'] = info
+    return record
+
+
+def read_annotation_project(datadir):
+    """
+    Read an asari annotation directory (project.json with run == 'annotate').
+    Annotated spectra are read from Annotated_pseudospectra_*.json (GC) or *_MS2_annotation.json (LCMSMS, MSMS).
+    The mirror plots use experimental peaks (peaks or peaks_as_features) and library spectra (peaks_in_lib)
+    stored in the JSON file.
+
+    Returns
+    -------
+    project_desc : dict from project.json
+    meta : dict, type, database, algorithm, time_stamp and source file of annotation
+    records : list of normalized annotation records, see _normalize_annotation_record
+    """
+    datadir = os.path.abspath(datadir)
+    project_desc = read_project_desc(datadir)
+    files = []
+    for pattern in ANNOTATION_FILE_PATTERNS:
+        files += sorted(glob.glob(os.path.join(datadir, pattern)))
+    if not files:
+        raise FileNotFoundError(f"No annotated spectra ({', '.join(ANNOTATION_FILE_PATTERNS)}) found in {datadir}.")
+    if len(files) > 1:
+        print(f"Multiple annotation files found, using {files[0]}.")
+    data = json.load(open(files[0]))
+    if isinstance(data, list):
+        data = {'list_of_features': data}
+    entries = data.get('list_of_empCpds') or data.get('list_of_features') or []
+    meta = {k: data.get(k) for k in ['type', 'database', 'algorithm', 'time_stamp']}
+    meta['source_file'] = files[0]
+    records = [_normalize_annotation_record(e, ii) for ii, e in enumerate(entries)]
+    return project_desc, meta, records
+
+
+def get_ms2_match_tolerance(project_desc):
+    """m/z tolerance (Da) to mark matched peaks in mirror plots, as used in annotation."""
+    if project_desc.get('workflow') == 'GC':
+        hires = project_desc.get('hires', True)
+        if isinstance(hires, str):
+            hires = hires.lower() in ('t', 'true', '1', 'yes')
+        return project_desc.get('ms2_tolerance_in_da', 0.005) if hires else 0.5
+    return project_desc.get('lcmsms_ms2_tolerance_in_da', 0.01)
+
+
+def _normalized_peaks(peaks):
+    """Return mz, intensity arrays, intensity normalized to max = 1."""
+    arr = np.asarray(peaks, dtype=float).reshape(-1, 2) if len(peaks) else np.zeros((0, 2))
+    mz, intensity = arr[:, 0], arr[:, 1]
+    if len(intensity) and intensity.max() > 0:
+        intensity = intensity / intensity.max()
+    return mz, intensity
+
+
+def mirror_plot_hv(record, match_tol=0.01, height=450):
+    """
+    Interactive mirror plot (holoviews/bokeh) of experimental spectrum (top, blue)
+    vs library spectrum (bottom, red). Peaks within match_tol are marked in black and connected.
+    """
+    title = "%s  %s" %(record['id'], record['name'])
+    if not len(record['query_peaks']) or not len(record['lib_peaks']):
+        return hv.Curve([]).opts(title=title + " - spectra not found in annotation file; "
+                                 "re-run asari annotate to include peaks.", height=height)
+    mz1, int1 = _normalized_peaks(record['query_peaks'])
+    mz2, int2 = _normalized_peaks(record['lib_peaks'])
+
+    matched1 = np.zeros(len(mz1), dtype=bool)
+    matched2 = np.zeros(len(mz2), dtype=bool)
+    links = []
+    for ii, m in enumerate(mz1):
+        jj = np.where(np.abs(mz2 - m) <= match_tol)[0]
+        if len(jj):
+            matched1[ii] = True
+            matched2[jj] = True
+            links += [(m, int1[ii], mz2[j], -int2[j]) for j in jj]
+
+    def _sticks(mz, intensity, color):
+        return hv.Segments((mz, np.zeros(len(mz)), mz, intensity),
+                           ['x0', 'y0', 'x1', 'y1']).opts(color=color, line_width=1.5)
+
+    def _tips(mz, intensity, matched, color, label):
+        df = pd.DataFrame({'m/z': mz, 'intensity': intensity, 'abs_intensity': np.abs(intensity),
+                           'matched': matched, 'spectrum': label})
+        return hv.Scatter(df, 'm/z', ['intensity', 'abs_intensity', 'matched', 'spectrum']).opts(
+            color=hv.dim('matched').categorize({True: 'black', False: color}),
+            size=4, tools=['hover'],
+            hover_tooltips=[('spectrum', '@spectrum'), ('m/z', '@{m/z}{0.0000}'),
+                            ('rel. intensity', '@abs_intensity{0.000}'), ('matched', '@matched')])
+
+    xmin = min(mz1.min(), mz2.min())
+    xmax = max(mz1.max(), mz2.max())
+    pad = max(5, 0.05 * (xmax - xmin))
+    plot = _sticks(mz1, int1, 'blue') * _sticks(mz2, -int2, 'red') \
+            * _tips(mz1, int1, matched1, 'blue', 'experimental') \
+            * _tips(mz2, -int2, matched2, 'red', 'library') \
+            * hv.HLine(0).opts(color='black', line_width=1)
+    if links:
+        plot *= hv.Segments(links, ['x0', 'y0', 'x1', 'y1']).opts(color='grey', line_width=0.5, alpha=0.6)
+    plot *= hv.Text(xmin - pad * 0.8, 1.08, 'Experimental', halign='left').opts(color='blue', text_font_size='10pt')
+    plot *= hv.Text(xmin - pad * 0.8, -1.08, 'Library', halign='left').opts(color='red', text_font_size='10pt')
+
+    scores = []
+    for k in ['cosine_score', 'entropy_score']:
+        if record[k] is not None:
+            scores.append("%s %.3f" %(k.replace('_score', ''), record[k]))
+    if scores:
+        title += "  (" + ", ".join(scores) + ")"
+    return plot.opts(hv.opts.Overlay(title=title, height=height, responsive=True,
+                                     xlim=(xmin - pad, xmax + pad), ylim=(-1.2, 1.2),
+                                     xlabel='m/z', ylabel='Normalized intensity',
+                                     shared_axes=False, show_legend=False))
+
+
+def annotation_info_html(info, title=''):
+    """Annotation info (dict) as HTML, 'key: value' joined by ' - ', floats rounded to 4 decimals."""
+    items = []
+    for k, v in info.items():
+        if v is None or v == '':
+            continue
+        if isinstance(v, float):
+            v = round(v, 4)
+        items.append("<b>%s</b>: %s" %(html.escape(str(k)), html.escape(str(v))))
+    return "<h3>%s</h3><p>%s</p>" %(html.escape(str(title)), ' - '.join(items))
+
+
+def get_annotation_summary_panel(project_desc, meta, records):
+    """Summary panel for annotation results: description and tabs of score and RT/m/z distributions."""
+    df = pd.DataFrame([{k: r[k] for k in ['name', 'mz', 'rtime', 'RI', 'cosine_score',
+                                          'entropy_score', 'num_matched_peaks']} for r in records])
+    spectrum_type = 'GC pseudospectra' if meta.get('type') == 'GCMS' else 'MS/MS spectra'
+    desc = "<h2>Annotation summary</h2><ul>%d annotated %s from %s.</ul>" %(
+        len(records), spectrum_type, html.escape(str(project_desc.get('input', ''))))
+    desc += "<ul>Database: %s. Algorithm: %s. Results in %s.</ul>" %(
+        html.escape(str(meta.get('database'))), html.escape(str(meta.get('algorithm'))),
+        html.escape(meta['source_file']))
+    description = pn.pane.HTML(desc)
+    if df.empty:
+        return pn.Column(description)
+
+    height, width = 330, 1000
+    def _hist(column, color, title, xlabel):
+        values = pd.to_numeric(df[column], errors='coerce').dropna()
+        if values.empty:
+            return hv.Curve([]).opts(title=title + " - not available", height=height)
+        bins = max(5, int(np.sqrt(len(values))))
+        return hv.Histogram(np.histogram(values, bins=bins), kdims=[xlabel], vdims=['Count']).opts(
+            color=color, alpha=0.7, title=title, height=height, width=width)
+
+    def _pane(plot):
+        return pn.pane.HoloViews(plot.opts(shared_axes=False), linked_axes=False)
+
+    hover_cols = ['name', 'mz', 'rtime', 'cosine_score', 'entropy_score']
+    tabs = []
+    if df['entropy_score'].notna().any():
+        tabs.append(("Cosine vs entropy score", hv.Scatter(df.dropna(subset=['entropy_score']),
+                    'cosine_score', ['entropy_score'] + [c for c in hover_cols if c not in ('cosine_score', 'entropy_score')]
+                    ).opts(size=5, alpha=0.6, tools=['hover'], height=height, width=width,
+                           title="Cosine vs entropy score")))
+    tabs += [
+        ("Cosine score", _hist('cosine_score', 'gold', "Cosine score", 'Cosine score')),
+        ("Entropy score", _hist('entropy_score', 'green', "Entropy score", 'Entropy score')),
+        ("Matched peaks", _hist('num_matched_peaks', 'grey', "Number of matched peaks", 'Matched peaks')),
+    ]
+    rt_col = 'RI' if df['RI'].notna().any() else 'rtime'
+    _df = df.dropna(subset=[rt_col, 'mz'])
+    if not _df.empty:
+        # first tab
+        tabs.insert(0, ("Distribution by %s and m/z" %rt_col, hv.Scatter(
+            _df, rt_col, ['mz'] + [c for c in hover_cols if c not in ('mz', rt_col)]).opts(
+                color='cosine_score', cmap='viridis', colorbar=True, clabel='cosine score',
+                size=5, tools=['hover'], height=height, width=width,
+                title="Annotated spectra by %s and m/z (quant ion m/z for GC)" %rt_col)))
+
+    return pn.Column(description, pn.Tabs(*[(name, pn.Column(_pane(p))) for name, p in tabs]))
+
+
+def build_annotation_dashboard(project_desc, meta, records):
+    """
+    Build the Dashboard for annotation results (GC pseudospectra or MS/MS spectra). Returns a panel template.
+    Summary panel on top, then a browser of all annotations with interactive mirror plots.
+    """
+    summary = get_annotation_summary_panel(project_desc, meta, records)
+    match_tol = get_ms2_match_tolerance(project_desc)
+    sections = [summary]
+
+    if records:
+        table_cols = ['id', 'name', 'query_id', 'mz', 'rtime', 'RI',
+                      'cosine_score', 'entropy_score', 'num_matched_peaks']
+        df = pd.DataFrame([{k: r[k] for k in table_cols} for r in records])
+        df = df.dropna(axis='columns', how='all')
+        df.insert(0, '#', range(1, len(records) + 1))
+        page_size = 10
+        table = pn.widgets.Tabulator(
+            df.round(4), show_index=False, selectable=1, disabled=True,
+            pagination='local', page_size=page_size, height=330,
+            header_filters={'name': {'type': 'input', 'func': 'like', 'placeholder': 'filter'},
+                            'id': {'type': 'input', 'func': 'like', 'placeholder': 'filter'}},
+            selection=[0],
+        )
+        current = pn.widgets.IntInput(name='Annotation #', value=1, start=1, end=len(records), width=150)
+        prev_button = pn.widgets.Button(name='◀ Previous', width=100)
+        next_button = pn.widgets.Button(name='Next ▶', width=100)
+
+        def _on_table(event):
+            if event.new and current.value != event.new[0] + 1:
+                current.value = event.new[0] + 1
+
+        def _on_current(event):
+            ii = event.new - 1
+            if table.selection != [ii]:
+                table.selection = [ii]
+            table.page = ii // page_size + 1
+
+        table.param.watch(_on_table, 'selection')
+        current.param.watch(_on_current, 'value')
+        prev_button.on_click(lambda e: setattr(current, 'value', max(1, current.value - 1)))
+        next_button.on_click(lambda e: setattr(current, 'value', min(len(records), current.value + 1)))
+
+        def annotation_info(n):
+            r = records[n - 1]
+            return pn.pane.HTML(annotation_info_html(r['info'], "%d. %s" %(n, r['name'])))
+
+        def mirror_plot_by_number(n):
+            return pn.pane.HoloViews(mirror_plot_hv(records[n - 1], match_tol), linked_axes=False)
+
+        browser = pn.Column(
+            "## Annotation browser",
+            pn.pane.HTML("<p>Select a row, or browse by number. Mirror plot of experimental spectrum (top) "
+                         "vs library spectrum (bottom); peaks matched within %s Da are in black.</p>" %match_tol),
+            table,
+            pn.Row(pn.Column(current, pn.Row(prev_button, next_button)),
+                   pn.bind(annotation_info, n=current)),
+            pn.bind(mirror_plot_by_number, n=current),
+        )
+        sections.append(browser)
+
+    return pn.template.FastListTemplate(
+        site = "Asari Dashboard",
+        title = "%s - annotation" %project_desc.get("project_name", ''),
+        main = sections + get_footer_sections(project_desc),
+        )
+
+
+def annotation_dashboard(project_desc, meta, records):
+    """Launch the annotation Dashboard in web browser."""
+    print("//*Asari dashboard (annotation)*//   Press Control-C to exit.")
+    pn.serve(build_annotation_dashboard(project_desc, meta, records))
 
 
 #

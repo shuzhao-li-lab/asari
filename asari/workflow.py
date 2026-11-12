@@ -18,7 +18,7 @@ from mass2chem.search import find_mzdiff_pairs_from_masstracks
 
 from .mass_functions import all_mass_paired_mapping
 from .experiment import ext_Experiment
-from .chromatograms import extract_massTracks_
+from .chromatograms import extract_massTracks_, extract_ms2_spectra_
 from .utils import bulk_process
 
 
@@ -88,8 +88,12 @@ def process_project(list_input_files, parameters):
 
     The pickle folder is removed after the processing by default.
     """
-    EE = workflow_setup(list_input_files, parameters)
-    # mass track extraction per file is done in workflow_setup
+    if parameters['workflow'] == "MSMS":
+        # MS2 spectra only, no mass tracks
+        EE = workflow_setup_MSMS(list_input_files, parameters)
+    else:
+        # mass track extraction per file is done in workflow_setup
+        EE = workflow_setup(list_input_files, parameters)
     print(f'Processing Experiment Using {parameters["workflow"]} Workflow...')
 
     if parameters['workflow'] == "LC":
@@ -106,8 +110,7 @@ def process_project(list_input_files, parameters):
         EE.process_all_LCMSMS()
 
     elif parameters['workflow'] == "MSMS":
-        # to add
-        print("Workflow to be implemented. Error 200.")
+        EE.process_all_MSMS()
 
     else:
         print("Workflow not supported. Error 100.")
@@ -228,6 +231,55 @@ def remove_intermediate_pickles(parameters):
         os.rmdir(parameters['tmp_pickle_dir'])
     except Exception as _:
         print("Failed to remove directory %s." %parameters['tmp_pickle_dir'])
+
+
+def workflow_setup_MSMS(list_input_files, parameters):
+    """
+    Setup for the MSMS workflow: extract MS2 spectra per file (MS1 data ignored),
+    in parallel, and keep them in memory in sample_registry[sid]['ms2_spectra'].
+    No mass tracks, m/z or RT alignment.
+    """
+    sample_registry = register_samples(list_input_files)
+    parameters['database_mode'] = 'memory'
+    time_stamp = [str(x) for x in time.localtime()[1:6]]
+    parameters['time_stamp'] = ':'.join(time_stamp)
+    create_export_folders(parameters, ''.join(time_stamp))
+    try:
+        os.rmdir(parameters['tmp_pickle_dir'])      # not used in MSMS workflow
+    except OSError:
+        pass
+
+    iters = [(sid, sam['input_file'], parameters) for sid, sam in sample_registry.items()]
+    results = bulk_process(single_sample_MS2_, iters, jobs_per_worker=parameters['multicores'])
+    for sid, status, acquisition_time, ms2_spectra in results:
+        sam = sample_registry[sid]
+        sam['name'] = os.path.basename(sam['input_file']).replace('.mzML', '')
+        for spec in ms2_spectra:
+            spec['sample'] = sam['name']
+        sam.update({
+            'status:mzml_parsing': status,
+            'status:eic': status,
+            'acquisition_time': acquisition_time,
+            'ms2_spectra': ms2_spectra,
+            'number_anchor_mz_pairs': None,
+        })
+    if not [v for v in sample_registry.values() if v['status:eic'] == 'passed']:
+        raise Exception("No data was processed, check the input files.")
+    return ext_Experiment(sample_registry, parameters)
+
+def single_sample_MS2_(job):
+    """
+    Extract MS2 spectra from a single sample, used by multiprocessing in workflow_setup_MSMS.
+    Returns (sample_id, status, acquisition_time, ms2_spectra).
+    """
+    sample_id, infile, parameters = job
+    try:
+        xdict = extract_ms2_spectra_(infile, min_intensity=parameters['min_intensity_threshold'])
+        print("Extracted %d MS2 spectra from %s." %(len(xdict['ms2_spectra']), os.path.basename(infile)))
+        return sample_id, 'passed', xdict['acquisition_time'], xdict['ms2_spectra']
+    except Exception as e:
+        print("Input error in sample %s, dropped from processing. %s" %(infile, e))
+        return sample_id, 'failed', None, []
 
 
 # -----------------------------------------------------------------------------

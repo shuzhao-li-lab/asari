@@ -14,10 +14,12 @@ from .default_parameters import adduct_search_patterns, \
     adduct_search_patterns_neg, isotope_search_patterns, extended_adducts, \
     readme_doc_str
 
-from .constructors import CompositeMap
-from .utils import NpEncoder
+from functools import partial
+
+from .constructors import CompositeMap, _cluster_track_ms2_worker
+from .utils import NpEncoder, bulk_process
 from . import db
-from .tools.ms2 import json_ms2_to_msp
+from .tools.ms2 import json_ms2_to_msp, group_ms2_by_precursor
 
 if not sys.warnoptions:
     import warnings
@@ -82,7 +84,9 @@ class ext_Experiment:
                     return k
 
         elif self.sample_registry:
-            L = [(v['number_anchor_mz_pairs'], v['sample_id']) for v in self.sample_registry.values() if v['number_anchor_mz_pairs'] is not None]
+            L = [(v['number_anchor_mz_pairs'], v['sample_id']) for v in self.sample_registry.values() if v.get('number_anchor_mz_pairs') is not None]
+            if not L:       # e.g. MSMS workflow, no mass tracks
+                return None
             L.sort(reverse=True)
             ref = self.sample_registry[L[0][1]]
             self.parameters['reference'] = ref['input_file']
@@ -113,8 +117,10 @@ class ext_Experiment:
         Return max scan number among samples, or None if no valid sample.
         self.sample_registry: a dict that maps sample IDs to sample data
         """
-        if self.sample_registry:
-            return max([self.sample_registry[k]['max_scan_number'] for k in self.valid_sample_ids]) + 1
+        scan_numbers = [self.sample_registry[k].get('max_scan_number') for k in self.valid_sample_ids]
+        scan_numbers = [x for x in scan_numbers if x is not None]
+        if scan_numbers:
+            return max(scan_numbers) + 1
         else:
             return None
 
@@ -188,6 +194,48 @@ class ext_Experiment:
         # MS1 peaks
         self.CMAP.global_peak_detection()
 
+    def process_all_MSMS(self):
+        """
+        The MS/MS workflow extracts MS2 spectra per sample. 
+        If cluster_ms2 == True, cluster all MS2 spectra and write clustered spectra to one JSON file and one MSP file;
+        else: save one MSP file per input sample.
+
+        MS1 data are ignored; there is no alignment of m/z or retention time.
+        MS2 spectra are extracted in workflow_setup_MSMS and kept in self.sample_registry[sid]['ms2_spectra'].
+        For clustering, spectra of all samples are grouped by precursor m/z (within mz_tolerance_ppm),
+        then each precursor group is clustered on RT and spectral similarity, same as in the LCMSMS workflow.
+
+        Updates
+        -------
+        self.ms2_precursor_groups : {id: {'id_number', 'mz', 'ms2_spectra'}, ...}, if cluster_ms2.
+        """
+        self.dropped_sample_names = [v['name'] for k,v in self.sample_registry.items()
+                                     if k not in self.valid_sample_ids]
+        all_spectra = []
+        for k in self.valid_sample_ids:
+            all_spectra += self.sample_registry[k]['ms2_spectra']
+        print("\nTotal %d MS2 spectra from %d samples.\n" %(len(all_spectra), self.number_of_samples))
+
+        if self.parameters.get('cluster_ms2', True):
+            groups = group_ms2_by_precursor(all_spectra, self.mz_tolerance_ppm)
+            print("Grouped into %d precursor m/z groups. Clustering MS/MS spectra (%s) ...\n" %(
+                len(groups), self.parameters.get('ms2_cluster_method', 'greedy')))
+            self.ms2_precursor_groups = {
+                ii: {'id_number': ii,
+                     'mz': float(np.median([spec['precursor_mz'] for spec in G])),
+                     'ms2_spectra': G}
+                for ii, G in enumerate(groups)
+            }
+            worker = partial(_cluster_track_ms2_worker,
+                             similarity_function=None,
+                             rt_gap=self.parameters.get('ms2_rt_gap', 5),
+                             mz_tolerance=self.parameters.get('ms2_mz_tolerance', 0.01),
+                             distance_threshold=self.parameters.get('ms2_distance_threshold', 0.8),
+                             method=self.parameters.get('ms2_cluster_method', 'greedy'),
+                             similarity_threshold=self.parameters.get('ms2_similarity_threshold', 0.7),
+                             score=self.parameters.get('ms2_cluster_score', 'entropy'))
+            self.ms2_precursor_groups = dict(bulk_process(worker, list(self.ms2_precursor_groups.items()),
+                                                          jobs_per_worker=self.parameters['multicores']))
 
     def export_all(self, diagnosis=False):
         """
@@ -217,7 +265,7 @@ class ext_Experiment:
                 pass
             self.export_feature_tables()
             self.export_log()
-            # self.export_readme()
+            self.export_readme()
 
         elif self.parameters['workflow'] == "LCMSMS":
             # annotation will be separate step
@@ -233,28 +281,51 @@ class ext_Experiment:
             self.export_log()
             self.export_readme()
 
+        elif self.parameters['workflow'] == "MSMS":
+            if self.parameters.get('cluster_ms2', True):
+                self.export_clustered_ms2(self.ms2_precursor_groups,
+                                          track_label='precursor_group', id_prefix='precursor')
+            else:
+                dict_sample_spectra = {
+                    self.sample_registry[k]['name']: [(spec, None) for spec in self.sample_registry[k]['ms2_spectra']]
+                    for k in self.valid_sample_ids
+                }
+                self.export_ms2_per_sample(dict_sample_spectra)
+
+            self.export_log()
+            self.export_readme()
+
     @staticmethod
-    def _format_ms2_spectrum(spec, track, spec_id):
-        """Round values and add parent mass track info to an MS/MS spectrum (in place)."""
-        spec['parent_masstrack_id'] = track['id_number']
-        spec['parent_masstrack_mz'] = round(float(track['mz']), 4)
+    def _format_ms2_spectrum(spec, track, spec_id, track_label='parent_masstrack'):
+        """
+        Round values and add parent track info to an MS/MS spectrum (in place).
+        track : composite mass track (LCMSMS) or precursor group (MSMS); None to add no track info.
+        track_label : prefix of the track fields, e.g. parent_masstrack_id, parent_masstrack_mz.
+        """
+        if track is not None:
+            spec[track_label + '_id'] = track['id_number']
+            spec[track_label + '_mz'] = round(float(track['mz']), 4)
         spec['id'] = spec_id
         spec['precursor_mz'] = round(spec['precursor_mz'], 4)
         spec['rtime'] = round(spec['rtime'], 2)
         spec['peaks'] = [[round(mz, 4), intensity] for mz, intensity in spec['peaks']]
         return spec
 
-    def export_clustered_ms2(self):
+    def export_clustered_ms2(self, tracks=None, track_label='parent_masstrack', id_prefix='track'):
         """
-        Export clustered MS/MS spectra (cluster representatives per composite mass track)
-        to export/ms2_spectra.json and export/ms2_spectra.msp.
+        Export clustered MS/MS spectra (cluster representatives per composite mass track,
+        or per precursor group in MSMS workflow) to export/ms2_spectra.json and export/ms2_spectra.msp.
+
+        tracks : dict of tracks with clustered 'ms2_spectra'; default self.CMAP.composite_mass_tracks.
         """
+        if tracks is None:
+            tracks = self.CMAP.composite_mass_tracks
         _list_ms2_spectra = []
-        for mt in self.CMAP.composite_mass_tracks.values():
+        for mt in tracks.values():
             # after clustering, the ms2_spectra in each mass track are the cluster representatives
             for ii, spec in enumerate(mt['ms2_spectra']):
                 _list_ms2_spectra.append(
-                    self._format_ms2_spectrum(spec, mt, f"track_{mt['mz']:.4f}_clus{ii}"))
+                    self._format_ms2_spectrum(spec, mt, f"{id_prefix}_{mt['mz']:.4f}_clus{ii}", track_label))
 
         outfile = os.path.join(self.parameters['outdir'], 'export', 'ms2_spectra')
         with open(outfile + '.json', 'w', encoding='utf-8') as f:
@@ -262,18 +333,23 @@ class ext_Experiment:
         json_ms2_to_msp(_list_ms2_spectra, outfile + '.msp')
         print("Exported %d clustered MS/MS spectra." %len(_list_ms2_spectra))
 
-    def export_ms2_per_sample(self):
+    def export_ms2_per_sample(self, dict_sample_spectra=None):
         """
         Export unclustered MS/MS spectra per input file, to export/ms2_spectra_<sample>.msp
         (MSP only, to save disk space).
         Each spectrum carries precursor_mz, rtime (seconds, as in input file),
         and the composite mass track it is assigned to (parent_masstrack_id, parent_masstrack_mz).
         Only MS/MS spectra mapped to a composite mass track are included.
+
+        dict_sample_spectra : {sample: [(spectrum, track or None), ...]};
+            default collects spectra from self.CMAP.composite_mass_tracks (LCMSMS).
+            MSMS workflow passes all spectra per sample with no track.
         """
-        dict_sample_spectra = {}
-        for mt in self.CMAP.composite_mass_tracks.values():
-            for spec in mt['ms2_spectra']:
-                dict_sample_spectra.setdefault(spec.get('sample', 'unknown'), []).append((spec, mt))
+        if dict_sample_spectra is None:
+            dict_sample_spectra = {}
+            for mt in self.CMAP.composite_mass_tracks.values():
+                for spec in mt['ms2_spectra']:
+                    dict_sample_spectra.setdefault(spec.get('sample', 'unknown'), []).append((spec, mt))
 
         for sample, specs in dict_sample_spectra.items():
             specs.sort(key=lambda x: (x[0]['rtime'], x[0]['precursor_mz']))

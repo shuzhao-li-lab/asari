@@ -482,6 +482,29 @@ def find_track_kde_peaks(sorted_list_rtimes,
     return real_apexes
 
 
+def group_ms2_by_precursor(list_ms2_spectra, mz_tolerance_ppm=5):
+    """
+    Group MS/MS spectra by precursor m/z, without m/z alignment.
+    Spectra are sorted by precursor_mz; a new group starts where the gap to the previous
+    precursor_mz exceeds mz_tolerance_ppm.
+
+    Returns list of groups, each a list of spectra, in increasing precursor m/z.
+    """
+    if not list_ms2_spectra:
+        return []
+    sorted_spectra = sorted(list_ms2_spectra, key=lambda x: x['precursor_mz'])
+    groups, current = [], [sorted_spectra[0]]
+    for spec in sorted_spectra[1:]:
+        prev = current[-1]['precursor_mz']
+        if spec['precursor_mz'] - prev > prev * mz_tolerance_ppm * 1e-6:
+            groups.append(current)
+            current = [spec]
+        else:
+            current.append(spec)
+    groups.append(current)
+    return groups
+
+
 def rt_cluster_msms(
         list_ms2_spectra, similarity_function,
         rt_gap=5, mz_tolerance=0.05, distance_threshold=0.8,
@@ -578,13 +601,10 @@ def json_ms2_to_msp(records, outfile='test.msp'):
             peaks = entry.get('peaks_as_features', [])
         lines.append(f"ID: {entry.get('id', '')}")
         lines.append(f"PRECURSORMZ: {entry.get('precursor_mz', '')}")
-        if 'sample' in entry:
-            lines.append(f"sample: {entry['sample']}")
-        if 'cluster_size' in entry:
-            lines.append(f"cluster_size: {entry['cluster_size']}")
-        lines.append(f"parent_masstrack_id: {entry.get('parent_masstrack_id', '')}")
-        if 'parent_masstrack_mz' in entry:
-            lines.append(f"parent_masstrack_mz: {entry['parent_masstrack_mz']}")
+        for key in ('sample', 'cluster_size', 'parent_masstrack_id', 'parent_masstrack_mz',
+                    'precursor_group_id', 'precursor_group_mz'):
+            if key in entry:
+                lines.append(f"{key}: {entry[key]}")
         lines.append(f"RETENTIONTIME: {entry.get('rtime', '')}")
         lines.append(f"Num Peaks: {len(peaks)}")
         for mz, intensity in peaks:

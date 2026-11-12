@@ -83,7 +83,7 @@ def annotate_project(infile, parameters):
             else:
                 print(f"No pseudospectra found in {infile}.")
 
-    elif parameters['workflow'] == "LCMSMS":
+    elif parameters['workflow'] in ("LCMSMS", "MSMS"):
         # to handle diff anno methods, including pre-annotation in version 2
         annotate_lcmsms(
             infile=infile,
@@ -127,6 +127,8 @@ def annotate_lcmsms(
     entropy_search = pickle.load(open(database_file, 'rb'))
     print(f"Loaded database of {len(entropy_search.precursor_mz_array)} spectra.")
     ms2_spectra = json.load(open(infile))
+    # original experimental peaks, kept in JSON export for mirror plots (e.g. in viz Dashboard)
+    dict_query_peaks = {sp['id']: sp['peaks'] for sp in ms2_spectra}
     cleaned_spectra = clean_list_ms2spectra(ms2_spectra, entropy_search, entropy_screen_params)
     print(f"Loadded {len(cleaned_spectra)} cleaned experimental spectra.\n")
 
@@ -162,8 +164,8 @@ def annotate_lcmsms(
     #
     json_concise_results = []
     for k, res in concise_results.items():
-        # if not isinstance(db_entry['peaks'], list): db_entry['peaks'] = db_entry['peaks'].tolist()
-        _ = res[0].pop('peaks')         # exclude peaks
+        # library peaks are kept in JSON only (not in tsv), for mirror plots
+        peaks_in_lib = [[round(float(mz), 4), float(intensity)] for mz, intensity in res[0].pop('peaks')]
         json_concise_results.append({
             'spid': res[4],
             'mz': round(res[5], 4),     # expt_precursor_mz
@@ -173,6 +175,8 @@ def annotate_lcmsms(
             'number_matched_peaks': int(res[3]),
             'database_key': k,
             'database_entry': res[0],
+            'peaks': dict_query_peaks.get(res[4], []),     # experimental MS/MS spectrum
+            'peaks_in_lib': peaks_in_lib,                   # library spectrum
         })
 
     tsv_output_file = os.path.join(outdir, project_name_handle+'_MS2_annotation.tsv')

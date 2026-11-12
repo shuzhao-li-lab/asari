@@ -111,7 +111,7 @@ Forward search can also start from a feature table, which then runs deconvolutio
 Notes:
 - `--db` takes MSP or JSON. Common MSP field-name variants are recognized; RI is read from `RI`, `Retention_index`, `Kovats` etc., or from `RETENTIONTIME` as in some GC libraries. Library entries without RI are not used. Without `--db`, the built-in `asari/db/gcms_corelib_20260930.msp` is used. A small low-resolution test library is at `asari/db/lowres_test_gcms.msp`.
 - Search parameters (`ms2_tolerance_in_da`, `ri_tolerance`, `score_cutoff_cosine`, `score_cutoff_entropy`, `corr_cutoff`) can be set in a parameter file (`-p`).
-- Annotation outputs: `empCpds_<project>.tsv` (one row per annotated compound), `Features_<project>.tsv` (one row per annotated feature), `Annotated_pseudospectra_<project>.json` and `.msp`, plus PDF mirror plots under `mirrorplots/`.
+- Annotation outputs: `empCpds_<project>.tsv` (one row per annotated compound), `Features_<project>.tsv` (one row per annotated feature), `Annotated_pseudospectra_<project>.json` and `.msp`. PDF mirror plots under `mirrorplots/` are optional (`--mirror_plot T`); interactive mirror plots are in the dashboard (`asari viz -i <annotation directory>`).
 
 ### More examples
 
@@ -127,11 +127,22 @@ To search MS/MS agains a database:
 `asari annotate --db /Users/lish/li.proj/Resources/MSMS_database.pkl -i mydir/projectx_dir/ms2_spectra.json -o mydir/projectx_dir/ --workflow LCMSMS
 `
 
+The database is a pre-indexed library for Flash Entropy search. Results are written to `<project>_MS2_annotation.tsv` and `.json` in a new `annotation_<project>_<time stamp>` directory; the JSON includes experimental and library peaks for mirror plots in the dashboard.
+
+To extract MS/MS spectra only, ignoring MS1 data (no mass tracks, no m/z or RT alignment):
+
+`asari process --input mydir/projectx_dir -o mydir -j msms_project --workflow MSMS
+`
+
+By default, MS/MS spectra of all input files are grouped by precursor m/z (within `mz_tolerance_ppm`), then clustered on RT and spectral similarity as in LCMSMS, and exported to `export/ms2_spectra.json` and `.msp`. Use `--cluster_ms2 F` to export unclustered spectra per input file as `export/ms2_spectra_<sample>.msp`. The clustered `ms2_spectra.json` is annotated the same way as LCMSMS output (`asari annotate --workflow MSMS` or `LCMSMS`).
+
+Use `asari list_workflows` to see all workflows.
+
 To pre-annotate LC-MS feature table then match to a database (default HMDB for now):
 
 `asari annotate -i /Users/lish/li.play/test16_v16_599432/preferred_Feature_table.tsv -o /Users/lish/li.play/test16_v16_599432/ -j LCMSanno --workflow LC --mode pos`
 
-To launch a dashboard in your web browser after the project is processed into directory process_result_dir:
+To launch a dashboard in your web browser after the project is processed into directory process_result_dir (requires `--diagnosis True` in `process`), or on an annotation directory:
 
 `asari viz --input process_result_dir`
 
@@ -178,7 +189,11 @@ They are removed after the processing by default, to save disk space.
 
 ## Dashboard
 
-After data are processed, users can use `asari viz --input process_result_dir` to launch a dashboard to inspect data, where 'process_result_dir' refers to the result folder. The dashboard uses these files under the result folder: 'project.json', 'export/cmap.pickle', 'export/full_Feature_table.tsv' and 'preferred_Feature_table.tsv'. Thus, one can move around the folder, but modification of these files is not a good idea. Please note that pickle files are for internal use, and one should not trust pickle files from other people.
+`asari viz --input <directory>` launches a dashboard in the web browser. The dashboard type is determined by `run` in `<directory>/project.json`.
+
+Processed results (`run: process`, LC or GC workflow). Users can inspect features, composite mass tracks, co-eluting features and RT alignment. This requires `asari process ... --diagnosis True`, which exports `export/cmap.pickle` (large, not exported by default). The dashboard uses these files under the result folder: 'project.json', 'export/cmap.pickle', 'export/full_Feature_table.tsv' and 'preferred_Feature_table.tsv'. The preferred table is used by default (`--table_for_viz full` for the full table). Thus, one can move around the folder, but modification of these files is not a good idea. Please note that pickle files are for internal use, and one should not trust pickle files from other people.
+
+Annotation results (`run: annotate`, GC, LCMSMS or MSMS workflow), e.g. `asari viz -i mydir/annotation_myproject_1112115116`. The dashboard reads annotated spectra from `Annotated_pseudospectra_*.json` (GC) or `*_MS2_annotation.json` (LCMSMS, MSMS). It has a summary panel (scores, matched peaks, distribution by RT/RI and m/z), and a browser of all annotations with interactive mirror plots, experimental spectrum (peaks or peaks_as_features) vs library spectrum (peaks_in_lib). Peaks matched within the annotation m/z tolerance are marked. LCMSMS annotation results from earlier versions do not include peaks; re-run `asari annotate` to view mirror plots.
  
 ![viz_screen_shot](docs/source/_static/viz_screen_shot20220518.png)
 

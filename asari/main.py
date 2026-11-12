@@ -31,6 +31,9 @@ WORKFLOWS = {
     'LCMSMS': 'LC-MS/MS (DDA). process: MS1 feature table plus MS/MS spectra on mass tracks, '
               'clustered by default (--cluster_ms2 F to export per input file); '
               'annotate: search MS/MS against a pre-indexed library (--db).',
+    'MSMS': 'MS/MS only. process: MS2 spectra per input file, MS1 data ignored, no m/z or RT alignment; '
+            'clustered by precursor m/z, RT and similarity by default (--cluster_ms2 F to export per input file); '
+            'annotate as LCMSMS (--workflow LCMSMS on export/ms2_spectra.json).',
     'DIMS': 'Direct infusion MS. process: MassGrid only, no RT alignment or peak detection; '
             'reports max intensity per mass track per sample.',
 }
@@ -80,10 +83,20 @@ def list_workflows(parameters=None, args=None):
         print(f"Default workflow: {parameters.get('workflow', 'LC')}")
 
 def viz(parameters, args):
-    """Run subcommand `viz`, launching dashboard of a processed project."""
+    """
+    Run subcommand `viz`, launching dashboard of a processed project (run == 'process' in project.json),
+    or of annotation results (run == 'annotate'), browsing annotated MS/MS spectra or GC pseudospectra.
+    """
     try:
-        from .dashboard import read_project, dashboard
+        from .dashboard import read_project_desc, read_project, dashboard, \
+            read_annotation_project, annotation_dashboard
         datadir = args.input
+        # the dashboard workflow is determined by 'run' in project.json:
+        # 'annotate' (GC, LCMSMS, MSMS) to browse annotated spectra; else processed LC/GC project
+        if read_project_desc(datadir).get('run') == 'annotate':
+            project_desc, meta, records = read_annotation_project(datadir)
+            annotation_dashboard(project_desc, meta, records)
+            return
         project_desc, cmap, Ftable, Ptable = read_project(datadir)
         # parameters['table_for_viz'] is 'preferred' (default) or 'full', validated in update_params_from_CLI
         if parameters.get('table_for_viz') == 'full':
@@ -360,6 +373,9 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     if args.cluster_ms2:
         parameters['cluster_ms2'] = booleandict[args.cluster_ms2]
         debug_print(to_print=f"Setting cluster_ms2 to: {parameters['cluster_ms2']}")
+    if args.mirror_plot:
+        parameters['do_mirror_plot'] = booleandict[args.mirror_plot]
+        debug_print(to_print=f"Setting do_mirror_plot to: {parameters['do_mirror_plot']}")
     if args.denovo_limit:
         parameters['max_core_features'] = args.denovo_limit
         debug_print(to_print=f"Setting max_core_features to: {parameters['max_core_features']}")
@@ -483,8 +499,12 @@ def build_parser():
     parser.add_argument('--hires',
             help='High resolution or not for GC data')
     parser.add_argument('--cluster_ms2',
-            help='For LCMSMS workflow, cluster MS/MS spectra per mass track (default True); '
+            help='For LCMSMS and MSMS workflows, cluster MS/MS spectra (default True), '
+                 'per mass track in LCMSMS or per precursor m/z group in MSMS; '
                  'if False, export unclustered MS/MS spectra per input file')
+    parser.add_argument('--mirror_plot',
+            help='For `annotate --workflow GC`, export PDF mirror plots under mirrorplots/ (default False). '
+                 'Interactive mirror plots are available in `asari viz` on the annotation directory')
     parser.add_argument('--denovo_limit', type=int,
             help='Feature numbers to consider in de novo construction of empCpds (deconvolution) on GC data')
 

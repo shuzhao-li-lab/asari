@@ -71,7 +71,7 @@ PARAMETERS = {
     'score_cutoff_entropy': 0.4,         # cutoff for entropy similarity score for MS2 matching
     'corr_cutoff': 0.6,                  # cutoff for correlation between feature intensity to base peak intensity across samples
     'max_ri_delta': 100,                 # maximal retention index delta between candidate annotations
-    'do_mirror_plot': True,              # whether to generate mirror plot for  annotation results
+    'do_mirror_plot': False,             # whether to export PDF mirror plots for GC annotation results (CLI --mirror_plot); viz shows interactive ones
     'max_core_features': 20000,          # to limit the number of features to annotate, as low-intensity features are of less interest
     # 'denovo': False,                     # toggle to run de novo construction of empirical compounds (deconvolution)
     'hires': True,                       # high resolution data; else use unit mz for search (GC)

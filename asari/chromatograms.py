@@ -27,6 +27,51 @@ INTENSITY_DATA_TYPE = np.float32
 # mass Tracks
 # -----------------------------------------------------------------------------
 
+def parse_ms2_spectrum(spec, min_intensity=100):
+    """
+    Parse a pymzml MS2 spectrum into {'precursor_mz', 'rtime', 'peaks'}, rtime in seconds.
+    Peaks below min_intensity and the precursor ion region (>= precursor_mz - 1) are excluded.
+    Returns None if no precursor m/z or no peak remains.
+    Peaks are kept as a list of tuples, not np.array, to be serializable for intermediate storage.
+    """
+    precursor_mz = spec.selected_precursors[0]['mz']
+    if precursor_mz is None:
+        return None
+    peaks = [(mz, int(intensity)) for mz, intensity in spec.peaks('centroided')
+             if intensity >= min_intensity and mz < precursor_mz-1]    # excluding precursor ion
+    if not peaks:
+        return None
+    return {
+        'precursor_mz': precursor_mz,
+        'rtime': spec.scan_time_in_minutes() * 60,   # in seconds
+        # 'charge': spec.selected_precursors[0]['charge'],
+        'peaks': peaks
+    }
+
+
+def extract_ms2_spectra_(infile, min_intensity=100):
+    """
+    Extract only MS2 spectra from a mzML file, ignoring MS1 data. Used by the MSMS workflow.
+
+    Returns
+    -------
+    Dict with keys 'ms2_spectra' (list of spectra as in parse_ms2_spectrum)
+    and 'acquisition_time' (timestamp or None).
+    """
+    ms2_spectra = []
+    exp = pymzml.run.Reader(infile)
+    try:
+        timestamp = int(datetime.datetime.strptime(exp.info['start_time'], "%Y-%m-%dT%H:%M:%SZ").timestamp())
+    except:
+        timestamp = None
+    for spec in exp:
+        if spec.ms_level == 2:
+            ms2 = parse_ms2_spectrum(spec, min_intensity)
+            if ms2:
+                ms2_spectra.append(ms2)
+    return {'ms2_spectra': ms2_spectra, 'acquisition_time': timestamp}
+
+
 def extract_massTracks_(infile,
                         mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5,
                         min_peak_height=1000):
@@ -71,20 +116,9 @@ def extract_massTracks_(infile,
             alldata += [(mz, ii, inten) for mz, inten in zip(spec.mz[good_positions], intensities[good_positions])]
             ii += 1
         elif spec.ms_level == 2:                        # MS Level 2
-            precursor_mz = spec.selected_precursors[0]['mz']
-            if precursor_mz is None:
-                continue
-            peaks = [(mz, int(intensity)) for mz, intensity in spec.peaks('centroided')
-                               if intensity >= min_intensity and mz < precursor_mz-1]    # excluding precursor ion
-            if peaks:  # ms2_spectra not to use np.array, which is not serializable for intem storage
-                ms2_spectra.append(
-                    {
-                        'precursor_mz': precursor_mz,
-                        'rtime': spec.scan_time_in_minutes() * 60,   # in seconds
-                        # 'charge': spec.selected_precursors[0]['charge'],
-                        'peaks': peaks
-                    }
-                )
+            ms2 = parse_ms2_spectrum(spec, min_intensity)
+            if ms2:
+                ms2_spectra.append(ms2)
     #print("extracted %d valide data points." %len(alldata))
     mzTree = {}
     for x in alldata:
