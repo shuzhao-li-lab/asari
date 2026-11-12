@@ -95,7 +95,7 @@ Mass track is used in asari, to cover full range of retention time, because alig
 
 9. The asari dashboard for data inpsection
 
-   The dashboard is built using panel (https://panel.holoviz.org/). The dashboard uses these files under the result folder: 'project.json', 'export/cmap.pickle', 'export/epd.pickle' and 'export/full_Feature_table.tsv'. Multiple summary and QC metrics are plotted in one panel with multiple tabs.
+   The dashboard is built using panel (https://panel.holoviz.org/). The dashboard uses these files under the result folder: 'project.json', 'export/cmap.pickle', 'export/full_Feature_table.tsv' and 'preferred_Feature_table.tsv'. Multiple summary and QC metrics are plotted in one panel with multiple tabs.
 
    The Feature browser displays a feature on a single composite mass track as a scatter plot. It is important that asari does not use smoothed data for visual inspection, which may be misleading. The mass track viewer is similar to Feature browser, but displays information on all features that are found on a composite mass track.
 

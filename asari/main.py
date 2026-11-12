@@ -84,16 +84,16 @@ def viz(parameters, args):
     try:
         from .dashboard import read_project, dashboard
         datadir = args.input
-        project_desc, cmap, epd, Ftable, Ptable = read_project(datadir)
-        if args.table_for_viz == 'full':
-            dashboard(project_desc, cmap, epd, Ftable)
-        elif args.table_for_viz == 'preferred':
-            dashboard(project_desc, cmap, epd, Ptable)
+        project_desc, cmap, Ftable, Ptable = read_project(datadir)
+        # parameters['table_for_viz'] is 'preferred' (default) or 'full', validated in update_params_from_CLI
+        if parameters.get('table_for_viz') == 'full':
+            dashboard(project_desc, cmap, Ftable, 'full')
         else:
-            print(f"Table for viz not recognized! Using Full table.")
-            dashboard(project_desc, cmap, epd, Ftable)
+            dashboard(project_desc, cmap, Ptable, 'preferred')
     except ImportError:
         print("Error loading Dashboard, likely missing libraries.")
+    except FileNotFoundError as e:
+        sys.exit(f"Error: {e}")
 
 
 def update_peak_detection_params(parameters, args=None):

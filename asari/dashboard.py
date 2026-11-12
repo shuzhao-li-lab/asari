@@ -2,6 +2,8 @@
 Functions for subcommand `viz`
 """
 import os
+import html
+import bisect
 import pickle
 import json
 import numpy as np
@@ -15,55 +17,77 @@ hv.extension('bokeh')
 pn.extension(sizing_mode="stretch_width")
 
 
-def epd_convert(epd_dict):
+FEATURE_INFO_COLUMNS = ['id_number', 'mz', 'rtime', 'rtime_left_base', 'rtime_right_base',
+                        'parent_masstrack_id', 'peak_area', 'cSelectivity', 'goodness_fitting',
+                        'snr', 'detection_counts', 'RI']
+
+
+def get_data_start_col(columns):
+    """Index of first sample column in an asari feature table: after 'RI' if present, else after 'detection_counts'."""
+    columns = list(columns)
+    if 'RI' in columns:
+        return columns.index('RI') + 1
+    return columns.index('detection_counts') + 1
+
+
+def read_feature_table(infile, load_sample_limit=20):
     """
-    Format epd_dict to two dicts: peakDict, epdDict
+    Read an asari feature table (tsv) using id_number as index.
+    Sample columns are truncated to the first load_sample_limit.
     """
-    peakDict, epdDict = {}, {}
-    for k,v in epd_dict.items():
-        for P in v['MS1_pseudo_Spectra']:
-            peakDict[P['id_number']] = P
-        v['MS1_pseudo_Spectra'] = [P['id_number'] for P in v['MS1_pseudo_Spectra']]
-        epdDict[k] = v
-    return peakDict, epdDict
+    header = pd.read_csv(infile, sep='\t', nrows=0).columns
+    usecols = list(header[: get_data_start_col(header) + load_sample_limit])
+    return pd.read_csv(infile, sep='\t', usecols=usecols, index_col=0, header=0)
 
 
 def read_project(datadir, load_sample_limit=20):
     """
-    Get all project data.
+    Get all project data. Requires a project processed with `--diagnosis True`, which exports cmap.pickle.
 
     Returns
     -------
     project_desc :
         dict of project meta data
     cmap :
-        composite map, ['_number_of_samples_', 'rt_length', 'dict_scan_rtime', 'list_mass_tracks', 'MassGrid']
-    epd :
-        dict of empirical compounds
+        composite map, ['_number_of_samples_', 'rt_length', 'rt_reference_landmarks', 'rt_records',
+        'dict_scan_rtime', 'list_mass_tracks', 'MassGrid']
     Ftable :
-        pandas dataframe of feature table. Truncated if samples more than load_sample_limit.
+        pandas dataframe of full feature table, id_number as index. Truncated if samples more than load_sample_limit.
+    Ptable :
+        pandas dataframe of preferred feature table, same format as Ftable.
     """
     datadir = os.path.abspath(datadir)
     project_desc = json.load(open(os.path.join(datadir, 'project.json')))
-    cmap = pickle.load( open(os.path.join(datadir, 'export', 'cmap.pickle'), 'rb') )
-    # xics, mz_dict, massgrid = reformat_cmap()
+    cmap_file = os.path.join(datadir, 'export', 'cmap.pickle')
+    if not os.path.exists(cmap_file):
+        raise FileNotFoundError(f"{cmap_file} not found. Run `asari process` with `--diagnosis True` to export data for viz.")
+    cmap = pickle.load(open(cmap_file, 'rb'))
+    Ftable = read_feature_table(os.path.join(datadir, 'export', 'full_Feature_table.tsv'), load_sample_limit)
+    Ptable = read_feature_table(os.path.join(datadir, 'preferred_Feature_table.tsv'), load_sample_limit)
+    return project_desc, cmap, Ftable, Ptable
 
-    epd = pickle.load(open(os.path.join(datadir, 'export', 'epd.pickle'), 'rb') )
-    if 'number_of_samples' in project_desc and project_desc['number_of_samples'] > load_sample_limit:
-        Ftable = pd.read_csv( os.path.join(datadir, 'export', 'full_Feature_table.tsv'),
-                                sep='\t', index_col=0, header=0, usecols=range(10 + load_sample_limit) )
-    else:
-        Ftable = pd.read_csv( os.path.join(datadir, 'export', 'full_Feature_table.tsv'),
-                                sep='\t', index_col=0, header=0 )
 
-    if 'number_of_samples' in project_desc and project_desc['number_of_samples'] > load_sample_limit:
-        Ptable = pd.read_csv( os.path.join(datadir, 'preferred_Feature_table.tsv'),
-                                sep='\t', index_col=0, header=0, usecols=range(10 + load_sample_limit) )
-    else:
-        Ptable = pd.read_csv( os.path.join(datadir, 'preferred_Feature_table.tsv'),
-                                sep='\t', index_col=0, header=0 )
+def table_to_feature_dict(Ftable, cmap, rt_list):
+    """
+    Convert feature table to {id_number: feature dict}, using feature columns only.
+    'height' is added as max composite intensity of the parent mass track within the peak RT range.
+    """
+    cols = [c for c in FEATURE_INFO_COLUMNS[1:] if c in Ftable.columns]
+    rt = np.asarray(rt_list)
+    peakDict = {}
+    for fid, F in Ftable[cols].to_dict('index').items():
+        F['id_number'] = fid
+        track = cmap['list_mass_tracks'].get(int(F['parent_masstrack_id']))
+        height = 0
+        if track is not None:
+            left = np.searchsorted(rt, F['rtime_left_base'], side='left')
+            right = np.searchsorted(rt, F['rtime_right_base'], side='right')
+            segment = np.asarray(track['intensity'])[left:max(right, left + 1)]
+            height = int(segment.max()) if len(segment) else 0
+        F['height'] = height
+        peakDict[fid] = F
+    return peakDict
 
-    return project_desc, cmap, epd, Ftable, Ptable
 
 def plot_xic(xics, mz_dict, track_id):
     """
@@ -117,11 +141,14 @@ def convert_dict_html(d, title=''):
     Returns HTML as a string.
     """
     s = title
-    info = [ ('id_number: ', d['id_number'], ' - ', 'parent_masstrack_id: ', d['parent_masstrack_id'], ' - ', 'parent_epd_id: ', d.get('parent_epd_id', '')),
+    info = [ ('id_number: ', d['id_number'], ' - ', 'parent_masstrack_id: ', d['parent_masstrack_id'], ' - ',
+              'detection_counts: ', d.get('detection_counts', '')),
              ('snr: ', d['snr'], ' - ', 'peak shape: ', round(d['goodness_fitting'],2), ' - ', 'cSelectivity: ', round(d['cSelectivity'],2),),
              ('height: ', d['height'], ' - ', 'peak_area: ', d['peak_area']),
              ('mz: ', round(d['mz'],4), ' - ', 'rtime: ', (round(d['rtime_left_base'],2), round(d['rtime'],2), round(d['rtime_right_base'],2))),
     ]
+    if d.get('RI') is not None and not pd.isna(d.get('RI')):
+        info.append(('RI: ', d['RI'],))
     for x in info:
         s += "<ul>" + ' '.join([str(ii) for ii in x]) + "</ul>"
     return s
@@ -149,7 +176,7 @@ def track_to_peaks(peakDict):
     """
     t = {}
     for P in peakDict.values():
-        mid = str(P["parent_masstrack_id"])
+        mid = int(P["parent_masstrack_id"])
         if mid in t:
             t[mid].append(P["id_number"])
         else:
@@ -172,7 +199,9 @@ def find_a_good_peak(peakDict):
     To find a good example feature/peak, which can be used as the feature on landing page.
     """
     good = [P for P in peakDict.values() if P['goodness_fitting'] > 0.9 and P['cSelectivity'] > 0.9]
-    return good[0]
+    if good:
+        return good[0]
+    return max(peakDict.values(), key=lambda P: P['peak_area'])
 
 def prepare_rt_alignment(cmap):
     """this method prepares necessary dataframe for retention time alignment.
@@ -212,12 +241,12 @@ def prepare_rt_alignment(cmap):
 #
 # Summary panel
 #
-def get_summary_panel(project_desc, peakDict, epdDict, Ftable, cmap):
+def get_summary_panel(project_desc, Ftable, cmap, table_name='full'):
     """
     Get a summary panel, returns a panel.Column of multiple tabs for summary metrics.
     """
-    desc0 = "Project retrieved from %s, %d features and %d empirical compounds." %(project_desc['outdir'],
-                    len(peakDict), len(epdDict)
+    desc0 = "Project retrieved from %s, %d features in the %s feature table." %(project_desc['outdir'],
+                    Ftable.shape[0], table_name
                     )
     html = "<h2>Data summary</h2><ul>" + desc0 + \
             "</ul><ul>This Dashboard shows all features of varying measurement quality. We recommend to use the preferred feature table for data analysis.</ul>"
@@ -233,46 +262,37 @@ def get_summary_panel(project_desc, peakDict, epdDict, Ftable, cmap):
     #metadata_table = project_metadata.hvplot.table(columns=['Parameter', 'Value'], width=width, height=height).opts(toolbar=None)
 
     num_bins = int(np.sqrt(Ftable.shape[0]))
+    # each plot keeps its own axes (not linked across tabs) and the default toolbar (pan, zoom, reset, save)
+    hist_opts = dict(bins=num_bins, width=width, height=height, alpha=0.7, hover=False, ylabel="Count")
     # Feature m/z distribution histogram
-    mz_distribution = Ftable['mz'].hvplot.hist(bins=num_bins, tools=[],
-                        width = width, height=height, alpha=0.7, color='gold', hover=False,
-                        ylabel="Count", title="Feature distribution by m/z"
-                        ).opts(toolbar=None)
-    # eature distribution by RT scatterplot
+    mz_distribution = Ftable['mz'].hvplot.hist(color='gold', title="Feature distribution by m/z", **hist_opts)
+    # Feature distribution by RT scatterplot
     Ftable['peak_area_sqrt'] = np.sqrt(Ftable['peak_area'])
-    rt_distribution = Ftable.hvplot.scatter(x='rtime', y='peak_area_sqrt', tools=[], width=width, height=height, size=2, hover=False,
-                        title="Feature distribution by RT").opts(toolbar=None)
+    rt_distribution = Ftable.hvplot.scatter(x='rtime', y='peak_area_sqrt', width=width, height=height, size=2,
+                        hover=False, title="Feature distribution by RT")
     # quality metrics
     Ftable['log10(SNR)'] = np.log10(Ftable['snr']+1)
-    SNR = Ftable['log10(SNR)'].hvplot.hist(bins=num_bins, tools=[],
-                        width=width,height=height, alpha=0.7, color='green', hover=False,
-                        ylabel="Count", title="Signal to noise ratio"
-                        ).opts(toolbar=None)
-    PeakShape = Ftable['goodness_fitting'].hvplot.hist(bins=num_bins, tools=[],
-                        width=width,height=height, alpha=0.7, color='grey', hover=False,
-                        ylabel="Count", title="Peak shape"
-                        ).opts(toolbar=None)
-    cSel = Ftable['cSelectivity'].hvplot.hist(bins=num_bins, tools=[],
-                        width=width,height=height, alpha=0.7, color='red', hover=False,
-                        ylabel="Count", title="Chromatographic Selectivity"
-                        ).opts(toolbar=None)
+    SNR = Ftable['log10(SNR)'].hvplot.hist(color='green', title="Signal to noise ratio", **hist_opts)
+    PeakShape = Ftable['goodness_fitting'].hvplot.hist(color='grey', title="Peak shape", **hist_opts)
+    cSel = Ftable['cSelectivity'].hvplot.hist(color='red', title="Chromatographic Selectivity", **hist_opts)
 
     # hard cap for legend is 20
     if_legend = cmap['_number_of_samples_'] <= 20
     RTAlign = prepare_rt_alignment(cmap).hvplot.line(title="Retention Time Deviation vs Retention Time",xlabel="Retention Time (sec)",
                 ylabel="Retention Time Deviation (sec)", width=width, height=height,hover=True).opts(
                 show_legend=if_legend, legend_opts=dict(
-                title='',label_text_font_size='8pt',spacing=-5, location=(5, (height/2-cmap['_number_of_samples_']*11)), padding=3), toolbar=None)
+                title='',label_text_font_size='8pt',spacing=-5, location=(5, (height/2-cmap['_number_of_samples_']*11)), padding=3))
 
+    def _pane(plot):
+        return pn.pane.HoloViews(plot.opts(shared_axes=False), linked_axes=False)
 
     feature_distribution = pn.Tabs(
-        #("Project Metadata", metadata_table),
-        ("Feature m/z distribution histogram", pn.Column(mz_distribution)),
-        ("Feature distribution by RT scatterplot", pn.Column(rt_distribution)),
-        ("Signal to noise ratio", pn.Column(SNR)),
-        ("Peak shape", pn.Column(PeakShape)),
-        ("Chromatographic Selectivity", pn.Column(cSel)),
-        ("Retention Time Alignment", pn.Column(RTAlign)),
+        ("Feature m/z distribution histogram", pn.Column(_pane(mz_distribution))),
+        ("Feature distribution by RT scatterplot", pn.Column(_pane(rt_distribution))),
+        ("Signal to noise ratio", pn.Column(_pane(SNR))),
+        ("Peak shape", pn.Column(_pane(PeakShape))),
+        ("Chromatographic Selectivity", pn.Column(_pane(cSel))),
+        ("Retention Time Alignment", pn.Column(_pane(RTAlign))),
         )
     return pn.Column(
                     description,
@@ -283,30 +303,55 @@ def get_summary_panel(project_desc, peakDict, epdDict, Ftable, cmap):
 #
 # Dashboard
 #
-def dashboard(project_desc, cmap, epd, Ftable, sample_limit=20):
+def build_dashboard(project_desc, cmap, Ftable, table_name='full'):
     """
-    Panel based Dashboard.
+    Build the panel based Dashboard. Returns a panel template.
 
-    Sample Limit is not used yet, but future versions will make the dashboard more dynamic.
+    Features are retrieved from Ftable (full or preferred feature table, id_number as index);
+    mass tracks from cmap.
     """
-    print("//*Asari dashboard*//   Press Control-C to exit.")
-    peakDict, epdDict = epd_convert(epd)
+    rt_list = [cmap['dict_scan_rtime'][ii] for ii in range(cmap['rt_length'])]
+    peakDict = table_to_feature_dict(Ftable, cmap, rt_list)
     a_good_peak = find_a_good_peak(peakDict)
     track2peaks = track_to_peaks(peakDict)
-    rt_list = [cmap['dict_scan_rtime'][ii] for ii in range(cmap['rt_length'])]
-    summary = get_summary_panel(project_desc, peakDict, epdDict, Ftable, cmap)
+    summary = get_summary_panel(project_desc, Ftable, cmap, table_name)
 
     #
     # Feature browser
     #
+    # feature numbers present in the table (asari feature ID is 'F' + number); not continuous in preferred table
+    feature_numbers = sorted(int(fid[1:]) for fid in peakDict)
     default_feature_number = int(a_good_peak['id_number'][1:])
-    max_feature_number = len(peakDict) # asari feature ID starts with F1
-    feature_num_slider = pn.widgets.IntSlider(name='Feature number', value=default_feature_number,
-                        start=1, end=max_feature_number, step=1,)
+    feature_num_slider = pn.widgets.DiscreteSlider(name='Feature number', options=feature_numbers,
+                        value=default_feature_number)
     feature_selector = pn.widgets.IntInput(name='', value=default_feature_number,
-                        start=1, end=max_feature_number)
-    feature_selector.link(feature_num_slider, value='value')
-    feature_num_slider.link(feature_selector, value='value')
+                        start=feature_numbers[0], end=feature_numbers[-1])
+
+    def _available_feature_number(n, previous=None):
+        """
+        Next available feature number >= n (or the last one).
+        If stepping down by 1 from previous (e.g. down arrow), the previous available number <= n instead.
+        """
+        if previous is not None and n == previous - 1:
+            ii = bisect.bisect_right(feature_numbers, n)
+            return feature_numbers[max(ii - 1, 0)]
+        ii = bisect.bisect_left(feature_numbers, n)
+        return feature_numbers[min(ii, len(feature_numbers) - 1)]
+
+    def _on_selector(event):
+        # move a number not in the table to the next available feature (previous one on a step down), then sync slider
+        n = _available_feature_number(event.new, event.old)
+        if n != event.new:
+            feature_selector.value = n
+        elif feature_num_slider.value != n:
+            feature_num_slider.value = n
+
+    def _on_slider(event):
+        if feature_selector.value != event.new:
+            feature_selector.value = event.new
+
+    feature_selector.param.watch(_on_selector, 'value')
+    feature_num_slider.param.watch(_on_slider, 'value')
 
     def feature_info_by_feature_id(feature_number):
         try:
@@ -317,10 +362,11 @@ def dashboard(project_desc, cmap, epd, Ftable, sample_limit=20):
 
     def cmapplot_track_by_feature_id(feature_number):
         id_number = 'F' + str(feature_number)
-        _p = { 'height': 1000000, 'rtime_left_base': 0, 'rtime_right_base': 10, }
-        p = peakDict.get(id_number, _p)
+        if id_number not in peakDict:
+            return hv.Curve([]).opts(title="Feature not found - %s." %id_number, height=400)
+        p = peakDict[id_number]
         height = max(1.3 * p['height'], 1000000)
-        track_id_number = peakDict[id_number]['parent_masstrack_id']
+        track_id_number = p['parent_masstrack_id']
         peak_Area = hv.Area(
             ([p['rtime_left_base'], p['rtime_right_base']], [height, height])).opts(
                 color='red', alpha=0.1,
@@ -329,10 +375,10 @@ def dashboard(project_desc, cmap, epd, Ftable, sample_limit=20):
 
 
     display_feature_info = pn.bind(
-        feature_info_by_feature_id, feature_number=feature_selector,
+        feature_info_by_feature_id, feature_number=feature_num_slider,
         )
     plot_masstracks_fid = pn.bind(
-        cmapplot_track_by_feature_id, feature_number=feature_selector,
+        cmapplot_track_by_feature_id, feature_number=feature_num_slider,
         )
 
     feature_browser = pn.Column(
@@ -356,11 +402,8 @@ def dashboard(project_desc, cmap, epd, Ftable, sample_limit=20):
 
     def get_features_by_mz(mz):
         # return tid_number, list of dictionary of features associated with the mass track
-        tid_number = str(find_track_by_mz(cmap, rt_list, mz))
-        try:
-            return tid_number, [peakDict[F] for F in track2peaks[tid_number]]
-        except KeyError:
-            return tid_number, []
+        tid_number = int(find_track_by_mz(cmap, rt_list, mz))
+        return tid_number, [peakDict[F] for F in track2peaks.get(tid_number, [])]
 
     def track_info_by_mz(mz):
         tid_number, list_features = get_features_by_mz(mz)
@@ -397,7 +440,7 @@ def dashboard(project_desc, cmap, epd, Ftable, sample_limit=20):
         )
 
     #
-    # frag spectrum browser
+    # Co-elution features
     #
 
     min_rt, max_rt = Ftable['rtime'].min(), Ftable['rtime'].max()
@@ -427,14 +470,12 @@ def dashboard(project_desc, cmap, epd, Ftable, sample_limit=20):
                 xlim=(min_mz * .95, max_mz * 1.05)
             )
         except:
-            return hv.Overlay([]).opts(title="No features found in this range.")
+            return hv.Curve([]).opts(title="No features found in this range.", height=400)
 
     display_frag = pn.bind(features_by_rt_with_lines, rtime=rt_slider, rtime_tol=rt_range_slider)    # Create the RT browser interface
     frag_browser = pn.Column(
-        "## Fragment Spectrum Browser",
-        pn.pane.HTML('''<p> Interpretation of fragmentation spectra depends on experimental conditions </p>
-                    <p> For soft ionization (e.g., ESI), these spectra represent adducts, in-source fragments, and isotopologues </p>
-                    <p> For hard ionization (e.g., EI/MALDI), these spectra also include fragmentation products
+        "## Co-elution features",
+        pn.pane.HTML('''<p> Useful for interpretation of isotopologues, adducts and fragments etc. </p>
                     '''),
         pn.Row(rt_slider, rt_range_slider),
         display_frag,
@@ -445,13 +486,8 @@ def dashboard(project_desc, cmap, epd, Ftable, sample_limit=20):
     Feel free to contribute, use GitHub Issues to report bugs and request features.</p>
     ''')
 
-    project_params = pd.DataFrame([{"Parameter": k, "Value": v} for k, v in project_desc.items()], index=None)
-    project_params = pn.Column(
-        "## Project Parameters",
-        pn.pane.DataFrame(project_params),
-        height=300,  # Set a fixed height
-        styles={'overflow-y': 'auto'}  # Enable vertical scrolling
-    )
+    params_text = '; '.join(f"{k}: {v}" for k, v in project_desc.items())
+    project_params = pn.pane.HTML("<h2>Project Parameters</h2><p>" + html.escape(params_text) + "</p>")
 
     template = pn.template.FastListTemplate(
         site = "Asari Dashboard",
@@ -460,13 +496,21 @@ def dashboard(project_desc, cmap, epd, Ftable, sample_limit=20):
                 summary,
                 feature_browser,
                 mz_browser,
-                disclaimer,
                 frag_browser,
                 project_params,
+                disclaimer,
                 ],
         )
 
-    pn.serve(template)
+    return template
+
+
+def dashboard(project_desc, cmap, Ftable, table_name='full'):
+    """
+    Launch the panel based Dashboard in web browser.
+    """
+    print("//*Asari dashboard*//   Press Control-C to exit.")
+    pn.serve(build_dashboard(project_desc, cmap, Ftable, table_name))
 
 
 #
@@ -479,5 +523,5 @@ if __name__ == '__main__':
     import sys
     datadir = sys.argv[1]
 
-    project_desc, cmap, epd, Ftable = read_project(datadir)
-    dashboard(project_desc, cmap, epd, Ftable)
+    project_desc, cmap, Ftable, Ptable = read_project(datadir)
+    dashboard(project_desc, cmap, Ftable)
