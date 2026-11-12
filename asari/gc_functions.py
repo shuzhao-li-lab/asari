@@ -1,20 +1,48 @@
+'''
+GC-MS feature processing is basically the same as LC-MS processing. 
+Retention index calculation can be either in the `process` step or in `deconvolute` or `annotate`, 
+based on a Kovats RI table to derive a regression model. 
+
+Default GC-MS annotation is using a reverse search against a high-resoluiton database, which requires no deconvolution. 
+
+Forward approaches are included too, first `deconvolute` then `annotate`.
+
+Example use:
+
+asari process -i mydir/projectx_dir -o test/ --workflow GC --kovats KovatsIndex_alkanestandards_cuimc.tsv
+
+asari annotate -i project_311234834/export/full_Feature_table.tsv -o project_311234834 \
+    --workflow GC  --search_algorithm reverse
+    --db GCHRMS_Database_251217.msp
+
+asari deconvolute -i project_311234834/export/full_Feature_table.tsv -o project_311234834 --deconvolution_algorithm hcl --workflow GC
+
+asari annotate -i project_311234834/v19h_denovo_pseudospectra.json -o project_311234834 \
+    --workflow GC  --search_algorithm forward --highres False
+    --db lowres_database.msp
+'''
+
 import json
+import re
 from typing import NamedTuple
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
-from scipy.cluster.hierarchy import linkage, fcluster
-from scipy.spatial.distance import pdist
+
 from scipy import sparse
 
 import ms_entropy as ME
 from jms.search import build_centurion_tree
 from .tools.cosine import cosine_similarity
-from .tools.msp_parser import MSP_dict, parse_msp_to_listdict, msp_standarize
+from .tools.msp_parser import MSP_dict, parse_msp_to_listdict, msp_standarize, parse_ri_value
 
 # from .mass_functions import complete_mass_paired_mapping, all_mass_paired_mapping
 # from .tools import match_features 
+
+# ---------------------------------------------------------------------------
+# Data structures and I/O
+# ---------------------------------------------------------------------------
 
 # Nonunique features are allowed. I.e. a feature can belong to multiple PseudoSpectrum. 
 class PseudoSpectrum(NamedTuple):
@@ -22,12 +50,13 @@ class PseudoSpectrum(NamedTuple):
     """
     id: str
     rtime: float
-    RI: float       # rentention_index
+    RI: float       # rentention_index; None if no ri_model
     rounded_mzs: list
     num_features: int
     members: list
     peaks: np.array
     annotation: str
+
 
 class GC_lib_entry(NamedTuple):
     """Reformatted library entry per compound, for standardized and fast access. 
@@ -53,7 +82,7 @@ def load_gcms_dbfile(infile):
         return None
 
 def reformat_gcms_lib(list_cpd_standards, 
-                      peaks_key='peaks', rt_key='RETENTIONTIME', 
+                      peaks_key='peaks', ri_keys=('RI', 'RETENTIONTIME'), 
                       inchi_key = 'InChIKey', name_key='Name',
                       mw_key = 'ExactMass', formula_key = 'Formula',
                       filter_factor=None,
@@ -62,11 +91,17 @@ def reformat_gcms_lib(list_cpd_standards,
                       ):
     '''list_cpd_standards is list of dicts, e.g. result from parse_msp_to_listdict. 
     MSP files are often not well standardized. Attention is required in porting, but this is not a frequenct task.
+    ri_keys : fields to read retention index from, first non-empty one wins.
+        'RI' is standardized by msp_parser from variants (Retention_index, Kovats, ...);
+        'RETENTIONTIME' is how some GC libraries (e.g. gcms_corelib) store RI.
+    Entries without RI are skipped.
     '''
     list_lib_entries = []
     counter = 0
     for entry in list_cpd_standards:
-        if peaks_key in entry and rt_key in entry and entry[rt_key]:
+        ri = next((parse_ri_value(entry[k]) for k in ri_keys
+                   if entry.get(k) not in (None, '') and parse_ri_value(entry[k]) is not None), None)
+        if peaks_key in entry and ri is not None:
             _peaks = entry[peaks_key]
             if mz_range:    # must do before designating base peak
                 _peaks = [x for x in _peaks if mz_range[0] < x[0] < mz_range[1]]
@@ -79,8 +114,8 @@ def reformat_gcms_lib(list_cpd_standards,
                     'cpd' + f"{counter:08}",
                     entry.get(inchi_key, ''),
                     entry.get(name_key, ''),
-                    float(entry[rt_key]),
-                    float(entry[mw_key]),
+                    ri,
+                    float(entry[mw_key]) if entry.get(mw_key) not in (None, '') else None,
                     entry.get(formula_key, ''),
                     [round(x[0]) for x in _peaks],
                     np.array(_peaks),
@@ -120,7 +155,8 @@ def json_pseudospectra_to_msp(records, outfile='test.msp'):
             
         lines.append(f"ID: {entry.get('id', '')}")
         lines.append(f"Name: {entry.get('name', '')}")
-        lines.append(f"RETENTIONTIME: {entry.get('RI', '')}")
+        ri = entry.get('RI')
+        lines.append(f"RETENTIONTIME: {'' if ri is None else ri}")
         lines.append(f"InChIKey: {entry.get('inchikey', '')}")
         features = entry.get('features', []) or entry.get('members', [])
         if features:
@@ -208,7 +244,7 @@ def port_pseudospectrum_to_json(PS, normalize_intensity=False):
     }
 
 def serialize_annotated_empCpds(list_empCpds):
-    '''list_empCpds from curate_batch_lib_search_result
+    '''list_empCpds from curate_batch_lib_reverse_search_result or curate_batch_lib_forward_search_result
     '''
     for x in list_empCpds:
         x['peaks_in_lib'] = x['peaks_in_lib'].tolist()
@@ -245,25 +281,6 @@ def filter_peaks_by_penalized_distance(
                                 ) >= feature_distance_filter
     ]
 
-
-#
-# Multiple methods of constructing pseudospectra 
-#
-def find_all_matches_centurion_indexed_list(query_mz, mz_centurion_tree, limit_ppm=5):
-    '''
-    Return matched peaks in mz_centurion_tree.
-    '''
-    q = int(query_mz * 100)
-    mz_tol = query_mz * limit_ppm * 0.000001
-    results = []
-    for ii in (q-1, q, q+1):
-        L = mz_centurion_tree.get(ii, [])
-        for peak in L:
-            if abs(peak['mz']-query_mz) < mz_tol:
-                results.append(peak)
-                
-    return results
-
 def get_matched_features_per_cpd(cpd, mz_centurion_tree,
                     mz_tolerance_da, ri_tolerance
                     ):
@@ -290,109 +307,6 @@ def distill_correlated_features(matched_feature_ids, feature_dataframe, corr_cut
     quant_feature = features_intensity_corr.sum(axis=0).idxmax()
     selected = [feat for feat in matched_feature_ids if features_intensity_corr.loc[quant_feature, feat] > corr_cutoff]
     return quant_feature, selected
-
-def get_seeded_pseudospectrum(
-    seed_tag, 
-    ref_ri,
-    seed_feature, 
-    list_features, 
-    feature_dataframe,
-    min_ri_delta=1,
-    max_ri_delta=100, 
-    low_peak_filter_factor=1000,
-    feature_distance_filter=None    # 0.5 is a good default when in use
-    ):
-    '''
-    Use base peaks in lib entries to initiate pseudospectra construction.   
-    seed_tag : to track linked information, e.g. annotation, cpd library entry. 
-    seed_feature : seed, e.g. the feature matched a lib query or one chosen from a group by top intensity.
-    list_features : all features to work with here, in standard JSON notion.
-    feature_dataframe : pandas dataframe of sample intensities, indexed by feature ID.
-    
-    ref_ri : the RI from lib entry
-    
-    if low_peak_filter_factor: remove features smaller than base peak intensity / filter_factor. 
-                    E.g. features have to be above 1% of base peak intensity if filter_factor=100.
-    if feature_distance_filter: filter features by penalized distance function. 
-    
-    '''
-    selected_features = [f for f in list_features if abs(f['RI'] - ref_ri) < max_ri_delta]
-    
-    if low_peak_filter_factor:
-        selected_features = filter_features_by_low_intensity_factor( 
-            selected_features, seed_feature['peak_area'], low_peak_filter_factor
-            )  
-    if feature_distance_filter:
-        selected_features = filter_peaks_by_penalized_distance(
-            selected_features, seed_feature, feature_dataframe, min_ri_delta, max_ri_delta, feature_distance_filter
-        )
-    num_features = len(selected_features)
-    if num_features > 1:
-        return PseudoSpectrum(
-                    seed_feature['id_number'], 
-                    seed_feature['rtime'],
-                    ref_ri,
-                    [round(x['mz']) for x in selected_features],
-                    num_features,
-                    [x['id'] for x in selected_features],           # members
-                    np.array([(x['mz'], x['peak_area']) for x in selected_features]), 
-                    seed_tag
-                )
-    else:
-        return None
-
-def get_spaced_top_features(list_features_sorted, ri_gap=100):
-    '''
-    Batch mode to get top N features that are not overlapping in RI. 
-    The pseudospectra built on the batch then don't have overlapping features (small chance of exception). 
-    All core features can be collected before next iteration.
-    '''
-    selected = []
-    for ii in range(1000, 4500, ri_gap): 
-        # get first feature that is btw ii and gap
-        selected.append(next((f for f in list_features_sorted if ii <= f['RI'] < ii+ri_gap), None))
-    return [f for f in selected if f]
-
-def iterative_build_pseudospectra_by_penalizeddistance(
-    list_features_sorted,
-    feature_dataframe,
-    init_core_features = {},
-    min_ri_delta=1,
-    max_ri_delta=100, 
-    low_peak_filter_factor=1000,
-    feature_distance_filter=0.5,
-    ri_gap=100,
-    max_core_features = 20000,
-    ):
-    '''
-    Build pseudospectra from list_features_sorted iteratively until reaching max_core_features 
-    (no more than 90% of all features)
-    
-    returns list_pseudospectra, core_features
-    '''
-    core_features = init_core_features
-    list_pseudospectra = []
-    max_core_features = min(max_core_features, 0.9*len(list_features_sorted))
-    while len(core_features) <= max_core_features:
-        list_features = [f for f in list_features_sorted if f['id'] not in core_features]
-        _tmp = []
-        for seed_feature in get_spaced_top_features(list_features, ri_gap):
-            new = get_seeded_pseudospectrum('',
-                                            seed_feature['RI'],
-                                            seed_feature, 
-                                            list_features, 
-                                            feature_dataframe,
-                                            min_ri_delta=min_ri_delta,
-                                            max_ri_delta=max_ri_delta, 
-                                            low_peak_filter_factor=low_peak_filter_factor,
-                                            feature_distance_filter=feature_distance_filter
-            )
-            if new:
-                list_pseudospectra.append(new)
-                _tmp += new.members
-        core_features.union(set(_tmp))
-        
-    return list_pseudospectra, core_features
 
 def calculate_molecular_ion(exact_mass, mz_shift=-0.000549):
     '''Assuming M[+] as molecular ion in EI GC-MS.
@@ -423,6 +337,131 @@ def has_molecular_ion(exact_mass, _peaks, mz_tolerance_da=0.005):
             return False
     else:
         return 'NA'
+
+
+
+def unit_mz(mz):
+    '''Plain rounding (half up) to unit m/z, not Python's banker's rounding.'''
+    return int(np.floor(mz + 0.5))
+
+
+def rtime_to_ri(rtime, ri_model):
+    '''rtime in seconds -> RI by interpolation on ri_model; None if no model.'''
+    if ri_model is None:
+        return None
+    return float(np.interp(rtime / 60, ri_model[:, 0], ri_model[:, 1]))
+
+def append_kovats_index(list_features, ri_model):
+    '''Add RI to each feature in list_features (asari rtime in seconds).'''
+    for feature in list_features:
+        feature['RI'] = rtime_to_ri(feature['rtime'], ri_model)
+    return list_features
+
+def check_RI_presence(infile):
+    '''
+    Check if a retention index column is present in an asari feature table (tsv).
+    Matches 'RI' as a word token (e.g. 'RI', 'ri', 'R.I.', 'RI_kovats', 'kovats RI')
+    or 'retention index' / 'kovats' in any case or separator style.
+    Returns the first matching column name, or None if not found.
+    '''
+    header = pd.read_csv(infile, sep='\t', nrows=0).columns
+    for col in header:
+        name = str(col).strip().lower()
+        tokens = re.split(r'[^a-z0-9]+', name)
+        compact = ''.join(tokens)
+        if 'ri' in tokens or compact == 'ri' or 'retentionindex' in compact or 'kovats' in compact:
+            return col
+    return None
+
+
+def read_feature_table_has_RI(infile, data_start_col=12):
+    '''
+    Read an asari feature table (tsv) that already has a retention index column
+    (detected by check_RI_presence), e.g. one column more than full_Feature_table.tsv.
+    Returns list_features (sorted by peak_area, descending; with 'RI' from the table)
+    and feature_dataframe (sample intensities, indexed by feature ID).
+    Missing RI values are set to None.
+    '''
+    df = pd.read_csv(infile, sep='\t', index_col=0)
+    ri_col = check_RI_presence(infile)
+    if ri_col is None:
+        raise ValueError(f"No retention index column found in {infile}.")
+    meta = df.iloc[:, :data_start_col - 1]
+    if ri_col not in meta.columns:
+        raise ValueError(f"RI column '{ri_col}' is not within the first {data_start_col} columns; check data_start_col.")
+    list_features = []
+    for fid, row in meta.iterrows():
+        ri = row[ri_col]
+        list_features.append({
+            'id_number': fid,
+            'id': fid,
+            'mz': float(row['mz']),
+            'rtime': float(row['rtime']),
+            'apex': float(row['rtime']),
+            'rtime_left_base': float(row['rtime_left_base']),
+            'rtime_right_base': float(row['rtime_right_base']),
+            'parent_masstrack_id': int(row['parent_masstrack_id']),
+            'peak_area': float(row['peak_area']),
+            'cSelectivity': float(row['cSelectivity']),
+            'goodness_fitting': float(row['goodness_fitting']),
+            'snr': float(row['snr']),
+            'detection_counts': int(row['detection_counts']),
+            'RI': None if pd.isna(ri) else float(ri),
+        })
+    list_features.sort(key=lambda x: x['peak_area'], reverse=True)
+
+    feature_dataframe = df.iloc[:, data_start_col - 1:]
+
+    return list_features, feature_dataframe
+
+
+def read_feature_table_and_kovats(infile, KovatsIndex_file=None, frac=0.3, data_start_col=11):
+    '''
+    Read an asari full_Feature_table.tsv.
+    Returns list_features (sorted by peak_area, descending; with 'RI' if KovatsIndex_file),
+    feature_dataframe (sample intensities, indexed by feature ID) and ri_model (or None).
+    '''
+    df = pd.read_csv(infile, sep='\t', index_col=0)
+    ri_model = read_fit_KovatsIndex_rtime(KovatsIndex_file, frac=frac) if KovatsIndex_file else None
+    meta = df.iloc[:, :data_start_col - 1]
+    list_features = []
+    for fid, row in zip(meta.index, meta.itertuples(index=False)):
+        list_features.append({
+            'id_number': fid,
+            'id': fid,
+            'mz': float(row.mz),
+            'rtime': float(row.rtime),
+            'apex': float(row.rtime),
+            'rtime_left_base': float(row.rtime_left_base),
+            'rtime_right_base': float(row.rtime_right_base),
+            'parent_masstrack_id': int(row.parent_masstrack_id),
+            'peak_area': float(row.peak_area),
+            'cSelectivity': float(row.cSelectivity),
+            'goodness_fitting': float(row.goodness_fitting),
+            'snr': float(row.snr),
+            'detection_counts': int(row.detection_counts),
+        })
+    list_features = append_kovats_index(list_features, ri_model)
+    list_features.sort(key=lambda x: x['peak_area'], reverse=True)
+
+    feature_dataframe = df.iloc[:, data_start_col - 1:]
+
+    return list_features, feature_dataframe, ri_model
+
+
+
+def write_list_pseudospectra(
+    list_pseudospectra, 
+    json_output_file    
+    ):
+    list_pseudospectra = [port_pseudospectrum_to_json(x, normalize_intensity=True) for x in list_pseudospectra]
+    with open(json_output_file, 'w', encoding='utf-8') as O:
+        json.dump(list_pseudospectra, O, indent=2, ensure_ascii=False)
+    json_pseudospectra_to_msp(list_pseudospectra, json_output_file.replace('.json', '.msp'))
+    print(f"Exported {len(list_pseudospectra)} de novo pseudospectra to JSON and MSP formats.\n")
+
+
+
 
 #
 # Workflows 
@@ -487,7 +526,7 @@ def batch_lib_reverse_search_score(
     return Results
 
 
-def curate_batch_lib_search_result(
+def curate_batch_lib_reverse_search_result(
     matched_results, 
     mz_tolerance_da=0.005, 
     score_cutoff_cosine=0.5, 
@@ -552,202 +591,124 @@ def curate_batch_lib_search_result(
     
     return list_empCpds, feature_anno_list
 
+def _lib_entry_view(lib_entry):
+    '''Uniform access to a library entry given as GC_lib_entry or dict (e.g. parsed MSP).
+    Returns id, name, inchikey, exact_mass, peaks (np.array), base_peak_mz.'''
+    if isinstance(lib_entry, dict):
+        peaks = np.asarray(lib_entry.get('peaks', []), dtype=float).reshape(-1, 2)
+        base = lib_entry.get('base_peak')
+        exact_mass = lib_entry.get('exact_mass', lib_entry.get('ExactMass'))
+        return {
+            'id': lib_entry.get('id', lib_entry.get('DB#')),
+            'name': lib_entry.get('name', lib_entry.get('Name')),
+            'inchikey': lib_entry.get('inchikey', lib_entry.get('InChIKey')),
+            'exact_mass': float(exact_mass) if exact_mass not in (None, '') else None,
+            'peaks': peaks,
+            'base_peak_mz': base[0] if base else (peaks[peaks[:, 1].argmax(), 0] if len(peaks) else None),
+        }
+    return {
+        'id': lib_entry.id, 'name': lib_entry.name, 'inchikey': lib_entry.inchikey,
+        'exact_mass': lib_entry.exact_mass, 'peaks': np.asarray(lib_entry.peaks, dtype=float),
+        'base_peak_mz': lib_entry.base_peak[0] if lib_entry.base_peak else None,
+    }
 
-# write out annotated results
-def write_tsv_feature_anno(feature_anno_list, dict_features, dict_lib_entries, outfile):
-    '''
-    The empCpd output is more concise (annotation by empCpd or cluster). 
-    This exports a table per annotated feature.
-    '''
-    header = [
-        'feature', 'mz', 'rtime', 'RI', 
-        'empCpd', 'quant_ion', 'score_cosine', 'score_entropy', 'name', 'inchikey',
-            #'correlation', 'is_core', 
-        'lib_RI', 'delta_RI', 'peak_area', 'cSelectivity', 'peak_shape', 'snr', 'detection_counts'
-    ]
-    s = '\t'.join(header) + '\n'
-    for feat in feature_anno_list:
-        k = feat['feature']
-        FF = dict_features[k]
-        score_cosine = round(feat['cosine_score'], 3)
-        score_entropy = round(feat['entropy_score'], 3)
-        lib_RI = dict_lib_entries[feat['lib_entry_id']].RI
-        s += '\t'.join([str(x) for x in [
-            k, dict_features[k]['mz'], dict_features[k]['rtime'], round(dict_features[k]['RI'], 3), 
-            feat['empCpd'], feat['quant_ion'], score_cosine, score_entropy, feat['name'], feat['inchikey'],
-            # round(feat['correlation'], 3), feat['is_core'], 
-            round(lib_RI, 3), round(FF['RI']-lib_RI, 3),
-            FF['peak_area'], FF['cSelectivity'], FF['goodness_fitting'], FF['snr'], FF['detection_counts'] 
-        ]]) + '\n'
-    with open(outfile, 'w') as O:
-        O.write(s)
-    
-def write_tsv_empCpd_anno(list_empCpds, dict_features, dict_lib_entries, outfile):
-    '''Table output for list of empCpds. 
-    '''
-    header = [
-        'empCpd', 'name', 'inchikey', 'formula', 'lib_exact_mass', 'score_cosine', 'score_entropy', 
-        'num_matched_peaks', 
-        'quant_ion', 'mz_quant_ion', 'rtime_quant_ion(min)', 'RI_quant_ion', 'lib_RI', 'delta_RI', 
-        'has_basepeak', 'has_molecular_ion', 'presence_ratio'
-    ]
-    s = '\t'.join(header) + '\n'
-    for epd in list_empCpds:
-        _formula = dict_lib_entries[epd['lib_entry_id']].compound_formula
-        lib_exact_mass = dict_lib_entries[epd['lib_entry_id']].exact_mass
-        lib_RI = dict_lib_entries[epd['lib_entry_id']].RI
-        num_matched_peaks = len(epd['peaks_as_features'])
-        quant_ion = epd['quant_ion']
-        score_cosine = round(epd['cosine_score'], 3)
-        score_entropy = round(epd['entropy_score'], 3)
-        s += '\t'.join([str(x) for x in [
-            epd['id'], epd['name'], epd['inchikey'], _formula, lib_exact_mass, score_cosine, score_entropy,
-            num_matched_peaks, 
-            quant_ion, dict_features[quant_ion]['mz'], 
-            round(dict_features[quant_ion]['rtime']/60, 2), 
-            int(epd['RI']), int(lib_RI), int(epd['RI']-lib_RI), 
-            epd['has_basepeak'], epd['has_molecularion'], 
-            round(num_matched_peaks/dict_lib_entries[epd['lib_entry_id']].peaks.shape[0], 2)
-        ]]) + '\n' 
-    with open(outfile, 'w') as O:
-        O.write(s)
-    
-def get_clusters_by_ri_hcl(
-    feature_dataframe_sorted, 
-    dict_features,
-    ri_penalty_function=ri_penalty_function, 
-    min_delta=1, 
-    max_delta=100, 
-    hcl_distance_cut = 1,
-    limit_fearture_num=None
+
+def curate_batch_lib_forward_search_result(
+    matched_results, 
+    mz_tolerance_da=0.005, 
+    score_cutoff_cosine=0.5, 
+    score_cutoff_entropy=0.4,
+    lowres_mz_tolerance_da=0.5,
     ):
     '''
-    Using RI (retention index) coupled hierarchical clustering (hcl) to find feature clusters.
-    
-    feature_dataframe_sorted : dataframe from feature table, indexed on feaature IDs, 
-                    sample intensity starts in first col.
-                    Sorted by combined peak area, descending order.
-    dict_features : dictionay of features, feature IDs as keys.
-    limit_fearture_num : if specified, to use a subset of top-intensity features, 
-                    as the low-intensity features are less relevant.
-    
+    Filter and organize forward search results for export, same output format as
+    curate_batch_lib_reverse_search_result.
+
+    matched_results : list of dicts from batch_forward_unit_search_score (low res)
+        or batch_forward_hires_search_score (high res). Each has 'query_entry'
+        (a pseudospectrum in JSON format, with 'id', 'RI', 'members', 'peaks').
+        Low-res results have no 'entropy_score'; they pass on cosine_score only,
+        and base peak / molecular ion are checked with lowres_mz_tolerance_da.
+        High-res results pass if entropy_score >= score_cutoff_entropy
+        or cosine_score >= score_cutoff_cosine, as in the reverse search.
+
+    quant_ion : the member feature with the highest intensity in the pseudospectrum
+        (the base feature of deconvolution). 'sample' is None (not determined in forward search).
+
+    Data for mirror plot are in (peaks_as_features, peaks_in_lib).
+
+    return list_empCpds, feature_anno_list
     '''
-    if limit_fearture_num:
-        feature_dataframe_sorted = feature_dataframe_sorted.iloc[:limit_fearture_num, :]
-    # ri_penalties
-    ri_penalties = []
-    featunre_number = feature_dataframe_sorted.shape[0]
-    print(f"Working with {featunre_number} features.")
-    retention_index = [dict_features[x]['RI'] for x in feature_dataframe_sorted.index] 
-    for ii in range(featunre_number):
-        for jj in range(ii+1, featunre_number):
-            ri_penalties.append(abs(retention_index[ii] - retention_index[jj]))
-    ri_penalties = np.array(
-        [ri_penalty_function(x,  min_delta, max_delta) for x in ri_penalties]
-    )
-    # distance function
-    YM = pdist(feature_dataframe_sorted.values, 'correlation')
-    # filter correlation to accelerate? 
-    YM = 1 - ri_penalties * (1 - YM)
-    # linkage and cluster
-    ZM = linkage(YM, method='ward')
-    metClus = fcluster(ZM, hcl_distance_cut, criterion='distance')
-    # print(metClus[:3]). # which cluster the feature belongs to
-
-    number_features, number_clusters = len(metClus), len(set(list(metClus)))
-    print("number of features: ", number_features)
-    print("number of clusters: ", number_clusters)
-
-    # Compile clusters, members being feature IDs
-    metClusDict = {}
-    for ii in range(number_features):
-        if metClus[ii] in metClusDict:
-            metClusDict[ metClus[ii] ].append(feature_dataframe_sorted.index[ii])
+    ii = 0
+    list_empCpds = []
+    feature_anno_list = []
+    for MM in matched_results:
+        entropy_score = MM.get('entropy_score')
+        cosine_score = MM.get('cosine_score', 0.0)
+        highres = entropy_score is not None
+        if highres:
+            passed = entropy_score >= score_cutoff_entropy or cosine_score >= score_cutoff_cosine
+            tol = mz_tolerance_da
         else:
-            metClusDict[ metClus[ii] ] = [feature_dataframe_sorted.index[ii]]
+            passed = cosine_score >= score_cutoff_cosine
+            tol = lowres_mz_tolerance_da
+        if not passed:
+            continue
 
-    return metClus, metClusDict
-    
-def extend_cluster(fcluster, 
-                   featureDict,
-                   list_features, 
-                   feature_dataframe,
-                   ri_tolerance=50, 
-                   correlation_cut=0.7
-                   ):
-    '''
-    Extend a cluster of features by correlated features in RI window.
-    list_features : features excluding core features already accounted for a cluster
-    correlation_cut : filter feature pairs by correlation coefficient
-    '''
-    cluster_features = [featureDict[f] for f in fcluster]
-    cluster_features.sort(key=lambda  x: x['peak_area'], reverse=True)
-    seed_feature = cluster_features[0]
-    selected_features = [f for f in list_features if abs(f['RI'] - seed_feature['RI']) < ri_tolerance]
-    selected_features = [f['id'] for f in selected_features 
-                         if feature_dataframe.loc[f['id'], :].corr(feature_dataframe.loc[seed_feature['id'], :]) >= correlation_cut
-                         ]
-    return (fcluster + selected_features, seed_feature)
+        query = MM['query_entry']
+        lib = _lib_entry_view(MM['lib_entry'])
+        peaks_as_features = np.asarray(query.get('peaks', []), dtype=float).reshape(-1, 2)
+        matched_features = list(query.get('members') or [])
+        if matched_features and len(matched_features) == len(peaks_as_features):
+            quant_feature = matched_features[int(peaks_as_features[:, 1].argmax())]
+        else:
+            quant_feature = query.get('id')
+        if len(peaks_as_features):
+            _has_basepeak = has_basepeak(lib['base_peak_mz'], peaks_as_features, tol) \
+                if lib['base_peak_mz'] is not None else 'NA'
+            _has_molecular_ion = has_molecular_ion(lib['exact_mass'], peaks_as_features, tol)
+        else:
+            _has_basepeak, _has_molecular_ion = False, False
 
-def format_fcluster_to_pseudospectrum(selected_features, seed_feature):
-    return PseudoSpectrum(
-                    seed_feature['id_number'], 
-                    seed_feature['rtime'],
-                    seed_feature['RI'],
-                    [round(x['mz']) for x in selected_features],
-                    len(selected_features),
-                    [x['id'] for x in selected_features],           # members
-                    np.array([(x['mz'], x['peak_area']) for x in selected_features]), 
-                    ''
-                )
+        ii += 1
+        epd_id = 'empCpd_' + "{:04d}".format(ii)
+        list_empCpds.append({
+            'id': epd_id,
+            'pseudospectrum_id': query.get('id'),
+            'rtime': query.get('rtime'),
+            'RI': query.get('RI'),          # use expt data, not lib data
+            'quant_ion_mz': float(peaks_as_features[peaks_as_features[:, 1].argmax(), 0]) if len(peaks_as_features) else None,
+            'entropy_score': entropy_score,
+            'cosine_score': cosine_score,
+            'num_matched_peaks': MM.get('num_matched_peaks'),
+            'lib_entry_id': lib['id'],
+            'name': lib['name'],
+            'inchikey': lib['inchikey'],
+            'features': matched_features,
+            'quant_ion': quant_feature,
+            'sample': None,
+            'peaks_as_features': peaks_as_features,
+            'peaks_in_lib': lib['peaks'],
+            'has_basepeak': _has_basepeak,
+            'has_molecularion': _has_molecular_ion,
+        })
+        for feature in matched_features:
+            feature_anno_list.append({
+                'feature': feature,
+                'empCpd': epd_id,
+                'quant_ion': quant_feature,
+                'entropy_score': entropy_score,
+                'cosine_score': cosine_score,
+                'lib_entry_id': lib['id'],
+                'name': lib['name'],
+                'inchikey': lib['inchikey'],
+            })
 
-def iterative_build_pseudospectra_by_hcl(
-    list_features_sorted,
-    feature_dataframe,
-    init_core_features = set(),
-    step_size = 2000,   # batch size for HCL. Slow if batch too big. 
-    hcl_distance_cut = 1, 
-    ri_tolerance=50,
-    correlation_cut=0.7,
-    max_core_features = 20000,
-    ):
-    '''
-    Build seudospectra from list_features_sorted iteratively until reaching max_core_features 
-    (no more than 90% of all features)
-    
-    hcl_distance_cut : parameter to cut linkage tree in HCL. 
-        Smaller values give tighter clusters, which are desired since they are extended after this step.
-    returns list_pseudospectra, core_features
-    '''
-    core_features = init_core_features
-    list_pseudospectra = []
-    max_core_features = min(max_core_features, 0.9*len(list_features_sorted))  # safeguard
-    featureDict = {x['id']: x for x in list_features_sorted}
-    counter = 0
-    while len(core_features) <= max_core_features:
-        counter += 1
-        remaining_features = [f for f in list_features_sorted if f['id'] not in core_features]
-        print(f"Iteration {counter} of building pseudospectra from {len(remaining_features)} remaining features.")
-        accounted_features = []
-        _, metClusDict = get_clusters_by_ri_hcl(
-            feature_dataframe.loc[[f['id'] for f in remaining_features], :], 
-            featureDict,
-            hcl_distance_cut = hcl_distance_cut,
-            limit_fearture_num = step_size
-        )
-        new_clusters = [
-            extend_cluster(clu, featureDict, remaining_features[step_size:],
-                           feature_dataframe, ri_tolerance=ri_tolerance, correlation_cut=correlation_cut)
-            for clu in metClusDict.values() if len(clu) > 1
-        ]
-        list_pseudospectra += [format_fcluster_to_pseudospectrum(
-            [featureDict[f] for f in x[0]], x[1]) for x in new_clusters]
-        for x in new_clusters: 
-            accounted_features += x[0]
-        core_features = core_features.union(set(accounted_features))
-        print(f"Core features collected: {len(core_features)}.")
-        
-    return list_pseudospectra, core_features
+    return list_empCpds, feature_anno_list
+
+
+
+
 
 #
 # Low resolution functions
@@ -780,7 +741,7 @@ def convert_unit_mz(list_spectra):
     Convert spectra to unit m/z. Exact m/z is converted to unit mass by plain rounding.
 
     Applies to both query spectra and library spectra.
-    Input: list of spectra, each a dict with 'peaks' or a list of [mz, intensity].
+    Input: list of spectra, each a dict with 'peaks', a GC_lib_entry, or a list of [mz, intensity].
     Returns a new list of dicts (input is not modified): the original fields plus
         'unit_mz': sorted unique int32 array of nominal masses,
         'unit_intensity': float64 array, summed per nominal mass and L2-normalized,
@@ -791,6 +752,9 @@ def convert_unit_mz(list_spectra):
         if isinstance(spec, dict):
             new = dict(spec)
             peaks = spec.get('peaks', [])
+        elif hasattr(spec, '_asdict'):          # GC_lib_entry or other NamedTuple
+            new = spec._asdict()
+            peaks = new.get('peaks', [])
         else:
             new, peaks = {}, spec
         new['unit_mz'], new['unit_intensity'] = _to_unit(peaks)
@@ -877,7 +841,7 @@ def batch_forward_unit_search_score(
     level and up to top_n candidates in 'candidates'.
     '''
     if query_list and 'unit_mz' not in query_list[0]:
-        query_list = convert_unit_mz(query_list)
+        query_list = convert_unit_mz(query_list) 
     if list_cpds and 'unit_mz' not in list_cpds[0]:
         list_cpds = convert_unit_mz(list_cpds)
     if not query_list or not list_cpds:
@@ -927,7 +891,7 @@ def batch_forward_unit_search_score(
             candidates = [{
                 'lib_index': int(j),
                 'lib_entry': list_cpds[j],
-                'lib_name': list_cpds[j].get('Name'),
+                'lib_name': _spec_field(list_cpds[j], 'Name'),
                 'lib_RI': list_cpds[j].get('RI'),
                 'cosine_score': float(min(row[j], 1.0)),
                 'num_matched_peaks': int(matched[i, j]),
@@ -935,10 +899,122 @@ def batch_forward_unit_search_score(
             top = candidates[0]
             Results.append({
                 'query_id': query.get('id'),
+                'query_entry': query,
                 'query_RI': query.get('RI'),
                 'lib_entry': top['lib_entry'],
                 'lib_name': top['lib_name'],
                 'lib_RI': top['lib_RI'],
+                'cosine_score': top['cosine_score'],
+                'num_matched_peaks': top['num_matched_peaks'],
+                'candidates': candidates,
+            })
+    return Results
+
+
+def _spec_field(spec, key):
+    '''Read a field from a spectrum given as dict or GC_lib_entry (NamedTuple).'''
+    if isinstance(spec, dict):
+        if key == 'Name':
+            return spec.get('Name', spec.get('name'))
+        return spec.get(key)
+    return getattr(spec, {'Name': 'name'}.get(key, key), None)
+
+
+def _spec_ri_array(specs):
+    ri = (_spec_field(s, 'RI') for s in specs)
+    return np.array([np.nan if (x is None or x == '') else float(x) for x in ri], dtype=float)
+
+
+def batch_forward_hires_search_score(
+        query_list,
+        list_cpds,  # library
+        mz_tolerance_da=0.005,
+        ri_tolerance=30,
+        include_missing_ri=True,
+        min_matched_peaks=3,
+        top_n=1,
+        chunk_size=500,
+        noise_threshold=0.01,
+        n_threads=1,
+    ):
+    '''
+    Match high-resolution EI spectra between query list (e.g. pseudospectra) and
+    a library of known compounds. High-res counterpart of batch_forward_unit_search_score.
+
+    Spectra are dicts with 'peaks' ([[mz, intensity], ...]) and optional 'RI',
+    or GC_lib_entry for the library.
+
+    Scoring uses ms2batch open search (no precursor in EI): entropy similarity over
+    peaks matched within mz_tolerance_da, computed in batch for each chunk of queries.
+    Candidates are filtered by RI window and min_matched_peaks, ranked by entropy score;
+    greedy cosine (tools.cosine.cosine_similarity) is then computed for the top_n kept.
+    - ri_tolerance=None disables the RI filter.
+    - include_missing_ri: entries without RI (library or query) are kept as candidates.
+    - mz_tolerance_da must be < 0.025 (half of ms2batch min_peak_distance 0.05).
+
+    Returns one dict per query that has a match, with the best match fields at top
+    level and up to top_n candidates in 'candidates'. Same keys as the unit version,
+    plus 'entropy_score'.
+    '''
+    from .ms2batch import SpectralIndex, search
+
+    if not query_list or not list_cpds:
+        return []
+    params = dict(noise_threshold=noise_threshold, precursor_removal_da=None)
+    lib_peaks = [np.asarray(_spec_field(s, 'peaks'), dtype=float).reshape(-1, 2) for s in list_cpds]
+    library = SpectralIndex.build([{'peaks': p} for p in lib_peaks],
+                                  fragment_index=True, keep_metadata=False, **params)
+    lib_ri = _spec_ri_array(list_cpds)
+    lib_ri_missing = np.isnan(lib_ri)
+
+    Results = []
+    for start in range(0, len(query_list), chunk_size):
+        chunk = query_list[start:start + chunk_size]
+        q_peaks = [np.asarray(_spec_field(s, 'peaks') or [], dtype=float).reshape(-1, 2) for s in chunk]
+        hits = search(library, [{'peaks': p} for p in q_peaks], method='open',
+                      ms2_tolerance=mz_tolerance_da, top_k=None, n_threads=n_threads)
+        qi, li, score, nm = hits.query_idx, hits.library_idx, hits.score, hits.n_matched
+
+        keep = nm >= min_matched_peaks
+        if ri_tolerance is not None:
+            q_ri = _spec_ri_array(chunk)
+            with np.errstate(invalid='ignore'):
+                ok = np.abs(q_ri[qi] - lib_ri[li]) <= ri_tolerance
+            if include_missing_ri:
+                ok |= lib_ri_missing[li] | np.isnan(q_ri[qi])
+            keep &= ok
+        qi, li, score, nm = qi[keep], li[keep], score[keep], nm[keep]
+        if qi.size == 0:
+            continue
+
+        # hits are grouped by query, best score first; take top_n per query
+        first = np.flatnonzero(np.r_[True, qi[1:] != qi[:-1]])
+        ends = np.r_[first[1:], qi.size]
+        for a, b in zip(first, ends):
+            i = int(qi[a])
+            query = chunk[i]
+            candidates = []
+            for k in range(a, min(b, a + top_n)):
+                j = int(li[k])
+                cos, _ = cosine_similarity(q_peaks[i], lib_peaks[j], mz_tolerance=mz_tolerance_da)
+                candidates.append({
+                    'lib_index': j,
+                    'lib_entry': list_cpds[j],
+                    'lib_name': _spec_field(list_cpds[j], 'Name'),
+                    'lib_RI': _spec_field(list_cpds[j], 'RI'),
+                    'entropy_score': float(min(score[k], 1.0)),
+                    'cosine_score': float(cos),
+                    'num_matched_peaks': int(nm[k]),
+                })
+            top = candidates[0]
+            Results.append({
+                'query_id': _spec_field(query, 'id'),
+                'query_entry': query,
+                'query_RI': _spec_field(query, 'RI'),
+                'lib_entry': top['lib_entry'],
+                'lib_name': top['lib_name'],
+                'lib_RI': top['lib_RI'],
+                'entropy_score': top['entropy_score'],
                 'cosine_score': top['cosine_score'],
                 'num_matched_peaks': top['num_matched_peaks'],
                 'candidates': candidates,

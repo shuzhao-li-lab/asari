@@ -11,13 +11,14 @@ from .workflow import (process_project, read_project_dir, read_project_file) # g
 from .default_parameters import PARAMETERS
 
 from .analyze import estimate_min_peak_height, analyze_single_sample
+from .deconvolute import deconvolute_project
 from .annotate import annotate_project
 from .join import join_tables
 from .utils import build_boolean_dict
 
 
 booleandict = build_boolean_dict()
-SUBCOMMANDS = ["analyze", "process", "annotate", "viz", "join", "list_workflows"]
+SUBCOMMANDS = ["analyze", "process", "deconvolute", "annotate", "viz", "join", "list_workflows"]
               # "xic", "extract", 
 
 def get_input_file_list(parameters):
@@ -35,6 +36,9 @@ def process(parameters):
         print("No valid mzML files are found :(")
     else:
         process_project(list_input_files, parameters)
+
+def deconvolute(parameters, args):
+    deconvolute_project(args.input, parameters=parameters)
 
 def analyze(parameters, args):
     analyze_single_sample(args.input, parameters=parameters)
@@ -283,9 +287,13 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     else:
         debug_print(to_print=f"Using default diagnosis: {parameters['diagnosis']}")
 
-    if args.algorithm:
-        parameters['algorithm'] = args.algorithm
-
+    for key in ('search_algorithm', 'score_algorithm', 'deconvolution_algorithm'):
+        value = getattr(args, key)
+        if value:
+            parameters[key] = value
+            debug_print(to_print=f"Setting {key} to {parameters[key]}")
+        else:
+            debug_print(to_print=f"Using default {key}: {parameters[key]}")
 
 
     # set debug rtime align
@@ -311,9 +319,9 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     if args.db:
         parameters['db'] = args.db
         debug_print(to_print=f"Setting db to: {parameters['db']}")
-    if args.denovo:
-        parameters['denovo'] = booleandict[args.denovo]
-        debug_print(to_print=f"Setting denovo to: {parameters['denovo']}")
+    if args.hires:
+        parameters['hires'] = booleandict[args.hires]
+        debug_print(to_print=f"Setting hires to: {parameters['hires']}")
     if args.denovo_limit:
         parameters['max_core_features'] = args.denovo_limit
         debug_print(to_print=f"Setting max_core_features to: {parameters['max_core_features']}")
@@ -378,8 +386,15 @@ def build_parser():
             help='Custom paramter file in YAML. Use parameters.yaml as template.')
     parser.add_argument('-c', '--multicores', type=int,
             help='nunmber of CPU cores intented to use')
-    parser.add_argument('--algorithm',
-                help='to specify algorithm to use')
+    parser.add_argument('--search_algorithm', type=str,
+                choices=['reverse', 'forward', 'mz', 'rtmz', 'csm'],
+                help=f"search algorithm for annotate (default: {PARAMETERS['search_algorithm']})")
+    parser.add_argument('--score_algorithm', type=str,
+                choices=['cosine', 'entropy'],
+                help=f"spectral similarity score (default: {PARAMETERS['score_algorithm']})")
+    parser.add_argument('--deconvolution_algorithm', type=str,
+                choices=['hcl', 'adap', 'nmf'],
+                help=f"deconvolution algorithm for deconvolute and forward annotate (default: {PARAMETERS['deconvolution_algorithm']})")
     
     parser.add_argument('--files', type=str,
             help='text file listing input mzML file paths, one per line; alternative to --input directory')
@@ -405,8 +420,8 @@ def build_parser():
             help='signal below this value is removed before peak picking')
     parser.add_argument('--peak_area', type=str,
             help='peak area calculation, sum, auc or gauss for area under the curve')
-    parser.add_argument('--keep_intermediates', 
-            help='keep all intermediate files, ondisk mode only.')
+    #parser.add_argument('--keep_intermediates', type=bool,
+    #        help='keep all intermediate files, ondisk mode only.')
     #parser.add_argument('--anno',
     #        help='perform default annotation after processing data')
     # diagnosis
@@ -421,8 +436,8 @@ def build_parser():
             help='input tsv file to map Kovats Index to retention time.')
     parser.add_argument('--db', type=str,
             help='input database file in MSP or JSON.')
-    parser.add_argument('--denovo',
-            help='de novo construction of empCpds (deconvolution) on GC data')
+    parser.add_argument('--hires',
+            help='High resolution or not for GC data')
     parser.add_argument('--denovo_limit', type=int,
             help='Feature numbers to consider in de novo construction of empCpds (deconvolution) on GC data')
     
@@ -442,6 +457,8 @@ def run_asari(parameters, args=None):
     '''
     if parameters['run'] == 'process':
         process(parameters)
+    if parameters['run'] == 'deconvolute':
+        deconvolute(parameters, args)
     elif parameters['run'] == 'analyze':
         # analyze a single sample file to get descriptions
         analyze(parameters, args)

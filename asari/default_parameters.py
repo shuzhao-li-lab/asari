@@ -12,7 +12,9 @@
 PARAMETERS = {
     'project_name': 'asari_project',
     'workflow': 'LC',                   # 'LC', 'GC', 'DIMS', ... 
-    'algorithm': '',                    # to specifiy algorithm for subcommands, e.g. annotate --algorithm lowres
+    'search_algorithm': 'reverse',      # annotate: 'reverse', 'forward', 'mz', 'rtmz', 'csm'
+    'score_algorithm': 'cosine',        # spectral similarity: 'cosine', 'entropy'
+    'deconvolution_algorithm': 'hcl',   # deconvolute / forward annotate: 'hcl', 'adap', 'nmf'
     'diagnosis': False,                   # to keep cache files for viz
 
     'outdir': 'output',
@@ -69,7 +71,9 @@ PARAMETERS = {
     'max_ri_delta': 100,                 # maximal retention index delta between candidate annotations
     'do_mirror_plot': True,              # whether to generate mirror plot for  annotation results 
     'max_core_features': 20000,          # to limit the number of features to annotate, as low-intensity features are of less interest
-    'denovo': False,                     # toggle to run de novo construction of empirical compounds (deconvolution)
+    # 'denovo': False,                     # toggle to run de novo construction of empirical compounds (deconvolution)
+    'hires': True,                       # high resolution data; else use unit mz for search (GC)
+    'kovats': None,
 
     # for LC annotation, to update
     'anno': False,                       # to pre-annotate features; to phase out after 1.19

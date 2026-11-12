@@ -4,7 +4,10 @@ sample_registry is the dict to track sample information and status,
 outside class to facilitate multiprocessing.
 Heavy lifting is in constructors.CompositeMap, 
     which contains MassGrid for correspondence, and FeatureList from feature/peak detection.
-Annotation is facilitated by jms-metabolite-services, mass2chem. 
+
+To-do: rename to process.py
+
+
 '''
 import time
 import os
@@ -91,15 +94,27 @@ def process_project(list_input_files, parameters):
     EE = workflow_setup(list_input_files, parameters)
     # mass track extraction per file is done in workflow_setup
     print(f'Processing Experiment Using {parameters["workflow"]} Workflow...')
-    
-    if parameters['workflow'] in ["LC", "GC"]:
+
+    if parameters['workflow'] == "LC":
         EE.process_all_LC()    # processing is same for LC and GC
+
+    elif parameters['workflow'] == "GC":
+        EE.process_all_LC()    # processing is same for LC and GC
+        if parameters['kovats']:
+            # to add kovats RI
+
+
+
+            pass
         
     elif parameters['workflow'] == "DIMS":
         EE.process_all_DIMS()
         
     elif parameters['workflow'] == "LCMSMS":
         EE.process_all_LCMSMS()
+
+    elif parameters['workflow'] == "MSMS":
+        print("Workflow to be implemented. Error 200.")
         
     else:
         print("Workflow not supported. Error 100.")
@@ -108,6 +123,7 @@ def process_project(list_input_files, parameters):
     
     if parameters['database_mode'] != 'memory':
         remove_intermediate_pickles(parameters)
+
 
 def read_project_dir(directory, file_pattern='.mzML'):
     '''

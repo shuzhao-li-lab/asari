@@ -1,8 +1,13 @@
+v1.19.0 -> v1.19.1
+    Major completion on GC functions by adding fwd workflows, test msp, unified components. 
+    Added ms2batch.
+
 v1.18.5 -> v1.19.0
     Cleaned up gcms.py. 
     Defined new formats of annotation.
-
-
+    added low res GC functions; 
+    added algorithm flag
+    rm unused feature_graph.py,gc_annotation.py,qc.py; 
 
 v1.18.4 -> v1.18.5
     Bug fixes on YAML parsing, multicores in batch_deep_detect_elution_peaks.

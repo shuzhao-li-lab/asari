@@ -55,7 +55,8 @@ from .utils import NpEncoder
 from .tools.file_io import read_features_from_asari_table
 from .tools.plot import mirror_plot
 from .tools.entropy_search import clean_list_ms2spectra
-from .gcms import *
+from .gc_functions import *
+from .deconvolute import (ingest_gc_featuretable, run_gc_deconvolution)
 
 def annotate_project(infile, parameters):
     time_stamp = [str(x) for x in time.localtime()[1:6]]
@@ -65,36 +66,24 @@ def annotate_project(infile, parameters):
     print(f"Annotation directory: {outdir}.\n\n")
     
     if parameters['workflow'] == "LC":
-
-
+        # to add deconvolute and algorithms in version 2
         ANN = LCMS_Annotation(parameters)
         ANN.parameters['outdir'] = outdir
         ANN.annotate_user_featuretable(infile)
         
     elif parameters['workflow'] == "GC":
-        annotate_gcms_full(
-            infile=infile,
-            outdir=outdir,
-            KovatsIndex=parameters['kovats'],
-            database_file=parameters['db'],
-            project_name_handle=parameters['project_name'],
-            denovo=parameters['denovo'],
-            ms2_tolerance_in_ppm=parameters['ms2_tolerance_in_ppm'], 
-            ms2_tolerance_in_da=parameters['ms2_tolerance_in_da'], 
-            
-            ri_tolerance=parameters['ri_tolerance'],  
-            score_cutoff_cosine=parameters['score_cutoff_cosine'], 
-            score_cutoff_entropy=parameters['score_cutoff_entropy'],
-            
-            corr_cutoff=parameters['corr_cutoff'], 
-            max_ri_delta=parameters['max_ri_delta'], 
-            do_mirror_plot=parameters['do_mirror_plot'],
-            max_core_features=parameters['max_core_features'],
-        )
+        ANN = GCMS_Annotation(dict(parameters, outdir=outdir))
+        if infile.endswith('.tsv'):
+            ANN.table_workflow(infile)
+        else:
+            list_query_spectra = load_gcms_dbfile(infile)   # auto determine msp or json
+            if list_query_spectra:
+                ANN.pseudospectra_workflow(list_query_spectra)
+            else:
+                print(f"No pseudospectra found in {infile}.")
 
     elif parameters['workflow'] == "LCMSMS":
-
-
+        # to handle diff anno methods, including pre-annotation in version 2
         annotate_lcmsms(
             infile=infile,
             outdir=outdir,
@@ -104,156 +93,10 @@ def annotate_project(infile, parameters):
             ms2_tolerance_in_da=parameters['ms2_tolerance_in_da'], 
 
         )
-        
+
+    # recording project parameters as meta data 
     with open(os.path.join(outdir, 'project.json'), 'w', encoding='utf-8') as f:
         json.dump(parameters, f, cls=NpEncoder, ensure_ascii=False, indent=2)
-
-#
-# main GC-HRMS function
-#
-
-def annotate_gcms_full(
-    infile,
-    outdir,
-    KovatsIndex,
-    database_file,
-    project_name_handle='result',
-    low_peak_filter_factor=100,
-    ms2_tolerance_in_ppm=5,     # not used now
-    ms2_tolerance_in_da=0.005, 
-    ri_tolerance=50,
-    cosine_penalty=1,           # don't change
-    score_cutoff_cosine=0.5, 
-    score_cutoff_entropy=0.4,
-    corr_cutoff=0.6, 
-    min_ri_delta=1,
-    max_ri_delta=100, 
-    hcl_distance_cut = 1,
-    clustering_step_size = 2000,
-    feature_distance_filter=None,
-    do_mirror_plot=True,
-    max_core_features=20000,
-    denovo=False, 
-    algorithm='highres'
-    ):
-    '''
-    Workflows 
-    a) Reverse search starting with HRMS database using def batch_lib_reverse_search_score(
-. 
-    b) Fwd search against low-res database, starting with list_pseudospectra
-
-    denovo : to construct pseudospectra (feature groups) from scratch. This is performed after HRMS database reverse search.
-    low_peak_filter_factor : to exclude peaks in a spectrum if low_peak_filter_factor*peak < base_peak.
-    
-    '''
-    # load GC-MS Database in MSP or JSON format
-    list_lib_entries = reformat_gcms_lib( load_gcms_dbfile(database_file), 
-                                     filter_factor=low_peak_filter_factor
-                                     )
-    dict_lib_entries = {e.id: e for e in list_lib_entries}
-    print(f"Imported {len(list_lib_entries)} compound library entries.")
-
-    if algorithm == 'lowres':
-        # use denovo_pseudospectra json as input; convert to unit mz
-        list_query_spectra = convert_unit_mz(
-            json.load(open(infile))
-        )
-        matched_results = batch_forward_unit_search_score(
-            list_query_spectra, 
-            convert_unit_mz(list_lib_entries),
-            ri_tolerance=30,
-            include_missing_ri=True,
-                    min_matched_peaks=3,
-                    top_n=1,
-        )
-
-        list_empCpds, feature_anno_list = (
-
-            # placeholder
-
-        )
-
-
-    else:   # highres
-        # infile in asari format
-        num_samples, list_features = read_features_from_asari_table(open(infile).read())
-        ri_model = read_fit_KovatsIndex_rtime(KovatsIndex, sep='\t', frac=0.3)
-        list_features = append_kovats_index(list_features, ri_model)
-        list_features.sort(key=lambda x: x['peak_area'], reverse=True)
-        dict_features = {f['id']: f for f in list_features}
-        
-        feature_dataframe = pd.read_csv(infile, sep="\t", index_col=0)
-        feature_dataframe = feature_dataframe.iloc[:, 10:]
-        matched_results = batch_lib_reverse_search_score(
-            list_lib_entries, list_features, dict_features, feature_dataframe,
-            mz_tolerance_da=ms2_tolerance_in_da, ri_tolerance=ri_tolerance,
-            cosine_penalty = cosine_penalty, corr_cutoff=corr_cutoff
-        )
-        list_empCpds, feature_anno_list = curate_batch_lib_search_result(
-            matched_results, 
-            mz_tolerance_da=ms2_tolerance_in_da,
-            score_cutoff_cosine=score_cutoff_cosine, 
-            score_cutoff_entropy=score_cutoff_entropy,
-        )
-
-    write_tsv_feature_anno(feature_anno_list, dict_features, dict_lib_entries, 
-                        os.path.join(outdir, "Features_" + project_name_handle + '.tsv'))
-    write_tsv_empCpd_anno(list_empCpds, dict_features, dict_lib_entries, 
-                        os.path.join(outdir, "empCpds_" + project_name_handle + '.tsv'))
-    print("\nDone targeted annotation.")
-    print(f"Exported tsv results for {len(list_empCpds)} annotated empCpds and {len(set([f['feature'] for f in feature_anno_list]))} unique features.\n")
-    
-    if do_mirror_plot:
-        print("Exporting PDF mirror plots..\n")
-        path_mirrorplots = os.path.join(outdir, "mirrorplots/")
-        os.makedirs(path_mirrorplots, exist_ok=True)
-        for tt in list_empCpds:
-            # print(tt['name'] )
-            _score = f"\n(cosine score: {tt['cosine_score']:.2f}, entropy score: {tt['entropy_score']:.2f})"
-            _title = tt['id'] + '__' + tt['name']   
-            mirror_plot(tt['peaks_as_features'], 
-                        # tt['peaks_in_lib'],   # filtered by unit mz match
-                        dict_lib_entries[tt['lib_entry_id']].peaks,     # peaks from original lib, not filtered by unit mz match, to show the full spectrum.
-                        match_tol=ms2_tolerance_in_da,
-                        colors=["blue", "tab:red", "black"],
-                        title=_title + _score, 
-                        outfile=os.path.join(path_mirrorplots, sanitize_filename(_title)+'.pdf'))
-    
-    # Export list_empCpds JSON and MSP
-    list_empCpds = serialize_annotated_empCpds(list_empCpds)
-    json_output_file = os.path.join(outdir, 'Annotated_pseudospectra_' + project_name_handle + '.json')
-    json_pseudospectra_to_msp(list_empCpds, json_output_file.replace('.json', '.msp'))
-    json_export = {
-        'type': 'GCMS', 
-        'database': database_file,
-        'algorithm': 'asari-gc-rs',
-        'time_stamp': ':'.join([str(x) for x in time.localtime()[1:6]]),
-        'list_of_empCpds': list_empCpds
-    }
-    with open(json_output_file, 'w', encoding='utf-8') as O:
-        json.dump(json_export, O, indent=2, ensure_ascii=False)
-    
-    print(f"{json_output_file} was written to JSON and MSP formats.\n")
-
-    # Deconvolution de novo, only after high-resolution reverse search
-    if denovo and algorithm != 'lowres':
-        print("De novo construction of pseudospectra (deconvolution)...")
-        core_features = set([f['feature'] for f in feature_anno_list])
-        list_pseudospectra, core_features = iterative_build_pseudospectra_by_hcl(
-            list_features, feature_dataframe, 
-            init_core_features=core_features, 
-            step_size=clustering_step_size,
-            hcl_distance_cut = hcl_distance_cut,
-            ri_tolerance=ri_tolerance,
-            correlation_cut = corr_cutoff,
-            max_core_features=max_core_features 
-        )
-        json_output_file = os.path.join(outdir, project_name_handle+'_denovo_pseudospectra.json')
-        list_pseudospectra = [port_pseudospectrum_to_json(x, normalize_intensity=True) for x in list_pseudospectra]
-        with open(json_output_file, 'w', encoding='utf-8') as O:
-            json.dump(list_pseudospectra, O, indent=2, ensure_ascii=False)
-        json_pseudospectra_to_msp(list_pseudospectra, json_output_file.replace('.json', '.msp'))
-        print(f"Exported {len(list_pseudospectra)} de novo pseudospectra to JSON and MSP formats.\n")
 
 
 #
@@ -602,12 +445,371 @@ class LCMS_Annotation:
 
 
 
+# 
+# ---------------------------------------------------------------------------
+# 
+
+class GCMS_Annotation:
+    '''
+    GC-MS annotation against a spectral library (MSP or JSON).
+
+    Workflows, by input and parameters['search_algorithm']:
+    - feature table (.tsv), 'reverse': library spectra are matched to features within
+      m/z and RI windows (batch_lib_reverse_search_score). Requires high resolution data.
+    - feature table (.tsv), 'forward': features are deconvoluted into pseudospectra
+      (parameters['deconvolution_algorithm']), then searched forward (pseudospectra_workflow).
+    - pseudospectra (.json or .msp, e.g. from `asari deconvolute`): forward search only.
+    Forward search uses high resolution m/z if parameters['hires'], else unit m/z.
+
+    RI comes from an RI column in the feature table, or from parameters['kovats'].
+    '''
+    default_database = 'gcms_corelib_20260930.msp'
+
+    def __init__(self, parameters):
+        self.parameters = parameters
+        self.outdir = parameters['outdir']
+        self.project_name = parameters['project_name']
+        self.database_file = parameters.get('db') or str(
+            pkg_resources.files(db).joinpath(self.default_database))
+        self.list_lib_entries, self.dict_lib_entries = self.load_gcms_database(
+                    database_file=self.database_file,
+                    low_peak_filter_factor=100,
+                )
+
+    def load_gcms_database(self, database_file, low_peak_filter_factor=100):
+        '''Load GC-MS Database in MSP or JSON format, as list and dict of GC_lib_entry.'''
+        list_lib_entries = reformat_gcms_lib(load_gcms_dbfile(database_file),
+                                             filter_factor=low_peak_filter_factor)
+        dict_lib_entries = {e.id: e for e in list_lib_entries}
+        print(f"Imported {len(list_lib_entries)} compound library entries from {database_file}.")
+        return list_lib_entries, dict_lib_entries
+
+    def _mz_tolerance(self, highres=None):
+        highres = self.parameters.get('hires', True) if highres is None else highres
+        return self.parameters['ms2_tolerance_in_da'] if highres else 0.5
+
+    # ------------------------------------------------------------------ workflows
+
+    def table_workflow(self, infile):
+        '''Annotate an asari feature table (tsv). Returns list_empCpds, feature_anno_list.'''
+        parameters = self.parameters
+        ingested = ingest_gc_featuretable(infile, parameters)
+        if ingested is None:
+            return None
+        list_features, feature_dataframe, ri_model = ingested
+        dict_features = {f['id']: f for f in list_features}
+
+        if parameters['search_algorithm'] == 'reverse':
+            if not parameters.get('hires', True):
+                print("Reverse search requires high resolution data; use --search_algorithm forward.")
+                return None
+            list_empCpds, feature_anno_list = self.annotate_gcms_reverse(
+                list_features,
+                feature_dataframe,
+                self.list_lib_entries,
+                dict_features,
+                ms2_tolerance_in_da=parameters['ms2_tolerance_in_da'],
+                ri_tolerance=parameters['ri_tolerance'],
+                score_cutoff_cosine=parameters['score_cutoff_cosine'],
+                score_cutoff_entropy=parameters['score_cutoff_entropy'],
+                corr_cutoff=parameters['corr_cutoff'],
+            )
+            self.export(list_empCpds, feature_anno_list, dict_features,
+                        algorithm='asari-gc-reverse')
+
+        elif parameters['search_algorithm'] == 'forward':
+            # construct pseudospectra (feature groups) from scratch
+            list_pseudospectra, core_features = run_gc_deconvolution(
+                list_features, feature_dataframe, ri_model, parameters['deconvolution_algorithm']
+                )
+            json_output_file = os.path.join(
+                self.outdir, self.project_name + '_denovo_pseudospectra.json')
+            write_list_pseudospectra(list_pseudospectra, json_output_file)
+            list_query_spectra = [port_pseudospectrum_to_json(x, normalize_intensity=True)
+                                  for x in list_pseudospectra]
+            list_empCpds, feature_anno_list = self.pseudospectra_workflow(      # contains export function
+                list_query_spectra, dict_features=dict_features)
+
+        else:
+            print(f"search_algorithm {parameters['search_algorithm']} is not supported in GC.")
+            return None
+
+        return list_empCpds, feature_anno_list
+
+    def pseudospectra_workflow(self, list_query_spectra, dict_features=None):
+        '''
+        Forward search of pseudospectra against the library, then export.
+        Only in parameters['search_algorithm'] == 'forward', or when input is pseudospectra.
+        High resolution data are dealt differently from low resolution data (parameters['hires']).
+
+        list_query_spectra : pseudospectra as dicts, from port_pseudospectrum_to_json
+            or loaded from JSON/MSP files (normalized by standardize_query_spectra).
+        dict_features : features by ID, if available (from a feature table), for export.
+
+        Returns list_empCpds, feature_anno_list.
+        '''
+        parameters = self.parameters
+        list_query_spectra = standardize_query_spectra(list_query_spectra)
+        print(f"Forward search of {len(list_query_spectra)} pseudospectra, "
+              f"{'high' if parameters.get('hires', True) else 'unit'} resolution.")
+        list_empCpds, feature_anno_list = self.annotate_gcms_forward(
+            list_query_spectra,
+            self.list_lib_entries,
+            highres=parameters.get('hires', True),
+            ms2_tolerance_in_da=parameters['ms2_tolerance_in_da'],
+            ri_tolerance=parameters['ri_tolerance'],
+            score_cutoff_cosine=parameters['score_cutoff_cosine'],
+            score_cutoff_entropy=parameters['score_cutoff_entropy'],
+        )
+        self.export(list_empCpds, feature_anno_list, dict_features,
+                    algorithm='asari-gc-forward-' + ('hires' if parameters.get('hires', True) else 'unit'))
+        return list_empCpds, feature_anno_list
+
+    # ------------------------------------------------------------------ search
+
+    def annotate_gcms_reverse(self,
+        list_features,
+        feature_dataframe,
+        list_lib_entries,
+        dict_features,
+        ms2_tolerance_in_da=0.005,
+        ri_tolerance=50,
+        cosine_penalty=1,           # don't change
+        score_cutoff_cosine=0.5,
+        score_cutoff_entropy=0.4,
+        corr_cutoff=0.6,
+        ):
+        '''
+        Reverse search starting with HRMS database using def batch_lib_reverse_search_score
+
+        returns list_empCpds, feature_anno_list
+        '''
+        matched_results = batch_lib_reverse_search_score(
+            list_lib_entries, list_features, dict_features, feature_dataframe,
+            mz_tolerance_da=ms2_tolerance_in_da, ri_tolerance=ri_tolerance,
+            cosine_penalty = cosine_penalty, corr_cutoff=corr_cutoff
+        )
+        return curate_batch_lib_reverse_search_result(
+            matched_results,
+            mz_tolerance_da=ms2_tolerance_in_da,
+            score_cutoff_cosine=score_cutoff_cosine,
+            score_cutoff_entropy=score_cutoff_entropy,
+        )
+
+    def annotate_gcms_forward(self,
+        list_query_spectra,
+        list_lib_entries,
+        highres=True,
+        ms2_tolerance_in_da=0.005,
+        ri_tolerance=30,
+        score_cutoff_cosine=0.5,
+        score_cutoff_entropy=0.4,
+        include_missing_ri=True,
+        min_matched_peaks=3,
+        top_n=1,
+        ):
+        '''
+        Forward search of pseudospectra against GC-MS database,
+        separate algorithms for low-res and high-resolution:
+        - highres: batch_forward_hires_search_score (entropy + cosine, m/z within ms2_tolerance_in_da);
+        - low res: batch_forward_unit_search_score (cosine on unit m/z).
+
+        list_query_spectra : list of pseudospectra dicts with 'id', 'RI', 'members', 'peaks'.
+
+        returns list_empCpds, feature_anno_list
+        '''
+        if highres:
+            matched_results = batch_forward_hires_search_score(
+                list_query_spectra, list_lib_entries,
+                mz_tolerance_da=ms2_tolerance_in_da,
+                ri_tolerance=ri_tolerance,
+                include_missing_ri=include_missing_ri,
+                min_matched_peaks=min_matched_peaks,
+                top_n=top_n,
+            )
+        else:       # low resolution, using unit mz search
+            matched_results = batch_forward_unit_search_score(
+                convert_unit_mz(list_query_spectra),
+                convert_unit_mz(list_lib_entries),
+                ri_tolerance=ri_tolerance,
+                include_missing_ri=include_missing_ri,
+                min_matched_peaks=min_matched_peaks,
+                top_n=top_n,
+            )
+        print(f"Forward search: {len(matched_results)} pseudospectra matched to library.")
+
+        return curate_batch_lib_forward_search_result(
+            matched_results,
+            mz_tolerance_da=ms2_tolerance_in_da,
+            score_cutoff_cosine=score_cutoff_cosine,
+            score_cutoff_entropy=score_cutoff_entropy,
+        )
+
+    # ------------------------------------------------------------------ export
+
+    def export(self, list_empCpds, feature_anno_list, dict_features=None, algorithm=''):
+        '''
+        Export tsv tables (Features_, empCpds_), JSON and MSP of annotated pseudospectra,
+        and mirror plots if parameters['do_mirror_plot'].
+        dict_features can be None (pseudospectra input): feature details are then
+        taken from the empCpds or left blank.
+        '''
+        outdir, handle = self.outdir, self.project_name
+        write_tsv_feature_anno(feature_anno_list, dict_features, self.dict_lib_entries,
+                               os.path.join(outdir, "Features_" + handle + '.tsv'))
+        write_tsv_empCpd_anno(list_empCpds, dict_features, self.dict_lib_entries,
+                              os.path.join(outdir, "empCpds_" + handle + '.tsv'))
+        print("\nDone GC-MS annotation.")
+        print(f"Exported tsv results for {len(list_empCpds)} annotated empCpds and "
+              f"{len(set([f['feature'] for f in feature_anno_list]))} unique features.\n")
+
+        if self.parameters.get('do_mirror_plot', False):
+            self.make_mirror_plots(list_empCpds)
+
+        # Export list_empCpds JSON and MSP
+        list_empCpds = serialize_annotated_empCpds(list_empCpds)
+        json_output_file = os.path.join(outdir, 'Annotated_pseudospectra_' + handle + '.json')
+        json_pseudospectra_to_msp(list_empCpds, json_output_file.replace('.json', '.msp'))
+        json_export = {
+            'type': 'GCMS',
+            'database': self.database_file,
+            'algorithm': algorithm,
+            'time_stamp': ':'.join([str(x) for x in time.localtime()[1:6]]),
+            'list_of_empCpds': list_empCpds
+        }
+        with open(json_output_file, 'w', encoding='utf-8') as O:
+            json.dump(json_export, O, indent=2, ensure_ascii=False, cls=NpEncoder)
+        print(f"{json_output_file} was written to JSON and MSP formats.\n")
+
+    def make_mirror_plots(self, list_empCpds):
+        '''PDF mirror plot per empCpd, experimental peaks vs full library spectrum.'''
+        print("Exporting PDF mirror plots..\n")
+        path_mirrorplots = os.path.join(self.outdir, "mirrorplots/")
+        os.makedirs(path_mirrorplots, exist_ok=True)
+        match_tol = self._mz_tolerance()
+        for tt in list_empCpds:
+            _score = f"\n(cosine score: {_fmt_score(tt['cosine_score'])}, entropy score: {_fmt_score(tt['entropy_score'])})"
+            _title = tt['id'] + '__' + str(tt['name'])
+            mirror_plot(tt['peaks_as_features'],
+                        # peaks from original lib, not filtered by match, to show the full spectrum.
+                        self.dict_lib_entries[tt['lib_entry_id']].peaks,
+                        match_tol=match_tol,
+                        colors=["blue", "tab:red", "black"],
+                        title=_title + _score,
+                        outfile=os.path.join(path_mirrorplots, sanitize_filename(_title)+'.pdf'))
+
+
+def standardize_query_spectra(list_query_spectra):
+    '''
+    Normalize pseudospectra loaded from different sources to dicts with
+    'id', 'rtime', 'RI', 'members', 'peaks' (other fields are kept):
+    - port_pseudospectrum_to_json / denovo JSON (already in this format);
+    - JSON export of annotation ({'list_of_empCpds': [...]}, 'features' as members);
+    - MSP written by json_pseudospectra_to_msp ('ID', 'RETENTIONTIME' as RI, 'Features').
+    Spectra without peaks are dropped.
+    '''
+    if isinstance(list_query_spectra, dict):
+        list_query_spectra = list_query_spectra.get('list_of_empCpds', [])
+    result = []
+    for i, e in enumerate(list_query_spectra):
+        q = dict(e)
+        peaks = q.get('peaks') or q.get('peaks_as_features') or []
+        if not len(peaks):
+            continue
+        q['peaks'] = [tuple(p[:2]) for p in peaks]
+        q['id'] = q.get('id') or q.get('ID') or q.get('Name') or f'pseudospectrum_{i}'
+        if q.get('RI') is None:
+            q['RI'] = parse_ri_value(q.get('RETENTIONTIME'))
+        members = q.get('members') or q.get('features') or q.get('Features') or []
+        if isinstance(members, str):
+            members = [x.strip() for x in members.split(',') if x.strip()]
+        q['members'] = list(members)
+        result.append(q)
+    return result
 
 
 
-
-
+# ---------------------------------------------------------------------------
 #
+# GC export
+#
+
+def _fmt_score(x, digits=3):
+    '''Round a score, or '' if missing (e.g. no entropy score in unit m/z search).'''
+    return '' if x is None else round(float(x), digits)
+
+def _ri_delta(ri, lib_ri, digits=3):
+    if ri is None or lib_ri is None:
+        return ''
+    return round(ri - lib_ri, digits)
+
+# write out annotated results
+def write_tsv_feature_anno(feature_anno_list, dict_features, dict_lib_entries, outfile):
+    '''
+    The empCpd output is more concise (annotation by empCpd or cluster). 
+    This exports a table per annotated feature.
+    dict_features can be None (pseudospectra input); feature details are then blank.
+    '''
+    header = [
+        'feature', 'mz', 'rtime', 'RI', 
+        'empCpd', 'quant_ion', 'score_cosine', 'score_entropy', 'name', 'inchikey',
+        'lib_RI', 'delta_RI', 'peak_area', 'cSelectivity', 'peak_shape', 'snr', 'detection_counts'
+    ]
+    dict_features = dict_features or {}
+    s = '\t'.join(header) + '\n'
+    for feat in feature_anno_list:
+        k = feat['feature']
+        FF = dict_features.get(k, {})
+        ri = FF.get('RI')
+        lib_RI = dict_lib_entries[feat['lib_entry_id']].RI
+        s += '\t'.join([str(x) for x in [
+            k, FF.get('mz', ''), FF.get('rtime', ''), _fmt_score(ri), 
+            feat['empCpd'], feat['quant_ion'], _fmt_score(feat['cosine_score']), 
+            _fmt_score(feat['entropy_score']), feat['name'], feat['inchikey'],
+            _fmt_score(lib_RI), _ri_delta(ri, lib_RI),
+            FF.get('peak_area', ''), FF.get('cSelectivity', ''), FF.get('goodness_fitting', ''), 
+            FF.get('snr', ''), FF.get('detection_counts', '')
+        ]]) + '\n'
+    with open(outfile, 'w') as O:
+        O.write(s)
+    
+def write_tsv_empCpd_anno(list_empCpds, dict_features, dict_lib_entries, outfile):
+    '''Table output for list of empCpds. 
+    dict_features can be None (pseudospectra input); quant ion m/z and rtime are then
+    taken from the empCpd ('quant_ion_mz', 'rtime') if available.
+    '''
+    header = [
+        'empCpd', 'name', 'inchikey', 'formula', 'lib_exact_mass', 'score_cosine', 'score_entropy', 
+        'num_matched_peaks', 
+        'quant_ion', 'mz_quant_ion', 'rtime_quant_ion(min)', 'RI_quant_ion', 'lib_RI', 'delta_RI', 
+        'has_basepeak', 'has_molecular_ion', 'presence_ratio'
+    ]
+    dict_features = dict_features or {}
+    s = '\t'.join(header) + '\n'
+    for epd in list_empCpds:
+        lib = dict_lib_entries[epd['lib_entry_id']]
+        # forward search reports matched peaks; in reverse search all peaks_as_features are matched
+        num_matched_peaks = epd.get('num_matched_peaks') or len(epd['peaks_as_features'])
+        quant_ion = epd['quant_ion']
+        FF = dict_features.get(quant_ion, {})
+        mz = FF.get('mz', epd.get('quant_ion_mz', ''))
+        rtime = FF.get('rtime', epd.get('rtime'))
+        ri = epd.get('RI')
+        s += '\t'.join([str(x) for x in [
+            epd['id'], epd['name'], epd['inchikey'], lib.compound_formula, lib.exact_mass, 
+            _fmt_score(epd['cosine_score']), _fmt_score(epd['entropy_score']),
+            num_matched_peaks, 
+            quant_ion, mz, 
+            '' if rtime in (None, '') else round(rtime/60, 2), 
+            '' if ri is None else int(ri), '' if lib.RI is None else int(lib.RI), _ri_delta(ri, lib.RI, 0), 
+            epd['has_basepeak'], epd['has_molecularion'], 
+            round(num_matched_peaks/lib.peaks.shape[0], 2) if lib.peaks.shape[0] else ''
+        ]]) + '\n' 
+    with open(outfile, 'w') as O:
+        O.write(s)
+    
+
+# ---------------------------------------------------------------------------
 #
 # merging with LCMS_Annotation class
 #
@@ -756,5 +958,7 @@ def export_combined_anno_json(matched, feature_dict, lib_dict, outfile):
         )
     with open(outfile, 'w') as f:
         json.dump(json_output, f, indent=4)
+
+
 
 

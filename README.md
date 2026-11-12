@@ -18,22 +18,24 @@ LC-MS application was described in Li et al. Nature Communications 14.1 (2023): 
 A web server (https://asari.app) and [full pipeline](https://pypi.org/project/pcpfm/) are available now.
 A set of tutorials are hosted at https://github.com/shuzhao-li-lab/asari_pcpfm_tutorials/.
 
-## Install
+## Install and get started
 
-- From PyPi repository: `pip3 install asari-metabolomics`. Add `--upgrade` to update to new versions.
+- Install from PyPi repository: `pip3 install asari-metabolomics`. Add `--upgrade` to update to new versions.
 - Or clone from source code: https://github.com/shuzhao-li/asari . One can run it as a Python module by calling Python interpreter. GitHub repo is often ahead of PyPi versions.
-- Requires Python 3.8+. Installation time ~ 5 seconds if common libraries already exist.
+- Requires Python 3.11+. Installation time ~ 5 seconds if common libraries already exist.
 - The core package is designed to be compact and cloud friendly. The visualization and other dependencies are additional, specified in `optional-requirements.txt`.
 - One can use the web version (https://asari.app) without local installation.
 
-If installed from pip and the system path includes asari, one can run `asari` as a command in a terminal. 
+If installed from pip and the system path includes asari, one can run `asari` as a command in a terminal, e.g.: 
+`asari process -i data_dir`
+
 Alternatively, one can run it as a module via Python interpreter, e.g.:
-`python3 -m asari.main process -i mydir`
+`python3 -m asari.main process -i data_dir`
 
 
 ## Input
 ### Data processing
-Input data are centroid mzML files from LC, GC or DI-MS metabolomics. 
+Input data are centroid mzML files. 
 Example datasets can be found at https://github.com/shuzhao-li-lab/data.
 
 We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats and .mzXML files.
@@ -72,15 +74,6 @@ To process all mzML files under directory mydir/projectx_dir (or use `--files` t
 
 `asari process --input mydir/projectx_dir`
 
-To annotate GC-MS feature table using a custom database and alkane standards:
-
-`asari annotate -i project_311234834/export/full_Feature_table.tsv 
--o project_311234834 -j gc_annotation_311234834 
---kovats /Users/lish/li.proj/asari_project/GCHRMS/KovatsIndex_alkanestandards_cuimc.tsv 
---db /Users/lish/li.proj/asari_project/GCHRMS/Resources/GCHRMS_Database_251217.msp 
---denovo F --workflow GC
-`
-
 To use LC-MS/MS workflow to produce feature tables and MS/MS clusters:
 
 `asari process --mode pos --input mydir/projectx_dir --workflow LCMSMS
@@ -94,6 +87,15 @@ To search MS/MS agains a database:
 To pre-annotate LC-MS feature table then match to a database (default HMDB for now):
 
 `asari annotate -i /Users/lish/li.play/test16_v16_599432/preferred_Feature_table.tsv -o /Users/lish/li.play/test16_v16_599432/ -j LCMSanno --workflow LC --mode pos`
+
+To annotate GC-MS feature table using a custom database and alkane standards:
+
+`asari annotate -i project_311234834/export/full_Feature_table.tsv 
+-o project_311234834 -j gc_annotation_311234834 
+--kovats /Users/lish/li.proj/asari_project/GCHRMS/KovatsIndex_alkanestandards_cuimc.tsv 
+--db /Users/lish/li.proj/asari_project/GCHRMS/Resources/GCHRMS_Database_251217.msp 
+--workflow GC
+`
 
 ### Various tools
 
