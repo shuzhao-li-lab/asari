@@ -1,4 +1,4 @@
-metDatamodel
+metDataModel
 mass2chem
 khipu-metabolomics>=0.7.0
 jms-metabolite-services>=0.5.7
@@ -6,8 +6,10 @@ pymzml
 ms_entropy
 numpy
 scipy
+pandas
 statsmodels
 pyyaml
+requests
 tqdm
 json_tricks
 pathvalidate

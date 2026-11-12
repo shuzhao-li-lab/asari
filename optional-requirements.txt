@@ -1,7 +1,8 @@
-panel>=0.13.0
+panel>=1.0
 holoviews
 hvplot
-seaborn
+bokeh
+scikit-learn
 matplotlib
+seaborn
 plotly
-sklearn

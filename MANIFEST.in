@@ -1,1 +1,3 @@
-include *.md LICENSE requirements.txt
+# sdist extras; package data files (asari/db) are set in pyproject.toml
+include README.md LICENSE VERSION_LOG requirements.txt optional-requirements.txt
+global-exclude *.py[cod] __pycache__ .DS_Store

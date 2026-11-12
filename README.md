@@ -23,7 +23,7 @@ A set of tutorials are hosted at https://github.com/shuzhao-li-lab/asari_pcpfm_t
 - Install from PyPi repository: `pip3 install asari-metabolomics`. Add `--upgrade` to update to new versions.
 - Or clone from source code: https://github.com/shuzhao-li/asari . One can run it as a Python module by calling Python interpreter. GitHub repo is often ahead of PyPi versions.
 - Requires Python 3.11+. Installation time ~ 5 seconds if common libraries already exist.
-- The core package is designed to be compact and cloud friendly. The visualization and other dependencies are additional, specified in `optional-requirements.txt`.
+- The core package is designed to be compact and cloud friendly. The visualization and other dependencies are additional (also listed in `optional-requirements.txt`), installed as extras: `pip install "asari-metabolomics[viz]"` for the dashboard (`asari viz`), `[gc]` for NMF deconvolution, `[plot]` for plotting tools, or `[all]`.
 - One can use the web version (https://asari.app) without local installation.
 
 If installed from pip and the system path includes asari, one can run `asari` as a command in a terminal, e.g.: 

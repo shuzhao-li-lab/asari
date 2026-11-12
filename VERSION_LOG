@@ -1,5 +1,7 @@
 v1.19.1 -> v1.19.2
-    Updated LCMSMS workflow with --cluster_ms2; added cluster_msms_spectra_greedy
+    Updated LCMSMS workflow with --cluster_ms2. 
+    Added cluster_msms_spectra_greedy. 
+    Updated Dashboard for LC and to viz GC and MSMS annotations (mirror plots).
 
 v1.19.0 -> v1.19.1
     Major completion on GC functions by adding fwd workflows, test msp, unified components. 
