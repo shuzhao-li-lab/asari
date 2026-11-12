@@ -349,6 +349,10 @@ def update_params_from_CLI(parameters, args, debug_print=False):
         debug_print(to_print=f"Setting workflow to {parameters['workflow']}")
     else:
         debug_print(to_print=f"Using default workflow: {parameters['workflow']}")
+    if parameters.get('kovats'):
+        validate_kovats_file(parameters['kovats'])
+        if parameters.get('workflow') != 'GC':
+            print(f"Warning: --kovats is only used in GC workflow; ignored for workflow {parameters.get('workflow')}.")
 
     # 
     if args.run:
@@ -433,7 +437,9 @@ def build_parser():
             help='Drop samples that fail RT alignment from composite map., recommend true for data mining')
 
     parser.add_argument('--kovats', type=str,
-            help='input tsv file to map Kovats Index to retention time.')
+            help='Kovats standards tsv file (columns: Kovats index, measured time in minutes) '
+                 'to convert retention time to retention index (RI). '
+                 'In `process --workflow GC`, adds an RI column to feature tables.')
     parser.add_argument('--db', type=str,
             help='input database file in MSP or JSON.')
     parser.add_argument('--hires',
@@ -473,6 +479,17 @@ def run_asari(parameters, args=None):
         viz(parameters, args)
     else:
         print(f"Expecting one of the subcommands: {SUBCOMMANDS}.")
+
+def validate_kovats_file(kovats_file):
+    '''Check that the Kovats standards file can be read and fitted, before long processing.'''
+    import pandas as pd
+    assert os.path.isfile(kovats_file), f"Kovats standards file not found: {kovats_file}"
+    kovats = pd.read_csv(kovats_file, sep='\t')
+    assert kovats.shape[1] >= 2 and kovats.shape[0] >= 3, \
+        f"Kovats standards file needs >= 2 columns (Kovats index, time in minutes) and >= 3 rows: {kovats_file}"
+    values = kovats.iloc[:, :2].apply(pd.to_numeric, errors='coerce')
+    assert not values.isna().any().any(), f"Non-numeric values in first 2 columns of {kovats_file}"
+
 
 def main():
     '''

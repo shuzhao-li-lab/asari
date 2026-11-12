@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import pickle
+import numpy as np
 import importlib.resources as pkg_resources  # Python 3.11+, importlib_resources for older versions
 
 from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
@@ -336,6 +337,8 @@ class ext_Experiment:
         filtered_FeatureTable['rtime_right_base'] = filtered_FeatureTable['rtime_right_base'].round(2)
         filtered_FeatureTable['cSelectivity'] = filtered_FeatureTable['cSelectivity'].round(2)
         filtered_FeatureTable['goodness_fitting'] = filtered_FeatureTable['goodness_fitting'].round(2)
+        if self.parameters['workflow'] == "GC" and self.parameters.get('kovats'):
+            filtered_FeatureTable = self.add_retention_index(filtered_FeatureTable)
 
         outfile = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
         filtered_FeatureTable.to_csv(outfile, index=False, sep="\t")
@@ -365,6 +368,23 @@ class ext_Experiment:
             unique_compound_table.to_csv(outfile, index=False, sep="\t")
             print("Unique compound table (%d x %d) was written to %s.\n" %(
                                 unique_compound_table.shape[0], number_of_samples, outfile))
+
+    def add_retention_index(self, feature_table):
+        '''
+        GC workflow: add a column 'RI' (Kovats retention index) right after 'detection_counts',
+        so that sample columns start one column later (data_start_col=12 in gc_functions).
+        RI is interpolated from feature rtime (seconds) by a lowess fit of the Kovats standards
+        file parameters['kovats'] (columns: Kovats index, measured time in minutes).
+        Features outside the range of the standards get the RI at the nearest end.
+        '''
+        from .gc_functions import read_fit_KovatsIndex_rtime
+        ri_model = read_fit_KovatsIndex_rtime(self.parameters['kovats'], frac=0.3)
+        ri = np.interp(self.CMAP.FeatureTable.loc[feature_table.index, 'rtime'].values / 60,
+                       ri_model[:, 0], ri_model[:, 1])
+        feature_table = feature_table.copy()
+        feature_table.insert(feature_table.columns.get_loc('detection_counts') + 1, 'RI', ri.round(2))
+        print(f"Added retention index (RI) using Kovats standards in {self.parameters['kovats']}.")
+        return feature_table
 
     def export_log(self):
         '''

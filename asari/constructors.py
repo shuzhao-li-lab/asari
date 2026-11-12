@@ -81,8 +81,10 @@ class MassGrid:
         build_grid_by_centroiding
         '''
         self._initiate_mass_grid()
-        sample_ids = self.experiment.valid_sample_ids
-        sample_ids.pop(self.experiment.reference_sample_id)
+        # exclude reference sample by value (sample ids are not list positions when some
+        # samples failed extraction); a new list, not modifying experiment.valid_sample_ids
+        sample_ids = [sid for sid in self.experiment.valid_sample_ids
+                      if sid != self.experiment.reference_sample_id]
         for sid in sample_ids:
             SM = SimpleSample(self.experiment.sample_registry[sid],
                 experiment=self.experiment, 
