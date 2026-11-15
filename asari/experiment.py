@@ -1,24 +1,18 @@
-"""Experiment class, managing samples, composite map, annotation and export in a project."""
+"""
+Experiment class, managing samples, composite map and export in a project (subcommand `process`).
+No database is used in processing; database searches are in `annotate`.
+"""
 
 import os
 import sys
 import json
 import pickle
 import numpy as np
-import importlib.resources as pkg_resources  # Python 3.11+, importlib_resources for older versions
-
-from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
-
-# to move out of experiment to separate annotation module
-from .default_parameters import adduct_search_patterns, \
-    adduct_search_patterns_neg, isotope_search_patterns, extended_adducts, \
-    readme_doc_str
-
 from functools import partial
 
+from .default_parameters import readme_doc_str
 from .constructors import CompositeMap, _cluster_track_ms2_worker
 from .utils import NpEncoder, bulk_process
-from . import db
 from .tools.ms2 import json_ms2_to_msp, group_ms2_by_precursor
 
 if not sys.warnoptions:
@@ -30,14 +24,9 @@ class ext_Experiment:
     """
     Similar to metDataModel.core.Experiment with preprocessing methods.
 
-    This encapsulates a set of LC-MS files using the same experimental method
+    This encapsulates a set of mzML files using the same experimental method
     (chromatography and ionization) to be processed together.
-
     E.g., data from postive ESI and negative ESI should not in the same ext_Experiment instance.
-
-    This class has annotation and export functions.
-
-    Default asari work flow is in `ext_Experiment.process_all`.
     """
     def __init__(self, sample_registry, parameters):
         """
@@ -126,7 +115,8 @@ class ext_Experiment:
 
     def process_all_LC(self):
         """
-        This is the default asari workflow for LC-MS and GC-MS procssing; annotation is separate after processing.
+        This is the default asari workflow for LC-MS and GC-MS procssing; 
+        annotation is separate after processing.
 
         1. Build MassGrid, using either pairwise (small study) or clustering method.
            Choose one reference from all samples for the largest number of landmark m/z tracks.
@@ -464,35 +454,3 @@ class ext_Experiment:
         with open(outfile, 'w', encoding='utf-8') as f:
             f.write(readme_doc_str)
 
-
-
-
-
-
-    #
-    # to move out core Asari after 2.0
-    #
-
-    def load_annotation_db(self, src='hmdb4'):
-        """
-        Load database of known compound using jms.dbStructures.knownCompoundDatabase.
-        The compound tree is precomputed indexing.
-        The `src` parameter is not used now, but placeholder to add more options later.
-
-        Parameters
-        ----------
-        src: str, optional, default: hmdb4
-            not used but can, in the future, dictate which database is used to generate annotations
-
-
-        To move annotation out of core package.
-
-        as for GC and LCMSMS
-
-
-        """
-        self.KCD = knownCompoundDatabase()
-        self.KCD.mass_indexed_compounds = pickle.load(
-            pkg_resources.open_binary(db, 'mass_indexed_compounds.pickle') )
-        self.KCD.emp_cpds_trees = pickle.load(
-            pkg_resources.open_binary(db, 'emp_cpds_trees.pickle') )

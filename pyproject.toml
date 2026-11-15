@@ -47,7 +47,7 @@ include-package-data = true
 include = ["asari", "asari.*"]
 
 [tool.setuptools.package-data]
-asari = ["db/*.pickle", "db/*.json", "db/*.msp", "db/README.md"]
+asari = ["db/*.json", "db/*.msp", "db/README.md"]
 
 [tool.setuptools.dynamic]
 version = { attr = "asari.__version__" }

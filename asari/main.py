@@ -10,10 +10,10 @@ from functools import partial
 import yaml
 
 from .__init__ import __version__
-from .workflow import (process_project, read_project_dir, read_project_file) # get_mz_list, process_xics, create_export_folders
+from .process import (process_project, read_project_dir, read_project_file) # get_mz_list, process_xics, create_export_folders
 from .default_parameters import PARAMETERS
 
-from .analyze import estimate_min_peak_height, analyze_single_sample
+from .peek import estimate_min_peak_height, peek_single_sample
 from .deconvolute import deconvolute_project
 from .annotate import annotate_project
 from .join import join_project, JOIN_ALGORITHMS
@@ -21,7 +21,7 @@ from .utils import build_boolean_dict
 
 
 booleandict = build_boolean_dict()
-SUBCOMMANDS = ["analyze", "process", "deconvolute", "annotate", "viz", "join", "list_workflows"]
+SUBCOMMANDS = ["peek", "process", "deconvolute", "annotate", "viz", "join", "list_workflows"]
 WORKFLOWS = {
     'LC': 'LC-MS (default). process: feature extraction; annotate: pre-annotation of feature table '
           '(khipu, isotopes/adducts) and match to a compound database (HMDB default).',
@@ -62,9 +62,9 @@ def deconvolute(parameters, args):
     """Run subcommand `deconvolute`."""
     deconvolute_project(args.input, parameters=parameters)
 
-def analyze(parameters, args):
-    """Run subcommand `analyze` on a single mzML file."""
-    analyze_single_sample(args.input, parameters=parameters)
+def peek(parameters, args):
+    """Run subcommand `peek` on a single mzML file."""
+    peek_single_sample(args.input, parameters=parameters)
 
 def annotate(parameters, args):
     """Run subcommand `annotate`."""
@@ -436,7 +436,7 @@ def build_parser():
     parser.add_argument('--ppm', type=int,
             help='mass precision in ppm (part per million), same as mz_tolerance_ppm')
     parser.add_argument('-i', '--input', type=str,
-            help='input directory of mzML files to process, or a single file to analyze')
+            help='input directory of mzML files to process, or a single file to peek')
     parser.add_argument('-o', '--output', type=str,
             help='output directory')
     parser.add_argument('-j', '--project', type=str,
@@ -527,9 +527,9 @@ def run_asari(parameters, args=None):
         process(parameters)
     elif parameters['run'] == 'deconvolute':
         deconvolute(parameters, args)
-    elif parameters['run'] == 'analyze':
-        # analyze a single sample file to get descriptions
-        analyze(parameters, args)
+    elif parameters['run'] == 'peek':
+        # peek into a single sample file to get descriptions
+        peek(parameters, args)
     elif parameters['run'] == 'annotate':
         # Annotate a user supplied feature table
         annotate(parameters, args)
@@ -559,7 +559,7 @@ def main():
     """
     asari, Trackable and scalable Python program for high-resolution MS metabolomics data preprocessing.
 
-        * analyze: analyze a single mzML file to print summary of statistics and recommended parameters.
+        * peek: peek into a single mzML file to print summary of statistics and recommended parameters.
         * process: MS data preprocessing
         * annotate: annotate features using various workflows
         * join: merge multiple processed projects (possibly split a large dataset)

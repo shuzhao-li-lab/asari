@@ -21,7 +21,7 @@ Mass track is used in asari, to cover full range of retention time, because alig
 
 ## Data processing algorithms step by step
 
-1. Build sample registry; see `workflow.process_project`, `workflow.register_samples`.
+1. Build sample registry; see `process.process_project`, `process.register_samples`.
 
 2. Mass track construction for each sample; see `chromatograms.extract_massTracks_`.
 
@@ -37,7 +37,7 @@ Mass track is used in asari, to cover full range of retention time, because alig
 
    d. Establish anchor mass tracks by finding m/z differences that match to either 13C/12C isotopes or Na/H adducts. These anchors are considered of higher confidence and prioritized in m/z alignment.
 
-   e. For all samples, use parallel processing; See `workflow.batch_EIC_from_samples_`.
+   e. For all samples, use parallel processing; See `process.batch_EIC_from_samples_`.
 
 3. Aignment of mass tracks across samples, resulting in the MassGrid; See `CompositeMap.construct_mass_grid`.
     

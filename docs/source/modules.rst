@@ -5,7 +5,7 @@ Module Index
     :maxdepth: 1
 
     asari_main
-    asari_analyze
+    asari_peek
     asari_annotate_user_table
     asari_chromatograms
     asari_constructors
@@ -15,4 +15,4 @@ Module Index
     asari_mass_functions
     asari_peaks
     asari_samples
-    asari_workflow
+    asari_process

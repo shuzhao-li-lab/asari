@@ -1,9 +1,9 @@
-.. asari_workflow:
+.. asari_process:
 
 .. default-domain:: py
 
-Workflow
+Process
 ======================
 
-.. automodule:: asari.workflow
+.. automodule:: asari.process
     :members:

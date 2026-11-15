@@ -1,9 +1,9 @@
-.. asari_analyze:
+.. asari_peek:
 
 .. default-domain:: py
 
-Analyze
+Peek
 ======================
 
-.. automodule:: asari.analyze
+.. automodule:: asari.peek
     :members:

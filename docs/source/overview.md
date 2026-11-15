@@ -48,7 +48,7 @@ To process all mzML files under directory mydir/projectx_dir:
 
 To get statistical description on a single file (useful to understand data and parameters):
 
-`asari analyze --input mydir/projectx_dir/file_to_analyze.mzML`
+`asari peek --input mydir/projectx_dir/file_to_peek.mzML`
 
 To get annotation on a tab delimited feature table:
 
@@ -188,7 +188,7 @@ In the container, ThermoRawFileParser is under `/usr/local/thermo/`.
 ```
 # mono /usr/local/thermo/ThermoRawFileParser.exe -d my_data_dir
 
-# asari analyze --input tmp/file_008.mzML 
+# asari peek --input tmp/file_008.mzML 
 
 # asari process --mode neg --input tmp --output test99
 ```

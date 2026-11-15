@@ -1,12 +1,12 @@
 """
+Main workflow for subcommand `process`: sample registry, mass track extraction per file,
+then project processing via ext_Experiment (renamed from workflow.py in asari 2.0).
+
 ext_Experiment is the container for whole project data.
 sample_registry is the dict to track sample information and status,
 outside class to facilitate multiprocessing.
 Heavy lifting is in constructors.CompositeMap,
     which contains MassGrid for correspondence, and FeatureList from feature/peak detection.
-
-To-do: rename to process.py
-
 
 """
 import time

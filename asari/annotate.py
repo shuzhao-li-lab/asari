@@ -220,7 +220,9 @@ class LCMS_Annotation:
     """
     def __init__(self, parameters):
         self.parameters = parameters
+        self.database_file = parameters.get('db')
 
+        
     def annotate_user_featuretable(self, infile):
         """
             Annotate a user supplied feature table. Used by asari subcommand `annotate`.
@@ -255,7 +257,7 @@ class LCMS_Annotation:
 
         Export Feature_annotation as tsv, Annotated_empricalCompounds in both JSON and pickle.
         Reference databases can be pre-loaded.
-        Measured m/z values are calibrated to database based values (db_mass_calibrate).
+        No m/z calibration here (see tools/db_mass_calibrate.py).
         """
         _n, list_features = read_features_from_asari_table(open(infile).read())
         for f in list_features:
@@ -264,7 +266,6 @@ class LCMS_Annotation:
         self.list_features = list_features
 
         self.load_annotation_db()
-        self.db_mass_calibrate()
 
         # asari uses seconds for rt
         EED = ExperimentalEcpdDatabase(mode=self.parameters['mode'],
@@ -314,40 +315,6 @@ class LCMS_Annotation:
             pkg_resources.open_binary(db, 'mass_indexed_compounds.pickle') )
         self.KCD.emp_cpds_trees = pickle.load(
             pkg_resources.open_binary(db, 'emp_cpds_trees.pickle') )
-
-    def db_mass_calibrate(self, max_features=1000, required_calibrate_threshold=0.000002):
-        """
-        Use KCD.evaluate_mass_accuracy_ratio to check systematic mass shift,
-        which is calculated as the average ppm difference between measured m/z and theoretical values.
-        If greater than required_calibrate_threshold (default 2 ppm),
-        calibrate m/z values for the whole experiment by updating self.CMAP.FeatureList.
-
-        Parameters
-        ---------
-        required_calibrate_treshold: float, optional, default: 0.000002
-            if the mass shift exceeds this value, mass correction will be applied.
-
-        Note
-        ----
-        Data format in good_reference_landmark_peaks:
-        [{'ref_id_num': 99, 'apex': 211, 'height': 999999}, ...],
-        where ref_id_num is index number of mass track in MassGrid.
-        """
-        mz_landmarks = [f['mz'] for f in self.list_features[:max_features]]
-        mass_accuracy_ratio = self.KCD.evaluate_mass_accuracy_ratio(
-            mz_landmarks, mode=self.parameters['mode'], mz_tolerance_ppm=10)
-        if mass_accuracy_ratio:
-            if abs(mass_accuracy_ratio) > required_calibrate_threshold:
-                print("Mass shift is greater than %2.1f ppm. Correction applied."
-                      %(required_calibrate_threshold*1000000))
-                _correction = mass_accuracy_ratio + 1
-                for F in self.list_features:
-                    F['mz'] = F['mz'] / _correction
-                    F['mz_corrected_by_division'] = _correction
-        else:
-            print("Mass accuracy check is skipped, too few mz_landmarks (%d) matched."
-                  %len(mz_landmarks))
-
 
     def append_orphans_to_epmCpds(self, dict_empCpds):
         """
@@ -785,7 +752,7 @@ def write_tsv_empCpd_anno(list_empCpds, dict_features, dict_lib_entries, outfile
 
 # ---------------------------------------------------------------------------
 #
-# merging with LCMS_Annotation class
+# To be merged with LCMS_Annotation class
 #
 
 

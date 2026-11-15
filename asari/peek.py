@@ -1,5 +1,5 @@
 """
-Functions for subcommand `analyze`
+Functions for subcommand `peek` (renamed from `analyze` in asari 2.0)
 """
 
 import random
@@ -13,11 +13,11 @@ from .experiment import ext_Experiment
 from .mass_functions import flatten_tuplelist
 from .utils import bulk_process
 
-def analyze_single_sample(infile,
+def peek_single_sample(infile,
             # mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000,
             parameters={}):
     """
-    Analyze single mzML file and print statistics. Used by asari subcommand `analyze`.
+    Peek into a single mzML file and print statistics. Used by asari subcommand `peek`.
     This uses ext_Experiment and default HMDB data to estimate mass accuracy.
 
     Parameters
@@ -35,7 +35,7 @@ def analyze_single_sample(infile,
     parameters : dict, optional, default: {}
         not used, just place holder to use ext_Experiment class.
     """
-    print("Analysis of %s\n" %infile)
+    print("Peek into %s\n" %infile)
     mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(
         infile, parameters, return_sample=False)
     EE = ext_Experiment({}, parameters)

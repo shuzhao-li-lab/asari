@@ -43,7 +43,7 @@ We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to
 MS/MS spectra are ignored in default LC-MS workflow but handled by alternative workflows.
 
 ### Raw data inspection and quality control
-Asari function `analyze` returns a summary on a single mzML file.
+Asari subcommand `peek` returns a summary on a single mzML file.
 
 The `tools.plot_scan_seq` module gives scan level visualization of a single mzML file. Various tools will be added over time. Single-file QC works on a single mzML file; most QC functions work on the processed full feature table.
 
@@ -148,7 +148,7 @@ To launch a dashboard in your web browser after the project is processed into di
 
 To get statistical description on a single file (useful to understand data and parameters):
 
-`asari analyze --input mydir/projectx_dir/file_to_analyze.mzML`
+`asari peek --input mydir/projectx_dir/file_to_peek.mzML`
 
 To join data from multiple feature tables using the same LC/GC-MS method:
 
@@ -311,7 +311,7 @@ In the container, ThermoRawFileParser is under `/usr/local/thermo/`.
 ```
 # mono /usr/local/thermo/ThermoRawFileParser.exe -d my_data_dir
 
-# asari analyze --input tmp/file_008.mzML 
+# asari peek --input tmp/file_008.mzML 
 
 # asari process --mode neg --input tmp --output test99
 ```
