@@ -16,26 +16,6 @@ Annotation should prioritize primary ions or neutral mass.
 Mass match alone (low level of confidence) should center on neutral mass.
 
 GC-MS data are dominated by fragments, requiring a different workflow.
-
-*******
-
-GC-HRMS annotation functions are added here.
-This does not change default --anno for LC-MS data processing; but we will unify in next version.
-
-Example use for GC-HRMS annotation:
-asari annotate -i /Users/lish/li.proj/IndiPHARM/LookAhead/GCMS/lookahead_gcms_asari13_asari_project_311234834/Feature_table.tsv \
-    -o /Users/lish/li.proj/IndiPHARM/LookAhead/GCMS/ \
-        -j v16 \
-            --kovats /Users/lish/li.proj/asari_project/GCHRMS/KovatsIndex_alkanestandards_cuimc.tsv \
-            --db /Users/lish/li.proj/asari_project/GCHRMS/Resources/GCHRMS_Database_251217.msp \
-                --denovo F --workflow GC
-
-LC:
-asari annotate -i /Users/lish/li.play/test16_v16_599432/Feature_table.tsv -o /Users/lish/li.play/test16_v16_599432/ -j v16lc --workflow LC --mode pos
-
-LC-MS/MS
-asari annotate --db /Users/lish/li.proj/Resources/MSMS-Public_experimentspectra-pos-VS19.pkl -i /Users/lish/li.play/miao_u2c_IDX028_asari_project_6512215/ms2_spectra.json -o /Users/lish/li.play/miao_u2c_IDX02/ --workflow LCMSMS
-
 """
 
 import os
@@ -45,14 +25,13 @@ import pickle
 import importlib.resources as pkg_resources
 from pathvalidate import sanitize_filename
 
+# from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 from . import db
-from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
-
-from .default_parameters import (extended_adducts, adduct_search_patterns_pos,
-                         adduct_search_patterns_neg,
-                         isotope_search_patterns)
+from .default_parameters import (PROTON, adduct_search_patterns_pos, adduct_search_patterns_neg)
 from .utils import NpEncoder
 from .tools.file_io import read_features_from_asari_table
+from .tools.match_features import list_match_lcms_features
+from .mass_functions import all_mass_paired_mapping
 from .tools.plot import mirror_plot
 from .tools.entropy_search import clean_list_ms2spectra
 from .gc_functions import *
@@ -68,9 +47,14 @@ def annotate_project(infile, parameters):
 
     if parameters['workflow'] == "LC":
         # to add deconvolute and algorithms in version 2
-        ANN = LCMS_Annotation(parameters)
-        ANN.parameters['outdir'] = outdir
-        ANN.annotate_user_featuretable(infile)
+        if parameters['search_algorithm'] not in ('mz', 'rtmz'):
+            print(f"search_algorithm {parameters['search_algorithm']} is not for LC; using 'mz'.")
+            parameters['search_algorithm'] = 'mz'
+        ANN = LCMS_Annotation(dict(parameters, outdir=outdir))
+        list_empCpds = []
+        if parameters.get('preannotation'):
+            list_empCpds = load_khipu_empCpds(parameters['preannotation'])
+        ANN.annotate_user_featuretable(infile, list_empCpds=list_empCpds)
 
     elif parameters['workflow'] == "GC":
         ANN = GCMS_Annotation(dict(parameters, outdir=outdir))
@@ -85,8 +69,6 @@ def annotate_project(infile, parameters):
 
     elif parameters['workflow'] in ("LCMSMS", "MSMS"):
         # to handle diff anno methods, including pre-annotation in version 2
-
-
 
         
         annotate_lcmsms(
@@ -214,177 +196,402 @@ def annotate_lcmsms(
 
 class LCMS_Annotation:
     """
-    Annotation of LC-MS feature tables. 
-    Use --algorithm 'rtmz' to match autentic library or MS/MS search results.
-    
+    Annotation of LC-MS feature tables by matching to known compound attributes. 
+    Most common are by m/z and retention time. 
+    When MS/MS spectra are used to in the MS/MS workflow, 
+    database matching is done there and the precursors can be matched here. 
+    When m/z is used alone, e.g. MSI level 4, error rate may be high. 
     """
     def __init__(self, parameters):
         self.parameters = parameters
-        self.database_file = parameters.get('db')
+        self.outdir = parameters['outdir']
+        self.project_name = parameters['project_name']
+
+    def load_annotation_db(self):
+        """
+        Load database. Two flavors based on parameters['search_algorithm']. 
+        The 'rtmz' format is like list of features with 'mz' and 'rtime'. 
+        The 'mz' approach is usually on compound library with neutral mass, 
+        where we will consider primary ions.  
+        """
+        
+        if self.parameters['search_algorithm'] == 'mz':
+            _default_database_ = 'core_blood_metabolites_20250212.json'
+            _database_file = self.parameters.get('db') or str(
+                pkg_resources.files(db).joinpath(_default_database_))
+            list_lib_entries = self.read_cpd_entries(_database_file)
+            
+        elif self.parameters['search_algorithm'] == 'rtmz':
+            _default_database_ = 'v3_authlib2024_hilicpos.json'
+            _database_file = self.parameters.get('db') or str(
+                pkg_resources.files(db).joinpath(_default_database_))
+            list_lib_entries = json.load(open(_database_file))
+
+        else:
+            print(f"search_algorithm {self.parameters['search_algorithm']} is not supported in LC.")
+            return None
+        
+        self.database_file = _database_file
+        return list_lib_entries
+
+    def read_cpd_entries(self, _database_file):
+        """
+        Input format example: [
+                {
+                "inchikey": "DDRJAANPRJIHGJ-UHFFFAOYSA-N",
+                "name": "Creatinine",
+                "chemical_formula": "C4H7N3O",
+                "id": "MDB0000003r1",
+                "monoisotopic_molecular_weight": 113.058911861,
+                "RTI_RP_NORMAN": 107.23, ...
+                }, ...
+        ]
+
+        Neutral mass is taken from `monoisotopic_molecular_weight` or `neutral_formula_mass`
+        (or `neutral_mass`, `monoisotopic_mass`); entries without any are skipped.
+
+        returns list of features, considering primary adducts.
+        Each adduct of a compound is a "feature", in format similar to v3_authlib2024_hilicpos.json:
+            {'id': 'MDB0000003r1_M+H+', 'mz': 114.066188, 'rtime': None, 'ion': 'M+H+', 'isotope': 'M0',
+             'name': 'Creatinine', 'identifier': 'MDB0000003r1', 'formula': 'C4H7N3O',
+             'neutral_mass': 113.058911861, 'inchikey': 'DDRJAANPRJIHGJ-UHFFFAOYSA-N'}
+        Ions are M+H+ (pos) or M-H- (neg), plus adducts from adduct_search_patterns_pos/neg
+        (relative to M+H+ or M-H-), named as khipu modifications (e.g. 'Na/H', 'ACN'),
+        so that they are comparable to khipu results. Only singly charged M0 ions are generated.
+        rtime is taken from 'rtime' if present in the entry, else None.
+        """
+        if self.parameters['mode'] == 'pos':
+            adduct_search_patterns = adduct_search_patterns_pos
+            base_ion, delta_mz = 'M+H+', PROTON
+        else:
+            adduct_search_patterns = adduct_search_patterns_neg
+            base_ion, delta_mz = 'M-H-', -PROTON
+
+        # Add M+H+ or M-H-
+        ions = [(0, base_ion)] + [(x[0], x[1]) for x in adduct_search_patterns]
+
+        with open(_database_file, encoding='utf-8') as f:
+            entries = json.load(f)
+        if isinstance(entries, dict):
+            entries = list(entries.values())
+
+        list_lib_features, num_skipped = [], 0
+        for cpd in entries:
+            neutral_mass = None
+            for k in ('monoisotopic_molecular_weight', 'neutral_formula_mass', 'neutral_mass', 'monoisotopic_mass'):
+                if cpd.get(k) not in (None, ''):
+                    neutral_mass = float(cpd[k])
+                    break
+            if neutral_mass is None:
+                num_skipped += 1
+                continue
+            cpd_id = cpd.get('id') or cpd.get('accession') or cpd.get('name')
+            for delta, ion in ions:
+                list_lib_features.append({
+                    'id': f"{cpd_id}_{ion}",
+                    'mz': round(neutral_mass + delta_mz + delta, 6),
+                    'rtime': cpd.get('rtime'),
+                    'ion': ion,
+                    'isotope': 'M0',
+                    'name': cpd.get('name', ''),
+                    'identifier': cpd_id,
+                    'formula': cpd.get('chemical_formula') or cpd.get('formula', ''),
+                    'neutral_mass': neutral_mass,
+                    'inchikey': cpd.get('inchikey', ''),
+                })
+
+        print(f"Read {len(entries) - num_skipped} compounds from {_database_file} ({num_skipped} without mass skipped), "
+              f"as {len(list_lib_features)} library features of {len(ions)} ions.")
+        return list_lib_features
+
+
+    def load_tissue_specific_lib(self):
+        """
+        To add 'csm' etc. in the future.
+
+        """
+        pass
 
         
-    def annotate_user_featuretable(self, infile):
+    def annotate_user_featuretable(self, infile, list_empCpds=None):
         """
-            Annotate a user supplied feature table. Used by asari subcommand `annotate`.
+        Annotate a user supplied feature table. Used by asari subcommand `annotate`.
 
         Parameters
         ----------
         infile : str
-            input feature table filepath, tab delimited file with first row as header,
-            first column m/z and 2nd column rtime.
-        parameters : dict
-            parameter dictionary passed from main.py,
-            which imports from default_parameters and updates the dict by user arguments.
-        rtime_tolerance : int, optional, default: 2
-            retention time tolerance to group adducts etc.
+            asari feature table (tsv).
+        list_empCpds : list, optional
+            pre-annotation from `deconvolute` (khipu_deconvolute_featuretable, <project>_list_khipus.json).
+            If given, library matches are combined within each empCpd and assigned to all its features,
+            by combine_preannotation (more common ions prioritized in conflicts).
 
-        Outputs
+        Returns
         -------
-        two files in current directory, Feature_annotation.tsv and Annotated_empricalCompounds.json
-
-
-        Note
-        ----
-        Annotate features via JMS (jms.dbStructures) and khipu.
-        The pre-annotation step is khipu based emprical compound construction, followed by
-        three steps of annotation:
-
-        1) Search known compound database, via neutral mass inferred by khipu
-
-        2) Search singletons for a formula match
-
-        3) Encapsulate remaining features in empCpd format, so that all are exported consistently.
-
-        Export Feature_annotation as tsv, Annotated_empricalCompounds in both JSON and pickle.
-        Reference databases can be pre-loaded.
-        No m/z calibration here (see tools/db_mass_calibrate.py).
+        matched_results : {feature id: [library entry id, ...], ...}
         """
-        _n, list_features = read_features_from_asari_table(open(infile).read())
-        for f in list_features:
-                f['representative_intensity'] = f['peak_area']
-        list_features.sort(key=lambda x: x['peak_area'], reverse=True)
+        with open(infile) as f:
+            _n, list_features = read_features_from_asari_table(f.read())
         self.list_features = list_features
+        list_lib_entries = self.load_annotation_db()
+        if not list_lib_entries:
+            return None
+        matched_results = self.match(list_features, list_lib_entries)
+        self.direct_matches = matched_results
+        self.dict_feature_empCpd = {}
 
-        self.load_annotation_db()
+        if list_empCpds:
+            # combine ion annotations in list_empCpds
+            matched_results, self.dict_feature_empCpd = combine_preannotation(
+                matched_results, list_empCpds, self.dict_lib_entries,
+                mode=self.parameters['mode'], mz_tolerance_ppm=self.parameters['mz_tolerance_ppm'])
 
-        # asari uses seconds for rt
-        EED = ExperimentalEcpdDatabase(mode=self.parameters['mode'],
-                                       mz_tolerance_ppm=self.parameters['mz_tolerance_ppm'],
-                                       rt_tolerance=self.parameters['khipu_rtime_tolerance']
-                                       )
-        # passing patterns from .default_parameters
-        if self.parameters['mode'] == 'pos':
-            EED.adduct_patterns = adduct_search_patterns_pos
+        self.export_feature_annotation(matched_results)
+        return matched_results
+
+
+    def match(self, list_features, list_lib_entries):
+        """
+        Use --algorithm 'rtmz' to match autentic library or MS/MS search results;
+        --algorithm 'mz' to do mz only match.
+
+        Parameters
+        ----------
+        list_features : list
+            features as dicts with 'id', 'mz', 'rtime', e.g. from read_features_from_asari_table.
+        list_lib_entries : list
+            library entries as dicts with 'id', 'mz' (and 'rtime' for 'rtmz'),
+            from load_annotation_db.
+
+        Returns
+        -------
+        dict_matched : {feature id: [library entry id, ...], ...}. Unmatched features are not included.
+            m/z tolerance is parameters['mz_tolerance_ppm'];
+            rtime tolerance (rtmz) is parameters['lc_rt_tolerance'], in seconds.
+            Library entries are kept in self.dict_lib_entries, indexed by id.
+        """
+        self.dict_lib_entries = {e['id']: e for e in list_lib_entries}
+        mz_ppm = self.parameters['mz_tolerance_ppm']
+
+        if self.parameters['search_algorithm'] == 'rtmz':
+            lib_with_rt = [e for e in list_lib_entries if e.get('rtime') not in (None, '')]
+            if len(lib_with_rt) < len(list_lib_entries):
+                print(f"{len(list_lib_entries) - len(lib_with_rt)} library entries without rtime are excluded.")
+            dict_matched = list_match_lcms_features(
+                list_features, lib_with_rt,
+                mz_ppm=mz_ppm, rt_tolerance=self.parameters['lc_rt_tolerance'])
+
+        elif self.parameters['search_algorithm'] == 'mz':
+            mapped, _, _ = all_mass_paired_mapping(
+                [f['mz'] for f in list_features], [e['mz'] for e in list_lib_entries],
+                std_ppm=mz_ppm)
+            dict_matched = {}
+            for ii, jj in mapped:
+                dict_matched.setdefault(list_features[ii]['id'], []).append(list_lib_entries[jj]['id'])
+            print(f"Of {len(list_features)} features, {len(dict_matched)} are matched by m/z.")
+
         else:
-            EED.adduct_patterns = adduct_search_patterns_neg
-        EED.isotope_search_patterns = isotope_search_patterns
-        EED.extended_adducts = extended_adducts
+            print(f"search_algorithm {self.parameters['search_algorithm']} is not supported in LC.")
+            return {}
 
-        EED.build_from_list_peaks(list_features)
-        # It takes three steps to take care of all features. First khipu organized empCpds
-        EED.extend_empCpd_annotation(self.KCD)
-        # Second, singletons that get a formula match in KCD
-        EED.annotate_singletons(self.KCD)
-        # Third, the remaining features unmatched to anything (orphans). Exported for potential downstream work.
-        EED.dict_empCpds = self.append_orphans_to_epmCpds(EED.dict_empCpds)
-
-        self.export_peak_annotation(EED.dict_empCpds, self.KCD, 'Feature_annotation')
-
-        # export JSON
-        outfile = os.path.join(self.parameters['outdir'], 'Annotated_empiricalCompounds.json')
-        with open(outfile, 'w', encoding='utf-8') as f:
-            json.dump(EED.dict_empCpds, f, cls=NpEncoder, ensure_ascii=False, indent=2)
-        print(f"JSON version was written to {outfile}.\n\n")
+        return dict_matched
 
 
-    def load_annotation_db(self, src='hmdb4'):
+    def export_feature_annotation(self, matched_results):
         """
-        Load database of known compound using jms.dbStructures.knownCompoundDatabase.
-        The compound tree is precomputed indexing.
-        The `src` parameter is not used now, but placeholder to add more options later.
+        Export feature annotation to JSON and tsv files, in self.outdir:
+        - Features_<project>.tsv, one row per matched pair of feature and library entry,
+          in the order of the input feature table; features without match are not included.
+        - Annotated_features_<project>.json, meta data and list of matched features,
+          each with all feature fields and 'matches' (library entries plus ppm and delta_rtime),
+          matches sorted by abs(ppm).
 
         Parameters
         ----------
-        src: str, optional, default: hmdb4
-            not used but can, in the future, dictate which database is used to generate annotations
-
-
+        matched_results : dict
+            {feature id: [library entry id, ...], ...}, from self.match.
+            Feature details are from self.list_features, library entries from self.dict_lib_entries.
         """
-        self.KCD = knownCompoundDatabase()
-        self.KCD.mass_indexed_compounds = pickle.load(
-            pkg_resources.open_binary(db, 'mass_indexed_compounds.pickle') )
-        self.KCD.emp_cpds_trees = pickle.load(
-            pkg_resources.open_binary(db, 'emp_cpds_trees.pickle') )
+        algorithm = self.parameters['search_algorithm']
+        list_annotated = []
+        for F in self.list_features:
+            if F['id'] not in matched_results:
+                continue
+            direct = set(getattr(self, 'direct_matches', matched_results).get(F['id'], []))
+            matches = []
+            for lib_id in matched_results[F['id']]:
+                E = dict(self.dict_lib_entries[lib_id])
+                if lib_id in direct:
+                    # ppm and delta_rtime only apply to direct matches, not those via empCpd
+                    E['match'] = 'direct'
+                    E['ppm'] = round((F['mz'] - E['mz']) / E['mz'] * 1e6, 2)
+                    if E.get('rtime') not in (None, ''):
+                        E['delta_rtime'] = round(F['rtime'] - float(E['rtime']), 2)
+                else:
+                    E['match'] = 'empCpd'
+                matches.append(E)
+            matches.sort(key=lambda x: (x['match'] != 'direct', abs(x.get('ppm', 0))))
+            F2 = dict(F, matches=matches)
+            if F['id'] in getattr(self, 'dict_feature_empCpd', {}):
+                F2['empCpd'] = getattr(self, 'dict_feature_empCpd')[F['id']]
+            list_annotated.append(F2)
 
-    def append_orphans_to_epmCpds(self, dict_empCpds):
-        """
-        This is the third step of feature annotation in self.annotate,
-        to encapsulate features without annotation in empCpd format.
-        Input via dict_empCpds and returns updated dict_empCpds.
-        See also: annotate
+        # tsv
+        lib_fields = ['id', 'name', 'identifier', 'ion', 'isotope', 'formula', 'mz', 'ppm',
+                      'rtime', 'delta_rtime', 'neutral_mass', 'inchikey']
+        empCpd_fields = ['interim_id', 'neutral_formula_mass', 'isotope', 'modification']
+        header = ['feature', 'mz', 'rtime', 'empCpd', 'empCpd_neutral_mass', 'feature_isotope', 'feature_ion',
+                  'number_of_matches', 'match'] + [
+                  'lib_' + x if x in ('id', 'mz', 'rtime') else x for x in lib_fields]
+        tsv_file = os.path.join(self.outdir, 'Features_' + self.project_name + '.tsv')
+        with open(tsv_file, 'w', encoding='utf-8') as O:
+            O.write('\t'.join(header) + '\n')
+            for F in list_annotated:
+                for E in F['matches']:
+                    emp = F.get('empCpd', {})
+                    row = [F['id'], F['mz'], F['rtime']] + [emp.get(x, '') for x in empCpd_fields] + [
+                           len(F['matches']), E['match']] + [E.get(x, '') for x in lib_fields]
+                    O.write('\t'.join(['' if x is None else str(x) for x in row]) + '\n')
 
-        Parameters
-        ----------
-        dict_empCpds: dict
-            a dictionary of empirical compounds in empCpd format
+        # JSON
+        json_file = os.path.join(self.outdir, 'Annotated_features_' + self.project_name + '.json')
+        json_export = {
+            'type': 'LCMS',
+            'database': getattr(self, 'database_file', ''),
+            'algorithm': algorithm,
+            'mode': self.parameters['mode'],
+            'mz_tolerance_ppm': self.parameters['mz_tolerance_ppm'],
+            'time_stamp': ':'.join([str(x) for x in time.localtime()[1:6]]),
+            'number_of_features': len(self.list_features),
+            'number_of_annotated_features': len(list_annotated),
+            'list_of_features': list_annotated,
+        }
+        if algorithm == 'rtmz':
+            json_export['lc_rt_tolerance'] = self.parameters['lc_rt_tolerance']
+        if getattr(self, 'dict_feature_empCpd', {}):
+            json_export['preannotation'] = self.parameters.get('preannotation', '')
+        with open(json_file, 'w', encoding='utf-8') as O:
+            json.dump(json_export, O, indent=2, ensure_ascii=False, cls=NpEncoder)
 
-        """
-        all_feature_ids = []
-        for _, V in dict_empCpds.items():
-            all_feature_ids += [peak['id_number'] for peak in V['MS1_pseudo_Spectra']]
+        print("\nDone LC-MS annotation.")
+        print(f"{len(list_annotated)} of {len(self.list_features)} features annotated, "
+              f"{sum(len(F['matches']) for F in list_annotated)} matches, written to\n  {tsv_file}\n  {json_file}\n")
 
-        orphans = [peak for peak in self.list_features if peak['id_number'] not in all_feature_ids]
-        # will need better tracking of empCpd ID; already used in jms.dbStructures new_id_start = len(self.dict_empCpds) + 10000
-        new_id_start = len(dict_empCpds) + 100000
-        for peak in orphans:
-            dict_empCpds[new_id_start] = {'interim_id': new_id_start,
-                    'neutral_formula_mass': '',
-                    'neutral_formula': '',
-                    'MS1_pseudo_Spectra': [peak],
-                    'ion_relation': None,
-                    'modification': None}
-            new_id_start += 1
 
-        return dict_empCpds
+def load_khipu_empCpds(preannotation):
+    """
+    Load list of empCpds from `deconvolute` (LC, khipu), a JSON file <project>_list_khipus.json,
+    or a deconvolution directory containing one.
+    """
+    if os.path.isdir(preannotation):
+        files = [f for f in os.listdir(preannotation) if f.endswith('_list_khipus.json')]
+        if not files:
+            raise FileNotFoundError(f"No *_list_khipus.json found in {preannotation}.")
+        preannotation = os.path.join(preannotation, files[0])
+    with open(preannotation, encoding='utf-8') as f:
+        list_empCpds = json.load(f)
+    print(f"Read {len(list_empCpds)} empCpds as pre-annotation from {preannotation}.")
+    return list_empCpds
 
-    def export_peak_annotation(self, dict_empCpds, KCD, export_file_name_prefix):
-        """
-        Export feature annotation to tab delimited tsv file, where interim_id is empCpd id.
 
-        Parameters
-        ----------
-        dict_empCpds : dict
-            dictionary of empirical compounds, using interim_id as key, as seen in JMS.
-        KCD : KnownCompoundDatabase instance
-            the known compound database that was used in annotating the empirical compounds.
-        export_file_name_prefix : str
-            to used in output file name.
-        """
-        s = "[peak]id_number\tmz\trtime\tapex(scan number)\t[EmpCpd]interim_id\
-            \t[EmpCpd]ion_relation\tneutral_formula\tneutral_formula_mass\
-            \tname_1st_guess\tmatched_DB_shorts\tmatched_DB_records\n"
+def get_ion_priority(ion, mode='pos'):
+    """
+    Rank of an ion label (lower is more common): M+H+ (or M-H-) first, 
+    then adducts in the order of adduct_search_patterns_pos/neg; others last.
+    Accepts khipu labels (e.g. 'Na/H', as in read_cpd_entries) and 
+    library labels (e.g. 'M+Na[1+]', as in v3_authlib2024_hilicpos.json).
+    """
+    if mode == 'pos':
+        labels = ['M+H+'] + [x[1] for x in adduct_search_patterns_pos]
+        aliases = {'M+H[1+]': 'M+H+', 'M+Na[1+]': 'Na/H', 'M+K[1+]': 'K/H',
+                   'M+ACN+H[1+]': 'ACN', 'M+HCOONa+H[1+]': 'NaCOOH'}
+    else:
+        labels = ['M-H-'] + [x[1] for x in adduct_search_patterns_neg]
+        aliases = {'M-H[1-]': 'M-H-', 'M-H[-]': 'M-H-', 'M+Cl[1-]': 'M+Cl-', 'M+Cl[-]': 'M+Cl-',
+                   'M+HCOO[1-]': 'M+HCOO-', 'M+FA-H[1-]': 'M+HCOO-', 'M-2H+Na[1-]': 'Na/H'}
+    ion = aliases.get(ion, ion)
+    return labels.index(ion) if ion in labels else len(labels)
 
-        for _, V in dict_empCpds.items():
-            name_1st_guess, matched_DB_shorts, matched_DB_records = '', '', ''
-            if 'list_matches' in V:
-                list_matches = V['list_matches']
-                if list_matches:
-                    name_1st_guess = KCD.mass_indexed_compounds[list_matches[0][0]]['compounds'][0]['name']
-                    matched_DB_shorts = ", ".join([ "(" + KCD.short_report_emp_cpd(xx[0]) + ")"  for xx in list_matches])
-                    matched_DB_records = ", ".join([str(xx) for xx  in list_matches])
 
-            for peak in V['MS1_pseudo_Spectra']:
-                s += '\t'.join([str(x) for x in [
-                    peak['id_number'], peak['mz'], peak['rtime'], peak['apex'],
-                    V['interim_id'], peak.get('ion_relation', ''),
-                    V['neutral_formula'], V['neutral_formula_mass'],
-                    name_1st_guess, matched_DB_shorts, matched_DB_records]]) + "\n"
+def combine_preannotation(matched_results, list_empCpds, dict_lib_entries, mode='pos', mz_tolerance_ppm=5):
+    """
+    Combine library matches with pre-annotation (empCpds from khipu, `deconvolute`), 
+    so that all features in an empCpd get the same annotation.
 
-        outfile = os.path.join(self.parameters['outdir'], export_file_name_prefix + '.tsv')
-        with open(outfile, encoding='utf-8', mode='w') as O:
-            O.write(s)
+    For each empCpd, candidate library entries are the direct matches of its features,
+    whose neutral mass is consistent with empCpd neutral_formula_mass (within mz_tolerance_ppm).
+    In conflicts, the best candidates are selected by, in order:
+        1) M0 over isotopes in library entry;
+        2) more common ions (get_ion_priority).
+    All candidates tied for best (e.g. isomers) are assigned to all features in the empCpd,
+    replacing their direct matches. 
+    If no candidate is consistent with the empCpd neutral mass (i.e. library match and khipu disagree),
+    the features keep their direct matches. Features not in any empCpd keep their direct matches.
 
-        print("\nAnnotation of %d Empirical compounds was written to %s.\n\n" %(len(dict_empCpds), outfile))
+    Parameters
+    ----------
+    matched_results : dict
+        {feature id: [library entry id, ...], ...}, direct matches.
+    list_empCpds : list
+        empCpds as from khipu_deconvolute_featuretable, with 'interim_id', 'neutral_formula_mass',
+        'MS1_pseudo_Spectra' (features with 'id', 'isotope', 'modification').
+    dict_lib_entries : dict
+        library entries indexed by id, with 'neutral_mass', 'ion', 'isotope'.
+    mode : str
+        ionization mode, 'pos' or 'neg'.
+    mz_tolerance_ppm : float
+        tolerance in checking neutral mass consistency.
+
+    Returns
+    -------
+    combined_results : {feature id: [library entry id, ...], ...}
+    dict_feature_empCpd : {feature id: {'interim_id', 'neutral_formula_mass', 'isotope', 'modification'}, ...},
+        for all features in empCpds.
+    """
+    combined_results = dict(matched_results)
+    dict_feature_empCpd = {}
+    num_annotated_empCpds, num_inconsistent = 0, 0
+    for emp in list_empCpds:
+        features = emp.get('MS1_pseudo_Spectra', [])
+        neutral_mass = emp.get('neutral_formula_mass')
+        for F in features:
+            dict_feature_empCpd[F['id']] = {
+                'interim_id': emp.get('interim_id', ''),
+                'neutral_formula_mass': neutral_mass,
+                'isotope': F.get('isotope', ''),
+                'modification': F.get('modification', ''),
+            }
+        candidates = []
+        for F in features:
+            for lib_id in matched_results.get(F['id'], []):
+                if lib_id not in candidates:
+                    candidates.append(lib_id)
+        if not candidates:
+            continue
+
+        if not neutral_mass:
+            continue
+        candidates = [x for x in candidates if dict_lib_entries[x].get('neutral_mass') and 
+                      abs(float(dict_lib_entries[x]['neutral_mass']) - neutral_mass) <= neutral_mass * mz_tolerance_ppm * 1e-6]
+        if not candidates:
+            num_inconsistent += 1
+            continue
+
+        def _rank(lib_id):
+            E = dict_lib_entries[lib_id]
+            return (E.get('isotope', 'M0') != 'M0', get_ion_priority(E.get('ion', ''), mode))
+
+        ranks = {x: _rank(x) for x in candidates}
+        best = min(ranks.values())
+        selected = [x for x in candidates if ranks[x] == best]
+        for F in features:
+            combined_results[F['id']] = selected
+        num_annotated_empCpds += 1
+
+    print(f"Pre-annotation: {num_annotated_empCpds} of {len(list_empCpds)} empCpds annotated "
+          f"({num_inconsistent} with matches inconsistent to empCpd neutral mass kept as direct matches); "
+          f"{len(combined_results)} features annotated, from {len(matched_results)} by direct match.")
+    return combined_results, dict_feature_empCpd
 
 
 #

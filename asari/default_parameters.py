@@ -87,6 +87,8 @@ PARAMETERS = {
     # for LC annotation, to update
     'check_isotope_ratio': False,
     'khipu_rtime_tolerance': 2,          # in seconds, for khipu annotation grouping of features into empirical compounds, to update
+    'preannotation': None,               # annotate LC: empCpds JSON from `deconvolute` (khipu), to combine annotation within empCpds
+    'lc_rt_tolerance': 10,               # in seconds, for matching LC-MS features to a library by m/z and rtime (annotate --search_algorithm rtmz)
 
     # default output names
     'output_feature_table': 'Feature_table.tsv',
@@ -128,11 +130,14 @@ adduct_search_patterns = adduct_search_patterns_pos = [
                             (37.955882, 'K/H'),
                             ]
 adduct_search_patterns_neg = [
-                            (21.98194, 'Na/H'), (67.987424, 'NaCOOH'),
-                            (82.0030, 'C2HF3'),
-                            (1.99566, 'F <-> OH'),
+                            (21.98194, 'Na/H'), 
+                            (67.987424, 'NaCOOH'),
+                            # (82.0030, 'C2HF3'),
+                            # (1.99566, 'F <-> OH'),
                             (41.026549, 'ACN'),
                             (37.955882, 'K/H'),
+                            (35.976678, 'M+Cl-'),       # 35Cl- (34.969402) + proton, relative to M-H-
+                            (46.005479, 'M+HCOO-'),     # formate HCOO- (44.998203) + proton
                             ]
 isotope_search_patterns = [ (1.003355, '13C/12C', (0, 0.8)),
                             (2.00671, '13C/12C*2', (0, 0.8)),

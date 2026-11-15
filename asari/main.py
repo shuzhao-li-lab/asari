@@ -335,6 +335,13 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     else:
         debug_print(to_print=f"Using default diagnosis: {parameters['diagnosis']}")
 
+    if args.preannotation:
+        parameters['preannotation'] = args.preannotation
+
+    if args.lc_rt_tolerance is not None:
+        parameters['lc_rt_tolerance'] = args.lc_rt_tolerance
+        debug_print(to_print=f"Setting lc_rt_tolerance to {parameters['lc_rt_tolerance']}")
+
     for key in ('search_algorithm', 'score_algorithm', 'deconvolution_algorithm'):
         value = getattr(args, key)
         if value:
@@ -447,7 +454,14 @@ def build_parser():
             help='nunmber of CPU cores intented to use')
     parser.add_argument('--search_algorithm', type=str,
                 choices=['reverse', 'forward', 'mz', 'rtmz', 'csm'],
-                help=f"search algorithm for annotate (default: {PARAMETERS['search_algorithm']})")
+                help=f"search algorithm for annotate (default: {PARAMETERS['search_algorithm']} for GC, mz for LC; "
+                     "LC uses mz or rtmz)")
+    parser.add_argument('--preannotation', type=str,
+                help="annotate LC: empCpds from `deconvolute` (<project>_list_khipus.json or its directory); "
+                     "library matches are combined within empCpds")
+    parser.add_argument('--lc_rt_tolerance', type=float,
+                help=f"rtime tolerance in seconds, matching LC-MS features to a library in annotate "
+                     f"--search_algorithm rtmz (default: {PARAMETERS['lc_rt_tolerance']})")
     parser.add_argument('--score_algorithm', type=str,
                 choices=['cosine', 'entropy'],
                 help=f"spectral similarity score (default: {PARAMETERS['score_algorithm']})")
