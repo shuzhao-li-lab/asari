@@ -5,7 +5,7 @@ Various functions for different workflows, within main Asari process or standalo
 - ddMS2 de novo processing
 
 Example use to matching the best to LC-MS1 features from asari:
-python3 get_ms2_data.py full_Feature_table.tsv \\
+python3 get_ms2_data.py Feature_table.tsv \\
     ../LCMS/ddMS2_hilicpos_files/ --rt_tol 30 \\
     --output_json ms2_hilicpos_asari_project_92125241.json > processing_hilicpos_ms2_log.txt
 """

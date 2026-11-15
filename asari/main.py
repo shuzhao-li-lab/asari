@@ -33,7 +33,7 @@ WORKFLOWS = {
               'annotate: search MS/MS against a pre-indexed library (--db).',
     'MSMS': 'MS/MS only. process: MS2 spectra per input file, MS1 data ignored, no m/z or RT alignment; '
             'clustered by precursor m/z, RT and similarity by default (--cluster_ms2 F to export per input file); '
-            'annotate as LCMSMS (--workflow LCMSMS on export/ms2_spectra.json).',
+            'annotate as LCMSMS (--workflow LCMSMS on ms2_spectra.json).',
     'DIMS': 'Direct infusion MS. process: MassGrid only, no RT alignment or peak detection; '
             'reports max intensity per mass track per sample.',
 }
@@ -101,12 +101,8 @@ def viz(parameters, args):
             project_desc, meta, records = read_annotation_project(datadir)
             annotation_dashboard(project_desc, meta, records)
             return
-        project_desc, cmap, Ftable, Ptable = read_project(datadir)
-        # parameters['table_for_viz'] is 'preferred' (default) or 'full', validated in update_params_from_CLI
-        if parameters.get('table_for_viz') == 'full':
-            dashboard(project_desc, cmap, Ftable, 'full')
-        else:
-            dashboard(project_desc, cmap, Ptable, 'preferred')
+        project_desc, cmap, Ftable = read_project(datadir)
+        dashboard(project_desc, cmap, Ftable)
     except ImportError:
         print("Error loading Dashboard, likely missing libraries.")
     except FileNotFoundError as e:
@@ -390,12 +386,6 @@ def update_params_from_CLI(parameters, args, debug_print=False):
         debug_print(to_print=f"Setting max_core_features to: {parameters['max_core_features']}")
 
     # set table for viz
-    if args.table_for_viz:
-        assert args.table_for_viz in {'preferred', 'full'}, "Table for viz must be either preferred or full."
-        parameters['table_for_viz'] = args.table_for_viz
-        debug_print(to_print=f"Setting table_for_viz to {parameters['table_for_viz']}")
-    else:
-        debug_print(to_print=f"Using default table_for_viz: {parameters['table_for_viz']}")
 
     # set visualization max samples
     if args.vizualization_max_samples:
@@ -521,8 +511,6 @@ def build_parser():
     parser.add_argument('--denovo_limit', type=int,
             help='Feature numbers to consider in de novo construction of empCpds (deconvolution) on GC data')
 
-    parser.add_argument('--table_for_viz', type=str,
-            help='Table to use for visualization, preferred or full')
     parser.add_argument('--vizualization_max_samples', type=int,
             help='Maximum number of samples to display in visualization')
     parser.add_argument('--workflow', type=str,

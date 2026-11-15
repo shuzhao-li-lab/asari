@@ -85,7 +85,7 @@ def msp_to_mgf(infile, outfile=None):
 
 if __name__ == "__main__":
     '''
-    Example use: python3 gnps.py full_Feature_table.tsv ms2_spectra.msp --output testing_gnps2
+    Example use: python3 gnps.py Feature_table.tsv ms2_spectra.msp --output testing_gnps2
     '''
     import argparse
     parser = argparse.ArgumentParser(description='Convert Asari LC-MS/MS result files to GNPS2 compatible formats.')

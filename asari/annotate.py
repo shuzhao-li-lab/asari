@@ -23,7 +23,7 @@ GC-HRMS annotation functions are added here.
 This does not change default --anno for LC-MS data processing; but we will unify in next version.
 
 Example use for GC-HRMS annotation:
-asari annotate -i /Users/lish/li.proj/IndiPHARM/LookAhead/GCMS/lookahead_gcms_asari13_asari_project_311234834/export/full_Feature_table.tsv \
+asari annotate -i /Users/lish/li.proj/IndiPHARM/LookAhead/GCMS/lookahead_gcms_asari13_asari_project_311234834/Feature_table.tsv \
     -o /Users/lish/li.proj/IndiPHARM/LookAhead/GCMS/ \
         -j v16 \
             --kovats /Users/lish/li.proj/asari_project/GCHRMS/KovatsIndex_alkanestandards_cuimc.tsv \
@@ -31,10 +31,10 @@ asari annotate -i /Users/lish/li.proj/IndiPHARM/LookAhead/GCMS/lookahead_gcms_as
                 --denovo F --workflow GC
 
 LC:
-asari annotate -i /Users/lish/li.play/test16_v16_599432/preferred_Feature_table.tsv -o /Users/lish/li.play/test16_v16_599432/ -j v16lc --workflow LC --mode pos
+asari annotate -i /Users/lish/li.play/test16_v16_599432/Feature_table.tsv -o /Users/lish/li.play/test16_v16_599432/ -j v16lc --workflow LC --mode pos
 
 LC-MS/MS
-asari annotate --db /Users/lish/li.proj/Resources/MSMS-Public_experimentspectra-pos-VS19.pkl -i /Users/lish/li.play/miao_u2c_IDX028_asari_project_6512215/export/ms2_spectra.json -o /Users/lish/li.play/miao_u2c_IDX02/ --workflow LCMSMS
+asari annotate --db /Users/lish/li.proj/Resources/MSMS-Public_experimentspectra-pos-VS19.pkl -i /Users/lish/li.play/miao_u2c_IDX028_asari_project_6512215/ms2_spectra.json -o /Users/lish/li.play/miao_u2c_IDX02/ --workflow LCMSMS
 
 """
 
@@ -85,6 +85,10 @@ def annotate_project(infile, parameters):
 
     elif parameters['workflow'] in ("LCMSMS", "MSMS"):
         # to handle diff anno methods, including pre-annotation in version 2
+
+
+
+        
         annotate_lcmsms(
             infile=infile,
             outdir=outdir,
@@ -209,7 +213,11 @@ def annotate_lcmsms(
 #
 
 class LCMS_Annotation:
-    """Annotation of LC-MS feature tables."""
+    """
+    Annotation of LC-MS feature tables. 
+    Use --algorithm 'rtmz' to match autentic library or MS/MS search results.
+    
+    """
     def __init__(self, parameters):
         self.parameters = parameters
 

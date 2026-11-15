@@ -74,16 +74,18 @@ def process_project(list_input_files, parameters):
     -------
     A local folder with asari processing result, e.g::
 
-        rsvstudy_asari_project_427105156
-        ├── export
-        │   ├── _mass_grid_mapping.csv
-        │   ├── cmap.pickle
-        │   └── full_Feature_table.tsv
+        rsvstudy_427105156
+        ├── README.txt
+        ├── Feature_table.tsv
         ├── pickle
-        │   ├── Blank_20210803_003.pickle
-        │   ├── ...
-        ├── preferred_Feature_table.tsv
+        │   ├── Blank_20210803_003.pickle
+        │   ├── ...
         └── project.json
+
+    With --diagnosis True, _mass_grid_mapping.csv and cmap.pickle (for viz) are added.
+    LCMSMS and MSMS workflows add ms2_spectra.json and ms2_spectra.msp
+    (or ms2_spectra_<sample>.msp per input file if --cluster_ms2 F); MSMS has no feature table.
+    There is no export/ subdirectory since asari 2.0.
 
 
     The pickle folder is removed after the processing by default.
@@ -200,18 +202,12 @@ def create_export_folders(parameters, time_stamp=None):
     parameters['outdir'] = os.path.join(parameters['outdir'], '_'.join([parameters['project_name'], time_stamp]))
 
     os.makedirs(parameters['outdir'])
-    # add additional subdirectories here.
-    for subdir in ['export']:      #, 'qaqc_reports', 'ms2_spectra']:
-        try:
-            os.mkdir(os.path.join(parameters['outdir'], subdir))
-        except FileExistsError:
-            print(f"Warning, {subdir} subdirectory already exists")
-        parameters[f'{subdir}_outdir'] = os.path.join(parameters['outdir'], subdir)
-        parameters['tmp_pickle_dir'] = os.path.join(parameters['outdir'], 'pickle')
-        try:
-            os.mkdir(parameters['tmp_pickle_dir'])
-        except FileExistsError:
-            print("Warning, pickle directory exists, this is normal in some circumstances")
+    # all outputs are under outdir (no export/ subdirectory since asari 2.0); pickle/ is temporary
+    parameters['tmp_pickle_dir'] = os.path.join(parameters['outdir'], 'pickle')
+    try:
+        os.mkdir(parameters['tmp_pickle_dir'])
+    except FileExistsError:
+        print("Warning, pickle directory exists, this is normal in some circumstances")
 
 
 def remove_intermediate_pickles(parameters):

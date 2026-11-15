@@ -10,7 +10,7 @@ import json
 import numpy as np
 import pandas as pd
 
-# import hvplot.pandas
+import hvplot.pandas
 import panel as pn
 import holoviews as hv
 
@@ -53,19 +53,28 @@ def read_project(datadir, load_sample_limit=20):
         composite map, ['_number_of_samples_', 'rt_length', 'rt_reference_landmarks', 'rt_records',
         'dict_scan_rtime', 'list_mass_tracks', 'MassGrid']
     Ftable :
-        pandas dataframe of full feature table, id_number as index. Truncated if samples more than load_sample_limit.
-    Ptable :
-        pandas dataframe of preferred feature table, same format as Ftable.
+        pandas dataframe of feature table, id_number as index. Truncated if samples more than load_sample_limit.
+
+    Files are under datadir (cmap.pickle, Feature_table.tsv);
+    projects before asari 2.0 have them under datadir/export/ (cmap.pickle, full_Feature_table.tsv),
+    which are used if present.
     """
     datadir = os.path.abspath(datadir)
     project_desc = json.load(open(os.path.join(datadir, 'project.json')))
-    cmap_file = os.path.join(datadir, 'export', 'cmap.pickle')
+    def _locate(filename, legacy_filename=None):
+        infile = os.path.join(datadir, filename)
+        legacy = os.path.join(datadir, 'export', legacy_filename or filename)
+        return legacy if not os.path.exists(infile) and os.path.exists(legacy) else infile
+    cmap_file = _locate('cmap.pickle')
     if not os.path.exists(cmap_file):
         raise FileNotFoundError(f"{cmap_file} not found. Run `asari process` with `--diagnosis True` to export data for viz.")
     cmap = pickle.load(open(cmap_file, 'rb'))
-    Ftable = read_feature_table(os.path.join(datadir, 'export', 'full_Feature_table.tsv'), load_sample_limit)
-    Ptable = read_feature_table(os.path.join(datadir, 'preferred_Feature_table.tsv'), load_sample_limit)
-    return project_desc, cmap, Ftable, Ptable
+    table_name = project_desc.get('output_feature_table', 'Feature_table.tsv')
+    table_file = _locate(table_name, 'full_' + table_name)
+    if not os.path.exists(table_file):
+        raise FileNotFoundError(f"{table_file} not found.")
+    Ftable = read_feature_table(table_file, load_sample_limit)
+    return project_desc, cmap, Ftable
 
 
 def table_to_feature_dict(Ftable, cmap, rt_list):
@@ -242,15 +251,14 @@ def prepare_rt_alignment(cmap):
 #
 # Summary panel
 #
-def get_summary_panel(project_desc, Ftable, cmap, table_name='full'):
+def get_summary_panel(project_desc, Ftable, cmap):
     """
     Get a summary panel, returns a panel.Column of multiple tabs for summary metrics.
     """
-    desc0 = "Project retrieved from %s, %d features in the %s feature table." %(project_desc['outdir'],
-                    Ftable.shape[0], table_name
-                    )
+    desc0 = "Project retrieved from %s, %d features in the feature table." %(project_desc['outdir'],
+                    Ftable.shape[0])
     html = "<h2>Data summary</h2><ul>" + desc0 + \
-            "</ul><ul>This Dashboard shows all features of varying measurement quality. We recommend to use the preferred feature table for data analysis.</ul>"
+            "</ul><ul>This Dashboard shows all features of varying measurement quality. Users can filter the feature table by QC metrics (snr, peak shape, cSelectivity, detection_counts) for data analysis.</ul>"
 
     description = pn.pane.HTML(html)
     height = 330
@@ -304,23 +312,23 @@ def get_summary_panel(project_desc, Ftable, cmap, table_name='full'):
 #
 # Dashboard
 #
-def build_dashboard(project_desc, cmap, Ftable, table_name='full'):
+def build_dashboard(project_desc, cmap, Ftable):
     """
     Build the panel based Dashboard. Returns a panel template.
 
-    Features are retrieved from Ftable (full or preferred feature table, id_number as index);
+    Features are retrieved from Ftable (feature table, id_number as index);
     mass tracks from cmap.
     """
     rt_list = [cmap['dict_scan_rtime'][ii] for ii in range(cmap['rt_length'])]
     peakDict = table_to_feature_dict(Ftable, cmap, rt_list)
     a_good_peak = find_a_good_peak(peakDict)
     track2peaks = track_to_peaks(peakDict)
-    summary = get_summary_panel(project_desc, Ftable, cmap, table_name)
+    summary = get_summary_panel(project_desc, Ftable, cmap)
 
     #
     # Feature browser
     #
-    # feature numbers present in the table (asari feature ID is 'F' + number); not continuous in preferred table
+    # feature numbers present in the table (asari feature ID is 'F' + number); may not be continuous
     feature_numbers = sorted(int(fid[1:]) for fid in peakDict)
     default_feature_number = int(a_good_peak['id_number'][1:])
     feature_num_slider = pn.widgets.DiscreteSlider(name='Feature number', options=feature_numbers,
@@ -508,12 +516,12 @@ def get_footer_sections(project_desc):
     return [project_params, disclaimer]
 
 
-def dashboard(project_desc, cmap, Ftable, table_name='full'):
+def dashboard(project_desc, cmap, Ftable):
     """
     Launch the panel based Dashboard in web browser.
     """
     print("//*Asari dashboard*//   Press Control-C to exit.")
-    pn.serve(build_dashboard(project_desc, cmap, Ftable, table_name))
+    pn.serve(build_dashboard(project_desc, cmap, Ftable))
 
 
 #
@@ -850,5 +858,5 @@ if __name__ == '__main__':
     import sys
     datadir = sys.argv[1]
 
-    project_desc, cmap, Ftable, Ptable = read_project(datadir)
+    project_desc, cmap, Ftable = read_project(datadir)
     dashboard(project_desc, cmap, Ftable)

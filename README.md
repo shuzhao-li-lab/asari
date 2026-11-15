@@ -88,14 +88,14 @@ Feature tables that already have an RI column (named `RI`, `Retention Index`, `K
 To annotate a feature table by reverse search (default; recommended for high-resolution data). Library spectra are matched to features within m/z and RI windows:
 
 ```
-asari annotate -i gc_project/export/full_Feature_table.tsv -o gc_project -j gc_anno \
+asari annotate -i gc_project/Feature_table.tsv -o gc_project -j gc_anno \
     --workflow GC --db my_GCMS_library.msp
 ```
 
 To deconvolute a feature table into pseudospectra (`--deconvolution_algorithm`: `hcl`, the default, clustering by correlation across samples and RI; `adap`, a port of ADAP-GC; or `nmf`, as in MSHub). The results are written to JSON and MSP:
 
 ```
-asari deconvolute -i gc_project/export/full_Feature_table.tsv -o gc_project -j gc_decon \
+asari deconvolute -i gc_project/Feature_table.tsv -o gc_project -j gc_decon \
     --workflow GC --deconvolution_algorithm adap
 ```
 
@@ -120,7 +120,7 @@ To use LC-MS/MS workflow to produce feature tables and MS/MS clusters:
 `asari process --mode pos --input mydir/projectx_dir --workflow LCMSMS
 `
 
-MS/MS spectra are clustered per composite mass track (default greedy clustering with consensus spectra, `ms2_cluster_method` in parameters) and exported to `export/ms2_spectra.json` and `.msp`. Use `--cluster_ms2 F` to skip clustering and export unclustered spectra per input file as `export/ms2_spectra_<sample>.msp`.
+MS/MS spectra are clustered per composite mass track (default greedy clustering with consensus spectra, `ms2_cluster_method` in parameters) and exported to `ms2_spectra.json` and `.msp`. Use `--cluster_ms2 F` to skip clustering and export unclustered spectra per input file as `ms2_spectra_<sample>.msp`.
 
 To search MS/MS agains a database:
 
@@ -134,13 +134,13 @@ To extract MS/MS spectra only, ignoring MS1 data (no mass tracks, no m/z or RT a
 `asari process --input mydir/projectx_dir -o mydir -j msms_project --workflow MSMS
 `
 
-By default, MS/MS spectra of all input files are grouped by precursor m/z (within `mz_tolerance_ppm`), then clustered on RT and spectral similarity as in LCMSMS, and exported to `export/ms2_spectra.json` and `.msp`. Use `--cluster_ms2 F` to export unclustered spectra per input file as `export/ms2_spectra_<sample>.msp`. The clustered `ms2_spectra.json` is annotated the same way as LCMSMS output (`asari annotate --workflow MSMS` or `LCMSMS`).
+By default, MS/MS spectra of all input files are grouped by precursor m/z (within `mz_tolerance_ppm`), then clustered on RT and spectral similarity as in LCMSMS, and exported to `ms2_spectra.json` and `.msp`. Use `--cluster_ms2 F` to export unclustered spectra per input file as `ms2_spectra_<sample>.msp`. The clustered `ms2_spectra.json` is annotated the same way as LCMSMS output (`asari annotate --workflow MSMS` or `LCMSMS`).
 
 Use `asari list_workflows` to see all workflows.
 
 To pre-annotate LC-MS feature table then match to a database (default HMDB for now):
 
-`asari annotate -i /Users/lish/li.play/test16_v16_599432/preferred_Feature_table.tsv -o /Users/lish/li.play/test16_v16_599432/ -j LCMSanno --workflow LC --mode pos`
+`asari annotate -i /Users/lish/li.play/test16_v16_599432/Feature_table.tsv -o /Users/lish/li.play/test16_v16_599432/ -j LCMSanno --workflow LC --mode pos`
 
 To launch a dashboard in your web browser after the project is processed into directory process_result_dir (requires `--diagnosis True` in `process`), or on an annotation directory:
 
@@ -154,7 +154,7 @@ To join data from multiple feature tables using the same LC/GC-MS method:
 
 `asari join -i pathlist.txt -o OUTDIR -j project_name`
 
-The input for `join` is a list of directories or paths to full feature tables, each a result of asari processing.
+The input for `join` is a list of project directories or paths to feature tables (`Feature_table.tsv`), each a result of asari processing.
 This uses the default `--join_algorithm composite_table_merge`.
 
 To combine GC annotation results from different runs or methods on the same feature table (e.g. reverse search, and forward search on different deconvolutions or libraries):
@@ -170,25 +170,24 @@ Please check documentation and demo notebooks for additional uses.
 A typical run of LC-MS data processing creates a project directory `<project_name>_<time stamp>` under the output directory (`-o`, default `output`). E.g. `-o mydir -j rsvstudy` may generate `mydir/rsvstudy_427105156` like this
 
     rsvstudy_427105156
-    ├── export
-    │   ├── _mass_grid_mapping.csv
-    │   ├── cmap.pickle
-    │   └── full_Feature_table.tsv
+    ├── README.txt
+    ├── Feature_table.tsv
     ├── pickle
-    │   ├── Blank_20210803_003.pickle
-    │   ├── ...
-    ├── preferred_Feature_table.tsv
+    │   ├── Blank_20210803_003.pickle
+    │   ├── ...
     └── project.json
 
-The recommended feature table is `preferred_Feature_table.tsv`. 
+There is one feature table, `Feature_table.tsv`, under the project directory (since asari 2.0; earlier versions had `preferred_Feature_table.tsv` and `export/full_Feature_table.tsv`).
 
-All peaks are kept in `export/full_Feature_table.tsv` if they meet signal (snr) and shape standards 
+All peaks are kept in `Feature_table.tsv` if they meet signal (snr) and shape standards 
 (part of input parameters but default values are fine for most people). 
 That is, if a feature is only present in one sample, it will be reported, 
 as we think this is important for applications like exposome and personalized medicine. 
-The filtering decisions are left to end users.
+The filtering decisions are left to end users, e.g. by `snr`, `goodness_fitting` (peak shape), `cSelectivity`, `detection_counts` or annotation.
 
-An example output feature table is `test/HighOnly_HILICpos_preferred_Feature_table.tsv`, which was generated by:
+With `--diagnosis True`, `_mass_grid_mapping.csv` and `cmap.pickle` (used by `asari viz`) are also written. LCMSMS and MSMS workflows write MS/MS spectra to `ms2_spectra.json` and `.msp` (or `ms2_spectra_<sample>.msp` per input file with `--cluster_ms2 F`); MSMS has no feature table.
+
+An example feature table (from an earlier version, filtered as the then preferred table) is `test/HighOnly_HILICpos_preferred_Feature_table.tsv`, which was generated by:
     `asari process -i MT202304_2phase_HILICpos -o highonly --min_peak_height 1000000`
 
 The `pickle` folder keeps intermediate files during processing.
@@ -198,9 +197,9 @@ They are removed after the processing by default, to save disk space.
 
 `asari viz --input <directory>` launches a dashboard in the web browser. The dashboard type is determined by `run` in `<directory>/project.json`.
 
-Processed results (`run: process`, LC or GC workflow). Users can inspect features, composite mass tracks, co-eluting features and RT alignment. This requires `asari process ... --diagnosis True`, which exports `export/cmap.pickle` (large, not exported by default). The dashboard uses these files under the result folder: 'project.json', 'export/cmap.pickle', 'export/full_Feature_table.tsv' and 'preferred_Feature_table.tsv'. The preferred table is used by default (`--table_for_viz full` for the full table). Thus, one can move around the folder, but modification of these files is not a good idea. Please note that pickle files are for internal use, and one should not trust pickle files from other people.
+Processed results (`run: process`, LC or GC workflow). Users can inspect features, composite mass tracks, co-eluting features and RT alignment. This requires `asari process ... --diagnosis True`, which exports `cmap.pickle` (large, not exported by default). The dashboard uses these files under the result folder: 'project.json', 'cmap.pickle' and 'Feature_table.tsv' (projects from earlier versions, with these files under `export/`, are also read). Thus, one can move around the folder, but modification of these files is not a good idea. Please note that pickle files are for internal use, and one should not trust pickle files from other people.
 
-Annotation results (`run: annotate`, GC, LCMSMS or MSMS workflow), e.g. `asari viz -i mydir/annotation_myproject_1112115116`. The dashboard reads annotated spectra from `Annotated_pseudospectra_*.json` (GC) or `*_MS2_annotation.json` (LCMSMS, MSMS). It has a summary panel (scores, matched peaks, distribution by RT/RI and m/z), and a browser of all annotations with interactive mirror plots, experimental spectrum (peaks or peaks_as_features) vs library spectrum (peaks_in_lib). Peaks matched within the annotation m/z tolerance are marked. LCMSMS annotation results from earlier versions do not include peaks; re-run `asari annotate` to view mirror plots.
+Annotation results (`run: annotate`, GC, LCMSMS or MSMS workflow), e.g. `asari viz -i mydir/myproject_annotation_1112115116`. The dashboard reads annotated spectra from `Annotated_pseudospectra_*.json` (GC) or `*_MS2_annotation.json` (LCMSMS, MSMS). It has a summary panel (scores, matched peaks, distribution by RT/RI and m/z), and a browser of all annotations with interactive mirror plots, experimental spectrum (peaks or peaks_as_features) vs library spectrum (peaks_in_lib). Peaks matched within the annotation m/z tolerance are marked. LCMSMS annotation results from earlier versions do not include peaks; re-run `asari annotate` to view mirror plots.
  
 ![viz_screen_shot](docs/source/_static/viz_screen_shot20220518.png)
 

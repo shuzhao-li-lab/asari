@@ -93,11 +93,11 @@ Mass track is used in asari, to cover full range of retention time, because alig
 
 8. Data export
 
-   The output directory by asari bears a time stamp, not to overwrite existing data. The recommended feature table is `preferred_Feature_table.tsv`. All peaks are kept in `export/full_Feature_table.tsv`. Annotation is exported into both JSON and tsv formats. See `experiment.ext_Experiment.export_peak_annotation`. MassGrid is exported as a csv file. The composite map is exported as a pickle file, which is used by the visual dashboard. 
+   The output directory by asari bears a time stamp, not to overwrite existing data. All peaks are kept in one feature table, `Feature_table.tsv`, under the result folder; users filter by QC metrics as needed. Annotation is exported into both JSON and tsv formats. See `experiment.ext_Experiment.export_peak_annotation`. MassGrid is exported as a csv file. The composite map is exported as a pickle file, which is used by the visual dashboard. 
 
 9. The asari dashboard for data inpsection
 
-   The dashboard is built using panel (https://panel.holoviz.org/). The dashboard uses these files under the result folder: 'project.json', 'export/cmap.pickle', 'export/epd.pickle' and 'export/full_Feature_table.tsv'. Multiple summary and QC metrics are plotted in one panel with multiple tabs.
+   The dashboard is built using panel (https://panel.holoviz.org/). The dashboard uses these files under the result folder: 'project.json', 'cmap.pickle' (with `--diagnosis True`) and 'Feature_table.tsv'. Multiple summary and QC metrics are plotted in one panel with multiple tabs.
 
    The Feature browser displays a feature on a single composite mass track as a scatter plot. It is important that asari does not use smoothed data for visual inspection, which may be misleading. The mass track viewer is similar to Feature browser, but displays information on all features that are found on a composite mass track.
 

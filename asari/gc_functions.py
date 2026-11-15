@@ -11,11 +11,11 @@ Example use:
 
 asari process -i mydir/projectx_dir -o test/ --workflow GC --kovats KovatsIndex_alkanestandards_cuimc.tsv
 
-asari annotate -i project_311234834/export/full_Feature_table.tsv -o project_311234834 \
+asari annotate -i project_311234834/Feature_table.tsv -o project_311234834 \
     --workflow GC  --search_algorithm reverse
     --db GCHRMS_Database_251217.msp
 
-asari deconvolute -i project_311234834/export/full_Feature_table.tsv -o project_311234834 --deconvolution_algorithm hcl --workflow GC
+asari deconvolute -i project_311234834/Feature_table.tsv -o project_311234834 --deconvolution_algorithm hcl --workflow GC
 
 asari annotate -i project_311234834/v19h_denovo_pseudospectra.json -o project_311234834 \
     --workflow GC  --search_algorithm forward --highres False
@@ -382,7 +382,7 @@ def check_RI_presence(infile):
 def read_feature_table_has_RI(infile, data_start_col=12):
     """
     Read an asari feature table (tsv) that already has a retention index column
-    (detected by check_RI_presence), e.g. one column more than full_Feature_table.tsv.
+    (detected by check_RI_presence), e.g. one column more than Feature_table.tsv.
     Returns list_features (sorted by peak_area, descending; with 'RI' from the table)
     and feature_dataframe (sample intensities, indexed by feature ID).
     Missing RI values are set to None.
@@ -422,7 +422,7 @@ def read_feature_table_has_RI(infile, data_start_col=12):
 
 def read_feature_table_and_kovats(infile, KovatsIndex_file=None, frac=0.3, data_start_col=11):
     """
-    Read an asari full_Feature_table.tsv.
+    Read an asari Feature_table.tsv.
     Returns list_features (sorted by peak_area, descending; with 'RI' if KovatsIndex_file),
     feature_dataframe (sample intensities, indexed by feature ID) and ri_model (or None).
     """

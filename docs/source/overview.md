@@ -76,24 +76,23 @@ Output
 ------
 A typical run on disk may generatae a directory like this
 
-    rsvstudy_asari_project_427105156
-    ├── export
-    │   ├── _mass_grid_mapping.csv
-    │   ├── cmap.pickle
-    │   └── full_Feature_table.tsv
+    rsvstudy_427105156
+    ├── README.txt
+    ├── Feature_table.tsv
     ├── pickle
-    │   ├── Blank_20210803_003.pickle
-    │   ├── ...
-    ├── preferred_Feature_table.tsv
+    │   ├── Blank_20210803_003.pickle
+    │   ├── ...
     └── project.json
 
-The recommended feature table is `preferred_Feature_table.tsv`. 
+There is one feature table, `Feature_table.tsv`, under the project directory (since asari 2.0; earlier versions had `preferred_Feature_table.tsv` and `export/full_Feature_table.tsv`).
 
-All peaks are kept in `export/full_Feature_table.tsv` if they meet signal (snr) and shape standards 
+All peaks are kept in `Feature_table.tsv` if they meet signal (snr) and shape standards 
 (part of input parameters but default values are fine for most people). 
 That is, if a feature is only present in one sample, it will be reported, 
 as we think this is important for applications like exposome and personalized medicine. 
-The filtering decisions are left to end users.
+The filtering decisions are left to end users, e.g. by `snr`, `goodness_fitting` (peak shape), `cSelectivity`, `detection_counts` or annotation.
+
+With `--diagnosis True`, `_mass_grid_mapping.csv` and `cmap.pickle` (used by `asari viz`) are also written. LCMSMS and MSMS workflows write MS/MS spectra to `ms2_spectra.json` and `.msp` (or `ms2_spectra_<sample>.msp` per input file with `--cluster_ms2 F`); MSMS has no feature table.
 
 The `pickle` folder keeps intermediate files during processing.
 They are removed after the processing by default, to save disk space.
@@ -102,7 +101,7 @@ Users can choose to keep them by specifying `--pickle True`.
 
 Dashboard
 ---------
-After data are processed, users can use `asari viz --input process_result_dir` to launch a dashboard to inspect data, where 'process_result_dir' refers to the result folder. The dashboard uses these files under the result folder: 'project.json', 'export/cmap.pickle', 'export/full_Feature_table.tsv' and 'preferred_Feature_table.tsv'. Thus, one can move around the folder, but modification of these files is not a good idea. Please note that pickle files are for internal use, and one should not trust pickle files from other people.
+After data are processed, users can use `asari viz --input process_result_dir` to launch a dashboard to inspect data, where 'process_result_dir' refers to the result folder. This requires `asari process ... --diagnosis True`. The dashboard uses these files under the result folder: 'project.json', 'cmap.pickle' and 'Feature_table.tsv'. Thus, one can move around the folder, but modification of these files is not a good idea. Please note that pickle files are for internal use, and one should not trust pickle files from other people.
  
 ![viz_screen_shot](_static/viz_screen_shot20220518.png)
 

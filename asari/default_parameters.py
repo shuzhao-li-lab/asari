@@ -98,7 +98,6 @@ PARAMETERS = {
     # dashboard parameters
     'join_algorithm': 'composite_table_merge',  # `join`: composite_table_merge (feature tables) or annotation_combine (GC annotations)
     'combine_inchikey_block': 1,         # annotation_combine: InChIKey blocks to match compounds (1 = skeleton, 3 = full key)
-    'table_for_viz': 'preferred',
     'vizualization_max_samples': 20,
     #
     'compress': False,       # not use compress option. "join" solves the problem by splitting job
@@ -165,12 +164,12 @@ extended_adducts = [(1.0078, 'H'),
 # to include in export for end users
 # process output; will add annotate output
 readme_doc_str = """
-The recommended feature table is `preferred_Feature_table.tsv`. 
+The feature table is `Feature_table.tsv`. 
 
-All peaks are kept in `export/full_Feature_table.tsv` 
-if they meet signal (snr) and shape standards 
+All peaks are kept if they meet signal (snr) and shape standards 
 (part of input parameters but default values are fine for most people). 
-The filtering decisions are left to end users.
+The filtering decisions are left to end users, 
+e.g. by snr, goodness_fitting (peak shape), cSelectivity, detection_counts or annotation.
 
 The processing parameters and history are in `project.json`.
 

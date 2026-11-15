@@ -488,20 +488,26 @@ def collect_rt_calibration_features(list_features, min_area, min_snr=10):
     return selected
 
 
-def verify_path_list(file_list_paths, filename_contains='Feature_table.tsv', dir_contains='export/'):
+def verify_path_list(file_list_paths, filename_contains='Feature_table.tsv'):
     """
-    file_list_paths : a text file containing list of paths, one per line
-    If not specified, assume full_Feature_table.tsv from Asari is to be used.
+    file_list_paths : a text file containing list of paths, one per line,
+    each a feature table or an asari project directory.
+    For a directory, Feature_table.tsv in it is used
+    (or export/full_Feature_table.tsv, as in projects before asari 2.0).
     """
     new = []
     for line in open(file_list_paths).read().splitlines():
-        if line.strip():
+        line = line.strip()
+        if line:
             if filename_contains in line:
                 new.append(line)
-            elif dir_contains in line:
-                new.append(os.path.join(line, 'full_Feature_table.tsv'))
             else:
-                new.append(os.path.join(line, 'export', 'full_Feature_table.tsv'))
+                infile = os.path.join(line, 'Feature_table.tsv')
+                if not os.path.exists(infile):
+                    legacy = os.path.join(line, 'export', 'full_Feature_table.tsv')
+                    if os.path.exists(legacy):
+                        infile = legacy
+                new.append(infile)
     return new
 
 def read_table_to_json(feature_table_file):

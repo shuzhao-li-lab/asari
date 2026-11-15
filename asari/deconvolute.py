@@ -22,8 +22,8 @@ def deconvolute_project(infile, parameters):
     os.makedirs(outdir, exist_ok=True)
     print(f"Result directory: {outdir}.\n\n")
 
-    if parameters['workflow'] == "LC":
-        # to add deconvolute and algorithms in version 2
+    if parameters['workflow'] == "LC" or parameters['workflow'] == "LCMSMS":
+        # deconvolute LC-MS using khipu
         print("To be implemented.")
 
     elif parameters['workflow'] == "GC":
@@ -34,8 +34,8 @@ def deconvolute_project(infile, parameters):
         json_output_file = os.path.join(outdir, parameters['project_name'] + '_denovo_pseudospectra.json')
         write_list_pseudospectra(list_pseudospectra, json_output_file)
 
-    elif parameters['workflow'] == "LCMSMS":
-       print("To be implemented.")
+    else:
+       print("deconvolute applies to LC, LCMSMS or GC workflow.")
 
     with open(os.path.join(outdir, 'project.json'), 'w', encoding='utf-8') as f:
         json.dump(parameters, f, cls=NpEncoder, ensure_ascii=False, indent=2)

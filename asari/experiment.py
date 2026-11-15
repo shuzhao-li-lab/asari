@@ -239,49 +239,14 @@ class ext_Experiment:
 
     def export_all(self, diagnosis=False):
         """
-        Export all files.
-        Annotation of features to empirical compounds is done here.
+        Export feature table for LCMS, LCMSMS, GCMS; MS/MS spectra for MSMS, LCMSMS.
 
         Parameters
         ----------
         diagnosis: bool, optional, default: True
             if true, export CMAP pickle for diagnosis and viz
         """
-        if self.parameters['workflow'] in ["LC", "GC"]:
-            self.CMAP.MassGrid.to_csv(
-                os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
-            if diagnosis:
-                self.export_CMAP_pickle()
-
-            self.export_feature_tables()
-            self.export_log()
-            self.export_readme()
-
-        elif self.parameters['workflow'] == "DIMS":
-            self.CMAP.MassGrid.to_csv(
-                os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
-            if diagnosis:
-                # add later
-                pass
-            self.export_feature_tables()
-            self.export_log()
-            self.export_readme()
-
-        elif self.parameters['workflow'] == "LCMSMS":
-            # annotation will be separate step
-            self.CMAP.MassGrid.to_csv(
-                os.path.join(self.parameters['outdir'], 'export', self.parameters['mass_grid_mapping']) )
-
-            self.export_feature_tables()
-            if self.parameters.get('cluster_ms2', True):
-                self.export_clustered_ms2()
-            else:
-                self.export_ms2_per_sample()
-
-            self.export_log()
-            self.export_readme()
-
-        elif self.parameters['workflow'] == "MSMS":
+        if self.parameters['workflow'] == "MSMS":
             if self.parameters.get('cluster_ms2', True):
                 self.export_clustered_ms2(self.ms2_precursor_groups,
                                           track_label='precursor_group', id_prefix='precursor')
@@ -292,8 +257,21 @@ class ext_Experiment:
                 }
                 self.export_ms2_per_sample(dict_sample_spectra)
 
-            self.export_log()
-            self.export_readme()
+        else:
+            if self.parameters['workflow'] == "LCMSMS":
+                if self.parameters.get('cluster_ms2', True):
+                    self.export_clustered_ms2()
+                else:
+                    self.export_ms2_per_sample()
+            if diagnosis:
+                self.CMAP.MassGrid.to_csv(
+                                    os.path.join(self.parameters['outdir'], self.parameters['mass_grid_mapping']) )
+                self.export_CMAP_pickle()
+
+            self.export_feature_tables()
+
+        self.export_log()
+        self.export_readme()
 
     @staticmethod
     def _format_ms2_spectrum(spec, track, spec_id, track_label='parent_masstrack'):
@@ -314,7 +292,7 @@ class ext_Experiment:
     def export_clustered_ms2(self, tracks=None, track_label='parent_masstrack', id_prefix='track'):
         """
         Export clustered MS/MS spectra (cluster representatives per composite mass track,
-        or per precursor group in MSMS workflow) to export/ms2_spectra.json and export/ms2_spectra.msp.
+        or per precursor group in MSMS workflow) to ms2_spectra.json and ms2_spectra.msp under outdir.
 
         tracks : dict of tracks with clustered 'ms2_spectra'; default self.CMAP.composite_mass_tracks.
         """
@@ -327,7 +305,7 @@ class ext_Experiment:
                 _list_ms2_spectra.append(
                     self._format_ms2_spectrum(spec, mt, f"{id_prefix}_{mt['mz']:.4f}_clus{ii}", track_label))
 
-        outfile = os.path.join(self.parameters['outdir'], 'export', 'ms2_spectra')
+        outfile = os.path.join(self.parameters['outdir'], 'ms2_spectra')
         with open(outfile + '.json', 'w', encoding='utf-8') as f:
             json.dump(_list_ms2_spectra, f, cls=NpEncoder, ensure_ascii=False)
         json_ms2_to_msp(_list_ms2_spectra, outfile + '.msp')
@@ -335,7 +313,7 @@ class ext_Experiment:
 
     def export_ms2_per_sample(self, dict_sample_spectra=None):
         """
-        Export unclustered MS/MS spectra per input file, to export/ms2_spectra_<sample>.msp
+        Export unclustered MS/MS spectra per input file, to ms2_spectra_<sample>.msp under outdir
         (MSP only, to save disk space).
         Each spectrum carries precursor_mz, rtime (seconds, as in input file),
         and the composite mass track it is assigned to (parent_masstrack_id, parent_masstrack_mz).
@@ -358,7 +336,7 @@ class ext_Experiment:
                 for ii, (spec, mt) in enumerate(specs)
             ]
             json_ms2_to_msp(_list_ms2_spectra,
-                            os.path.join(self.parameters['outdir'], 'export', f"ms2_spectra_{sample}.msp"))
+                            os.path.join(self.parameters['outdir'], f"ms2_spectra_{sample}.msp"))
         print("Exported unclustered MS/MS spectra of %d samples." %len(dict_sample_spectra))
 
     def export_CMAP_pickle(self):
@@ -402,73 +380,50 @@ class ext_Experiment:
             'list_mass_tracks': self.CMAP.composite_mass_tracks,
             'MassGrid': dict(self.CMAP.MassGrid),
         }
-        outfile = os.path.join(self.parameters['outdir'], 'export', 'cmap.pickle')
+        outfile = os.path.join(self.parameters['outdir'], 'cmap.pickle')
         with open(outfile, 'wb') as f:
             pickle.dump(_export, f, pickle.HIGHEST_PROTOCOL)
 
-    def export_feature_tables(self, _snr=2, _peak_shape=0.7, _cSelectivity=0.7):
+    def export_feature_tables(self):
         """
-        To export multiple features tables.
-        Filtering parameters (_snr, _peak_shape, _cSelectivity) only apply to preferred table.
-        Full table is filtered by initial peak detection parameters,
-        which contains lower values of snr and gaussian_shape.
-
-        Parameters
-        ----------
-        _snr: float, optional, default: 2
-            signal to noise ratio, peaks must have SNR above this value to be a preferred feature
-        _peak_shape: float, optional, default: 0.7
-            the goodness fitting for a peak must be above this value to be a preferred feature
-        _cSelectivity: float, optional, default: 0.7
-            the cSelectivity of a peak must be above this value to be a preferred feature
+        To export Full feature table, where users can filter by QC parameters, e.g. snr and detection count, or annotation. 
+        No longer porting multiple tables after Asari 2.0. 
+        Full table is still filtered by initial peak detection parameters (snr and gaussian_shape).
 
         Outputs
         -------
-        Multiple features tables under output directory:
-        1. preferred table under `outdir`, after quality filtering
-           by SNR, peak shape and chromatographic selectivity.
-        2. full table under `outdir/export/`
+        Full feature table under `outdir`. 
         """
         if self.parameters['drop_unaligned_samples']:
             good_samples = [sample.name for sample in self.all_samples if sample.is_rt_aligned]
         else:
             good_samples = [sample.name for sample in self.all_samples]
-        filtered_FeatureTable = self.CMAP.FeatureTable[good_samples]          # this fixes order of samples
+        _FeatureTable = self.CMAP.FeatureTable[good_samples]          # this fixes order of samples
         self.number_of_samples = number_of_samples = len(good_samples)
         self.dropped_sample_names = [sample.name for sample in self.all_samples
                                      if sample.name not in good_samples]     # samples dropped due to alignment or quality
         # non zero counts
-        count = filtered_FeatureTable[filtered_FeatureTable>1].count(axis='columns')
+        count = _FeatureTable[_FeatureTable>1].count(axis='columns')
         self.CMAP.FeatureTable['detection_counts'] = count
 
         use_cols = [ 'id_number', 'mz', 'rtime', 'rtime_left_base', 'rtime_right_base', 'parent_masstrack_id',
                     'peak_area', 'cSelectivity', 'goodness_fitting', 'snr', 'detection_counts' ] + good_samples
-        filtered_FeatureTable = self.CMAP.FeatureTable[use_cols].copy()
+        _FeatureTable = self.CMAP.FeatureTable[use_cols].copy()
         # sample intensities as integers, to save disk space in .tsv
-        filtered_FeatureTable[good_samples] = filtered_FeatureTable[good_samples].fillna(0).round().astype(np.int64)
-        filtered_FeatureTable['mz'] = filtered_FeatureTable['mz'].round(4)
-        filtered_FeatureTable['rtime'] = filtered_FeatureTable['rtime'].round(2)
-        filtered_FeatureTable['rtime_left_base'] = filtered_FeatureTable['rtime_left_base'].round(2)
-        filtered_FeatureTable['rtime_right_base'] = filtered_FeatureTable['rtime_right_base'].round(2)
-        filtered_FeatureTable['cSelectivity'] = filtered_FeatureTable['cSelectivity'].round(2)
-        filtered_FeatureTable['goodness_fitting'] = filtered_FeatureTable['goodness_fitting'].round(2)
+        _FeatureTable[good_samples] = _FeatureTable[good_samples].fillna(0).round().astype(np.int64)
+        _FeatureTable['mz'] = _FeatureTable['mz'].round(4)
+        _FeatureTable['rtime'] = _FeatureTable['rtime'].round(2)
+        _FeatureTable['rtime_left_base'] = _FeatureTable['rtime_left_base'].round(2)
+        _FeatureTable['rtime_right_base'] = _FeatureTable['rtime_right_base'].round(2)
+        _FeatureTable['cSelectivity'] = _FeatureTable['cSelectivity'].round(2)
+        _FeatureTable['goodness_fitting'] = _FeatureTable['goodness_fitting'].round(2)
         if self.parameters['workflow'] == "GC" and self.parameters.get('kovats'):
-            filtered_FeatureTable = self.add_retention_index(filtered_FeatureTable)
+            _FeatureTable = self.add_retention_index(_FeatureTable)
 
-        outfile = os.path.join(self.parameters['outdir'], 'export', 'full_'+self.parameters['output_feature_table'])
-        filtered_FeatureTable.to_csv(outfile, index=False, sep="\t")
+        outfile = os.path.join(self.parameters['outdir'], self.parameters['output_feature_table'])
+        _FeatureTable.to_csv(outfile, index=False, sep="\t")
         print("\nFeature table (%d x %d) was written to %s." %(
-                                filtered_FeatureTable.shape[0], number_of_samples, outfile))
-
-        outfile = os.path.join(self.parameters['outdir'], 'preferred_'+self.parameters['output_feature_table'])
-        # Some features can have all 0s, filtered here
-        filtered_FeatureTable = filtered_FeatureTable[  filtered_FeatureTable['detection_counts'] > 0 ]
-        filtered_FeatureTable = filtered_FeatureTable[  filtered_FeatureTable['snr']>_snr][
-                                                        filtered_FeatureTable['goodness_fitting']>_peak_shape][
-                                                        filtered_FeatureTable['cSelectivity']>_cSelectivity ]
-        filtered_FeatureTable.to_csv(outfile, index=False, sep="\t")
-        print("\nFiltered Feature table (%d x %d) was written to %s.\n" %(
-                                filtered_FeatureTable.shape[0], number_of_samples, outfile))
+                                _FeatureTable.shape[0], number_of_samples, outfile))
 
 
     def add_retention_index(self, feature_table):
@@ -508,6 +463,10 @@ class ext_Experiment:
         outfile = os.path.join(self.parameters['outdir'], 'README.txt')
         with open(outfile, 'w', encoding='utf-8') as f:
             f.write(readme_doc_str)
+
+
+
+
 
 
     #

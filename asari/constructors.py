@@ -920,7 +920,7 @@ class CompositeMap:
         reference_sample_name = self.reference_sample.name
 
         # example: batch14_MT_20210808_087_mz_rtime_landmarks.csv
-        reference_path = os.path.join(self.experiment.parameters['outdir'], 'export', reference_sample_name + '_mz_rtime_landmarks.csv')
+        reference_path = os.path.join(self.experiment.parameters['outdir'], reference_sample_name + '_mz_rtime_landmarks.csv')
         with open(reference_path, 'w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(["mz", "rtime"])  #  headers
