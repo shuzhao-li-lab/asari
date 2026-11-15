@@ -756,54 +756,6 @@ def write_tsv_empCpd_anno(list_empCpds, dict_features, dict_lib_entries, outfile
 #
 
 
-def annotate_user_featuretable(infile, parameters):
-    """
-
-    Annotate a user supplied feature table. Used by asari subcommand `annotate`.
-
-    Parameters
-    ----------
-    infile : str
-        input feature table filepath, tab delimited file with first row as header,
-        first column m/z and 2nd column rtime.
-    parameters : dict
-        parameter dictionary passed from main.py,
-        which imports from default_parameters and updates the dict by user arguments.
-    rtime_tolerance : int, optional, default: 2
-        retention time tolerance to group adducts etc.
-
-    Outputs
-    -------
-    _PreAnnotated_list_khipus.json
-
-    # currently redundant w/ --anno, but to be unified in next version.
-    """
-    from khipu.extended import peaklist_to_khipu_list
-
-    mode = parameters['mode']
-    if mode == 'pos':
-        adduct_search_patterns = adduct_search_patterns_pos
-    else:
-        adduct_search_patterns = adduct_search_patterns_neg
-    _n, list_features = read_features_from_asari_table(open(infile).read())
-    for f in list_features:
-            f['representative_intensity'] = f['peak_area']
-    list_khipus, all_assigned_fids = peaklist_to_khipu_list(
-                            list_features,
-                            isotope_search_patterns=isotope_search_patterns,
-                            adduct_search_patterns=adduct_search_patterns,
-                            extended_adducts=extended_adducts,
-                            mz_tolerance_ppm=parameters['mz_tolerance_ppm'],
-                            rt_tolerance=parameters['khipu_rtime_tolerance'],
-                            mode=mode,
-                            charges=[1, 2, 3],
-                            )
-    #  exporting JSON
-    json_output_file = os.path.join(parameters['outdir'],
-                                    parameters['project_name']+'_PreAnnotated_list_khipus.json')
-    with open(json_output_file, 'w', encoding='utf-8') as f:
-        json.dump(list_khipus, f, cls=NpEncoder, ensure_ascii=False, indent=2)
-
 
 def annoate_by_standards(list_features, cpdLib):
     """Match features to a library of compound standards by m/z and rtime."""

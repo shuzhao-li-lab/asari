@@ -2,16 +2,19 @@
 Functions for subcommand `deconvolute`
 
 Supports LC and GC after ver 2.0.
-
 Will add MS/MS deconvolution in long future.
-
-
 """
 import os
 import json
 import time
+from khipu.extended import (peaklist_to_khipu_list, export_empCpd_khipu_list, export_khipu_table)
+from khipu.utils import make_peak_dict
 from .utils import NpEncoder
+from .tools.file_io import read_features_from_asari_table
 from .gc_deconvolution import *
+from .default_parameters import (
+        PROTON, adduct_search_patterns_pos, adduct_search_patterns_neg, isotope_search_patterns, extended_adducts
+)
 
 
 def deconvolute_project(infile, parameters):
@@ -24,7 +27,9 @@ def deconvolute_project(infile, parameters):
 
     if parameters['workflow'] == "LC" or parameters['workflow'] == "LCMSMS":
         # deconvolute LC-MS using khipu
-        print("To be implemented.")
+        json_output_file = os.path.join(outdir, parameters['project_name']+'_list_khipus.json')
+        khipu_deconvolute_featuretable(infile, parameters, json_output_file)
+        print(f"Results were written to {json_output_file} and .tsv.")
 
     elif parameters['workflow'] == "GC":
         list_features, feature_dataframe, ri_model = ingest_gc_featuretable(infile, parameters)
@@ -40,6 +45,10 @@ def deconvolute_project(infile, parameters):
     with open(os.path.join(outdir, 'project.json'), 'w', encoding='utf-8') as f:
         json.dump(parameters, f, cls=NpEncoder, ensure_ascii=False, indent=2)
 
+
+# ---------------------------------------------------------------------------
+# GC-MS deconvolution 
+# ---------------------------------------------------------------------------
 
 def ingest_gc_featuretable(infile, parameters):
     """Read a GC feature table with RI, from an RI column or a Kovats standards file.
@@ -75,3 +84,72 @@ def run_gc_deconvolution(list_features, feature_dataframe, ri_model, method):
     list_pseudospectra, core_features = runs[method]()
     print(f"Got {len(list_pseudospectra)} pseudospectra, {len(core_features)} core features.")
     return list_pseudospectra, core_features
+
+
+# ---------------------------------------------------------------------------
+# LC-MS deconvolution using Khipu
+# ---------------------------------------------------------------------------
+
+
+def khipu_deconvolute_featuretable(infile, parameters, json_output_file):
+    """
+    LC-MS deconvolution using Khipu, grouping isotopes and adducts of the same compound
+    into empirical compounds (empCpds). No database is used.
+
+    Parameters
+    ----------
+    infile : str
+        input feature table filepath, asari format (Feature_table.tsv),
+        tab delimited with header; columns id, mz, rtime, ..., parent_masstrack_id, peak_area, ...
+    parameters : dict
+        parameter dictionary passed from main.py,
+        which imports from default_parameters and updates the dict by user arguments.
+        Uses mode, mz_tolerance_ppm and khipu_rtime_tolerance (seconds).
+    json_output_file : str
+        output JSON filepath. A tsv of the same name is also written.
+
+    Outputs
+    -------
+    JSON, list of empCpds (khipu format, with MS1_pseudo_Spectra, neutral_formula_mass etc);
+    tsv, one row per feature, with empCpd assignment, isotope, modification and ion_relation;
+    features not in any khipu are listed as singletons.
+
+    Returns
+    -------
+    list of empCpds.
+    """
+    mode = parameters['mode']
+    if mode == 'pos':
+        adduct_search_patterns = adduct_search_patterns_pos
+        singleton_ion, delta_mz = 'M+H+', PROTON
+    else:
+        adduct_search_patterns = adduct_search_patterns_neg
+        singleton_ion, delta_mz = 'M-H-', -PROTON
+
+    with open(infile) as f:
+        _n, list_features = read_features_from_asari_table(f.read())
+    for f in list_features:
+        f['representative_intensity'] = f['peak_area']
+    peak_dict = make_peak_dict(list_features)
+
+    list_khipus, _ = peaklist_to_khipu_list(
+                            list_features,
+                            isotope_search_patterns=isotope_search_patterns,
+                            adduct_search_patterns=adduct_search_patterns,
+                            extended_adducts=extended_adducts,
+                            mz_tolerance_ppm=parameters['mz_tolerance_ppm'],
+                            rt_tolerance=parameters['khipu_rtime_tolerance'],
+                            check_isotope_ratio=parameters['check_isotope_ratio'],
+                            mode=mode,
+                            charges=[1, 2, 3],
+                            has_parent_masstrack=True,
+                            )
+    empCpds = export_empCpd_khipu_list(list_khipus)
+    num_in_khipus = sum(len(E['MS1_pseudo_Spectra']) for E in empCpds)
+    print(f"Got {len(empCpds)} khipus, with {num_in_khipus} of {len(list_features)} features; "
+          f"the rest are singletons in the tsv.")
+
+    with open(json_output_file, 'w', encoding='utf-8') as f:
+        json.dump(empCpds, f, cls=NpEncoder, ensure_ascii=False, indent=2)
+    export_khipu_table(json_output_file.replace('.json', '.tsv'), peak_dict, empCpds, singleton_ion, delta_mz)
+    return empCpds

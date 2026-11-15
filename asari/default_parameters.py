@@ -85,7 +85,6 @@ PARAMETERS = {
     'lcmsms_ms2_tolerance_in_da': 0.01,  # da tolerance for MS/MS peak matching in LCMSMS annotation
 
     # for LC annotation, to update
-
     'check_isotope_ratio': False,
     'khipu_rtime_tolerance': 2,          # in seconds, for khipu annotation grouping of features into empirical compounds, to update
 
@@ -115,7 +114,7 @@ PARAMETERS = {
 
 
 #
-# From khipu.utils. Placed here so that people can customize within asari.
+# From khipu.utils. Placed here for convenience and examples.
 #
 PROTON = 1.00727646677
 electron = 0.000549
