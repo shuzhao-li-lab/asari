@@ -18,6 +18,8 @@ Every member is a plain numeric array; nothing is executed on load.
     frag_mz            float32 (p,)    same peaks sorted by m/z across the library
     frag_intensity     float32 (p,)
     frag_spec          uint32  (p,)    spectrum of each fragment-sorted peak
+    weight_power       float32 (n,)    optional, entropy weighting exponent per spectrum
+                                       (1.0 if unweighted), to recover unweighted intensities
     metadata_json      uint8   (b,)    optional, concatenated UTF-8 JSON objects
     metadata_offsets   int64   (n+1,)  optional
 
@@ -33,7 +35,7 @@ import numpy as np
 
 from . import __version__
 from .preprocess import (clean_spectra, entropy_weight, expand_ranges, offsets_from_ids,
-                         pack_peaks, spectrum_ids)
+                         pack_peaks, spectrum_ids, unweight)
 
 FORMAT_NAME = 'ms2batch.spectral_index'
 FORMAT_VERSION = 1
@@ -55,6 +57,7 @@ ARRAY_DTYPES = {
     'frag_mz': np.float32,
     'frag_intensity': np.float32,
     'frag_spec': np.uint32,
+    'weight_power': np.float32,
     'metadata_json': np.uint8,
     'metadata_offsets': np.int64,
 }
@@ -119,8 +122,9 @@ class SpectralIndex:
                 max_peak_num=p['max_peak_num'])
         else:
             mz, intensity, offsets = _precleaned(peaks_list, p['min_peak_distance'])
+        power = None
         if p['intensity_weight'] == 'entropy':
-            intensity = entropy_weight(intensity, offsets)
+            intensity, power = entropy_weight(intensity, offsets, return_power=True)
         elif p['intensity_weight'] is not None:
             raise ValueError("intensity_weight must be 'entropy' or None")
 
@@ -139,6 +143,8 @@ class SpectralIndex:
             'mz': mz[peak_order],
             'intensity': intensity[peak_order],
         }
+        if power is not None:
+            arrays['weight_power'] = power[source_idx]
         if fragment_index:
             arrays.update(_fragment_arrays(arrays['mz'], arrays['intensity'], new_offsets))
         if metadata is not None:
@@ -201,10 +207,20 @@ class SpectralIndex:
         """Total number of peaks."""
         return int(self.offsets[-1])
 
-    def peaks(self, i):
-        """Search-ready peaks of the i-th stored spectrum, shape (n, 2)."""
+    def peaks(self, i, unweighted=False):
+        """
+        Search-ready peaks of the i-th stored spectrum, shape (n, 2).
+        With unweighted=True, entropy weighting is reversed (cleaned peaks with
+        intensities summing to 1, e.g. for cosine similarity); this needs
+        weight_power in the index, or an unweighted index.
+        """
         a, b = self.offsets[i], self.offsets[i + 1]
-        return np.column_stack([self.mz[a:b], self.intensity[a:b]])
+        intensity = self.intensity[a:b]
+        if unweighted and self.params['intensity_weight'] is not None:
+            if self.weight_power is None:
+                raise ValueError('index has no weight_power to reverse weighting; rebuild the index')
+            intensity = unweight(intensity, self.weight_power[i])
+        return np.column_stack([self.mz[a:b], intensity])
 
     def metadata(self, source_idx):
         """Metadata dict for a spectrum, by its position in the input list."""
@@ -247,6 +263,8 @@ class SpectralIndex:
         if len(self.source_idx) != n or len(self.offsets) != n + 1 or self.offsets[-1] != p \
                 or len(self.intensity) != p:
             raise ValueError('inconsistent array lengths in index')
+        if self.weight_power is not None and len(self.weight_power) != n:
+            raise ValueError('inconsistent weight_power length')
         if self.frag_mz is not None and not (len(self.frag_mz) == len(self.frag_intensity) == len(self.frag_spec) == p):
             raise ValueError('inconsistent fragment index lengths')
 

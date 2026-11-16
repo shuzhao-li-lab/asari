@@ -1,8 +1,9 @@
 """
 Command line interface.
 
-    python -m ms2batch index library.msp library.npz
-    python -m ms2batch search library.npz queries.mgf -o hits.tsv --method identity --top-k 5
+    python -m asari.ms2batch index library.msp library.npz
+    python -m asari.ms2batch index flash_library.pkl library.npz     (convert legacy pickle, trusted files only)
+    python -m asari.ms2batch search library.npz queries.mgf -o hits.tsv --method identity --top-k 5
 """
 
 import argparse
@@ -18,7 +19,7 @@ def main(argv=None):
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
 
-    p = sub.add_parser('index', help='build an index from .msp/.mgf/.json')
+    p = sub.add_parser('index', help='build an index from .msp/.mgf/.json, or convert a FlashEntropySearch .pkl')
     p.add_argument('spectra')
     p.add_argument('output', help='index file (.npz)')
     p.add_argument('--min-peak-distance', type=float, default=0.05)
@@ -43,6 +44,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
     t0 = time.perf_counter()
     if args.command == 'index':
+        if args.spectra.lower().endswith(('.pkl', '.pickle')):
+            index = _index_from_flash_pickle(args.spectra, keep_metadata=not args.no_metadata,
+                                             intensity_weight=None if args.unweighted else 'entropy')
+            index.save(args.output)
+            print(f'{index} -> {args.output} ({time.perf_counter() - t0:.1f} s)', file=sys.stderr)
+            return
         spectra = read_spectra(args.spectra)
         index = SpectralIndex.build(
             spectra, keep_metadata=not args.no_metadata,
@@ -69,6 +76,20 @@ def main(argv=None):
         if out is not sys.stdout:
             out.close()
         print(f'{len(hits)} hits ({time.perf_counter() - t0:.1f} s)', file=sys.stderr)
+
+
+def _index_from_flash_pickle(path, keep_metadata=True, intensity_weight='entropy'):
+    """
+    Convert a FlashEntropySearch pickle (ms_entropy) to SpectralIndex, for migration only.
+    Unpickling can execute code: use only on trusted files. Requires ms_entropy.
+    Spectra in the pickle are already cleaned by ms_entropy, thus clean=False.
+    """
+    import pickle
+    with open(path, 'rb') as f:
+        entropy_search = pickle.load(f)
+    spectra = [entropy_search[i] for i in range(len(entropy_search.precursor_mz_array))]
+    return SpectralIndex.build(spectra, keep_metadata=keep_metadata, clean=False,
+                               intensity_weight=intensity_weight)
 
 
 def _name_lookup(index):

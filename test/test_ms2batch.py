@@ -91,6 +91,19 @@ def test_entropy_weight():
     assert w[3] == 1.0
 
 
+def test_unweighted_peaks_roundtrip():
+    lib = random_library(30)
+    L = SpectralIndex.build(lib)
+    U = SpectralIndex.build(lib, intensity_weight=None)
+    assert L.weight_power is not None and len(L.weight_power) == len(L)
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, 'lib.npz')
+        L.save(path)
+        L2 = SpectralIndex.load(path)
+    for i in range(len(L)):
+        np.testing.assert_allclose(L2.peaks(i, unweighted=True), U.peaks(i), rtol=1e-5, atol=1e-7)
+
+
 def test_scores_match_bruteforce():
     shared = random_spectrum(8)
     lib = random_library(60, shared)

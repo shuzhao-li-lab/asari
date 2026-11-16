@@ -54,7 +54,29 @@ Deconvolution in LC-MS data is also called "pre-annation", i.e., grouping ions t
 
 Annotation typically involves compound libraries and databases. Please refer to specific workflows. 
 
-Flash entropy is used in some MS/MS search. See notebooks/index_spectral_db.ipynb on preparing the database from MSP or JSON.
+MS/MS search uses entropy similarity (Li et al. 2021), by the batch search in `asari.ms2batch` (NumPy only) on `.npz` spectral indexes.
+
+#### Indexing an MS/MS library to .npz
+
+Build an index once from an MSP, MGF or JSON library, then use the `.npz` file as `--db`:
+
+```
+python -m asari.ms2batch index MassBank_NISTformat.msp MassBank.npz
+asari annotate --workflow LCMSMS --db MassBank.npz -i projectx_dir/ms2_spectra.json -o projectx_dir
+```
+
+Peaks are cleaned as in MS Entropy (precursor ion removal, noise filter at 1% of base peak, centroiding at 0.05 Da), so scores are comparable to FlashEntropySearch. Options: `--precursor-removal-da` (default 1.6; negative to disable, e.g. for EI spectra), `--noise-threshold` (default 0.01), `--min-peak-distance` (default 0.05), `--unweighted` (no entropy intensity weighting), `--no-metadata` (smaller file, without names and other fields). See `python -m asari.ms2batch index -h`.
+
+The `.npz` file is a plain NumPy archive (no pickle), safe to share and loaded with `allow_pickle=False`; it can be memory-mapped for large libraries. In Python:
+
+```
+from asari.ms2batch import SpectralIndex, read_spectra
+index = SpectralIndex.build(read_spectra('library.msp'))
+index.save('library.npz')
+index = SpectralIndex.load('library.npz')
+```
+
+A legacy FlashEntropySearch pickle can be converted by `python -m asari.ms2batch index library.pkl library.npz`. Unpickling can execute code, so convert only trusted files.
 
 ### Pipelines
 An example pipeline is [PCPFM](https://pypi.org/project/pcpfm/), which includes data processing, annotation, QC and data wrangling. Thermo raw files conversion is included in PCPFM. 
@@ -124,10 +146,10 @@ MS/MS spectra are clustered per composite mass track (default greedy clustering 
 
 To search MS/MS agains a database:
 
-`asari annotate --db /Users/lish/li.proj/Resources/MSMS_database.pkl -i mydir/projectx_dir/ms2_spectra.json -o mydir/projectx_dir/ --workflow LCMSMS
+`asari annotate --db mydir/MSMS_library.npz -i mydir/projectx_dir/ms2_spectra.json -o mydir/projectx_dir/ --workflow LCMSMS
 `
 
-The database is a pre-indexed library for Flash Entropy search. Results are written to `<project>_MS2_annotation.tsv` and `.json` in a new `annotation_<project>_<time stamp>` directory; the JSON includes experimental and library peaks for mirror plots in the dashboard.
+The database is preferably a `.npz` spectral index (`python -m asari.ms2batch index library.msp library.npz`), searched in batch mode. Plain `.msp`, `.mgf` or `.json` libraries are indexed on the fly. Legacy FlashEntropySearch `.pkl` databases are still supported, but pickle files are not secure to share; convert a trusted one by `python -m asari.ms2batch index library.pkl library.npz`. Input spectra can be `ms2_spectra.json`, `.msp`, or the process result directory. Matches pass `--score_algorithm` (cosine or entropy) with `--score_cutoff_cosine` (default 0.4). Results are written to `<project>_MS2_annotation.tsv` and `.json` in a new `annotation_<project>_<time stamp>` directory; the JSON includes experimental and library peaks for mirror plots in the dashboard.
 
 To extract MS/MS spectra only, ignoring MS1 data (no mass tracks, no m/z or RT alignment):
 

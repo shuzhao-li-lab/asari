@@ -37,6 +37,8 @@ from .tools.plot import mirror_plot
 from .tools.entropy_search import clean_list_ms2spectra
 from .tools.msp_parser import parse_msp_to_listdict
 from .tools.cosine import cosine_similarity
+from .ms2batch import SpectralIndex, read_spectra
+from .ms2batch import search as ms2batch_search
 from .gc_functions import *
 from .deconvolute import (ingest_gc_featuretable, run_gc_deconvolution)
 
@@ -86,8 +88,15 @@ def annotate_project(infile, parameters):
 
 class LCMSMS_Annotation:
     """
-    Annotation of MS/MS spectra (LCMSMS or MSMS workflow) against a spectral library
-    pre-indexed for Flash Entropy (pickle of ms_entropy.FlashEntropySearch).
+    Annotation of MS/MS spectra (LCMSMS or MSMS workflow) against a spectral library (--db).
+
+    Library formats, by file extension:
+    - .npz (default, recommended): ms2batch SpectralIndex, searched in batch mode (vectorized, NumPy only).
+      Build once by `python -m asari.ms2batch index library.msp library.npz`.
+    - .msp, .mgf, .json: plain spectra, indexed in memory as SpectralIndex, then searched in batch mode.
+    - .pkl, .pickle: FlashEntropySearch pickle, searched per spectrum (legacy).
+      Pickle is not secure for sharing databases; convert by `python -m asari.ms2batch index library.pkl library.npz`.
+    Both search modes give the same entropy and cosine scores.
 
     Input spectra are from asari `process` (LCMSMS or MSMS workflow), in JSON (ms2_spectra.json)
     or MSP (ms2_spectra.msp, ms2_spectra_<sample>.msp), or a process directory with ms2_spectra.json/.msp.
@@ -115,7 +124,8 @@ class LCMSMS_Annotation:
             self.score_cutoff = parameters['score_cutoff_entropy']
         else:
             self.score_algorithm, self.score_cutoff = 'cosine', parameters['score_cutoff_cosine']
-        self.entropy_search = None
+        self.entropy_search = None      # FlashEntropySearch, legacy pickle
+        self.library = None             # ms2batch SpectralIndex, batch mode
 
     def annotate_spectra(self, infile):
         """
@@ -125,7 +135,7 @@ class LCMSMS_Annotation:
         if not self.database_file:
             print("LCMSMS/MSMS annotation requires a pre-indexed MS/MS database via --db.")
             return None
-        self.entropy_search = self.load_database(self.database_file)
+        self.load_database(self.database_file)
         list_query_spectra = self.load_query_spectra(infile)
         results = self.search(list_query_spectra)
         concise_results = self.collapse_by_database_key(results)
@@ -134,11 +144,29 @@ class LCMSMS_Annotation:
         return json_results
 
     def load_database(self, database_file):
-        """Load pre-indexed database (pickle of FlashEntropySearch)."""
-        with open(database_file, 'rb') as f:
-            entropy_search = pickle.load(f)
-        print(f"Loaded database of {len(entropy_search.precursor_mz_array)} spectra from {database_file}.")
-        return entropy_search
+        """
+        Load MS/MS library by file extension: .npz (SpectralIndex, default), .msp/.mgf/.json 
+        (indexed in memory) or .pkl/.pickle (FlashEntropySearch, legacy).
+        Sets self.library (batch mode) or self.entropy_search.
+        """
+        ext = os.path.splitext(database_file)[1].lower()
+        if ext == '.npz':
+            self.library = SpectralIndex.load(database_file)
+        elif ext in ('.msp', '.mgf', '.json'):
+            self.library = SpectralIndex.build(read_spectra(database_file))
+            print(f"Indexed {database_file}. To skip indexing in future runs, save as .npz by "
+                  f"`python -m asari.ms2batch index {database_file} <library.npz>`.")
+        elif ext in ('.pkl', '.pickle'):
+            print("Warning: pickle files are not secure to share; please convert the database to .npz by "
+                  f"`python -m asari.ms2batch index {database_file} <library.npz>`.")
+            with open(database_file, 'rb') as f:
+                self.entropy_search = pickle.load(f)
+            print(f"Loaded database of {len(self.entropy_search.precursor_mz_array)} spectra from {database_file}.")
+            return self.entropy_search
+        else:
+            raise ValueError(f"Unsupported MS/MS database format: {database_file}. Use .npz, .msp, .mgf, .json or .pkl.")
+        print(f"Loaded database of {len(self.library)} spectra from {database_file}.")
+        return self.library
 
     def load_query_spectra(self, infile):
         """
@@ -175,10 +203,54 @@ class LCMSMS_Annotation:
 
     def search(self, list_query_spectra):
         """
-        Entropy identity search of cleaned query spectra; cosine similarity on the best entropy match.
+        Entropy identity search of query spectra; cosine similarity on the best entropy match.
+        Batch mode if library is a SpectralIndex (search_batch), else per spectrum by FlashEntropySearch.
         Returns list of (library entry, cosine_score, entropy_score, number_matched_peaks, spid, precursor_mz, rtime)
         that pass score cutoff by self.score_algorithm.
         """
+        if self.library is not None:
+            return self.search_batch(list_query_spectra)
+        return self.search_flash(list_query_spectra)
+
+    def search_batch(self, list_query_spectra):
+        """
+        Batch identity search (ms2batch) of all query spectra against self.library.
+        Queries are cleaned with the library parameters (incl. precursor removal);
+        cosine similarity uses cleaned, unweighted peaks, as in search_flash.
+        """
+        L = self.library
+        queries = SpectralIndex.build(
+            [{'peaks': sp['peaks'], 'precursor_mz': sp['precursor_mz']} for sp in list_query_spectra],
+            fragment_index=False, keep_metadata=False, **L.params)
+        print(f"Batch searching {len(queries)} cleaned experimental spectra, "
+              f"{self.score_algorithm} score cutoff {self.score_cutoff}.\n")
+        prefilter = min(self.entropy_prefilter, self.score_cutoff)
+        hits = ms2batch_search(L, queries, method='identity',
+                               ms1_tolerance=self.ms1_tolerance_in_da,
+                               ms2_tolerance=self.ms2_tolerance_in_da,
+                               top_k=1, min_score=prefilter,
+                               n_threads=self.parameters.get('multicores', 1))
+        lib_pos, query_pos = L._source_to_pos(), queries._source_to_pos()
+        results = []
+        for q, lib_idx, entropy_score, n_matched in zip(hits.query_idx, hits.library_idx, hits.score, hits.n_matched):
+            if entropy_score <= prefilter:
+                continue
+            lib_peaks = L.peaks(lib_pos[lib_idx], unweighted=True)
+            peaks = queries.peaks(query_pos[q], unweighted=True)
+            cosine_score, _ = cosine_similarity(peaks, lib_peaks, mz_tolerance=self.ms2_tolerance_in_da)
+            entropy_score = float(entropy_score)
+            score = entropy_score if self.score_algorithm == 'entropy' else cosine_score
+            if score > self.score_cutoff:
+                sp = list_query_spectra[q]
+                entry = dict(L.metadata(lib_idx) or {'id': int(lib_idx)})
+                entry['peaks'] = lib_peaks
+                results.append((entry, float(cosine_score), entropy_score, int(n_matched),
+                                sp['id'], sp['precursor_mz'], sp.get('rtime')))
+        print(f"{len(results)} spectra matched to database.")
+        return results
+
+    def search_flash(self, list_query_spectra):
+        """Per spectrum identity search by FlashEntropySearch (legacy pickle database)."""
         cleaned_spectra = clean_list_ms2spectra(list_query_spectra, self.entropy_search,
                                                 {'precursor_mz_offset': self.precursor_mz_offset})
         print(f"Searching {len(cleaned_spectra)} cleaned experimental spectra, "

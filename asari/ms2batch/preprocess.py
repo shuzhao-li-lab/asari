@@ -100,12 +100,14 @@ def clean_spectra(peaks_list,
     return mz, intensity, offsets_from_ids(spec, n)
 
 
-def entropy_weight(intensity, offsets):
+def entropy_weight(intensity, offsets, return_power=False):
     """
     Entropy-based intensity weighting (Li et al. 2021), vectorized over spectra.
     Spectra with entropy S < 3 have intensities raised to 0.25 + 0.25 * S and
     renormalized; others are unchanged. Input intensities must sum to 1 per
-    spectrum. Returns a new float32 array.
+    spectrum. Returns a new float32 array, and if return_power, also the
+    exponent per spectrum (float32, 1.0 if unchanged), so that weighting can be
+    reversed by unweight().
     """
     spec = spectrum_ids(offsets)
     n = len(offsets) - 1
@@ -116,7 +118,21 @@ def entropy_weight(intensity, offsets):
     x = x ** power[spec]
     totals = np.bincount(spec, weights=x, minlength=n)
     x = np.where(low[spec], x / totals[spec], x)
+    if return_power:
+        return x.astype(np.float32), power.astype(np.float32)
     return x.astype(np.float32)
+
+
+def unweight(intensity, power):
+    """
+    Reverse entropy_weight for one spectrum: intensities (summing to 1) raised to
+    1 / power and renormalized. Returns float64 array.
+    """
+    x = np.asarray(intensity, dtype=np.float64)
+    if power == 1:
+        return x
+    x = x ** (1.0 / float(power))
+    return x / x.sum()
 
 
 def _segment_max(values, spec, n):
