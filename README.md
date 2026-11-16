@@ -3,386 +3,116 @@
 [![Documentation Status](https://readthedocs.org/projects/asari/badge/?version=latest)](https://asari.readthedocs.io/en/latest/?badge=latest)
 [![DOI](https://img.shields.io/badge/DOI-doi.org%2F10.1038%2Fs41467--023--39889--1-blue)](https://doi.org/10.1038/s41467-023-39889-1)
 
-Trackable and scalable Python program for high-resolution metabolomics data processing. 
+Trackable and scalable Python program for high-resolution metabolomics and exposomics data processing.
+Asari supports LC-MS, LC-MS/MS, MS/MS, GC-MS and direct infusion (DI-MS) workflows. 
+- Fast enough to process 1000s samples on a laptop computer. 
+- Precise enough to find a compound present in a single sample. 
+- Annotation is separate from feature extraction, allowing flexible and modular workflows. 
+- Many modules and functions for reuse by developers and analysts.
+- Cloud friendly and AI ready. 
 
-- Taking advantage of high mass resolution to prioritize mass separation and alignment
-- Peak detection on a composite map instead of repeated on individual samples
-- Statistics guided peak dection, based on local maxima and prominence, selective use of smoothing
-- Reproducible, track and backtrack between features and mass tracks (EICs)
-- Tracking peak quality, selectiviy metrics on m/z, chromatography and annotation databases
-- Scalable, performance conscious, disciplined use of memory and CPU 
-- Transparent, JSON centric data structures, easy to chain other tools
+This is the quick start. For details on each workflow, parameters, output, algorithms and data formats, see [GUIDE.md](GUIDE.md).
 
-LC-MS application was described in Li et al. Nature Communications 14.1 (2023): 4113](https://www.nature.com/articles/s41467-023-39889-1). GC-MS workflow was added to version 1.16.6.
+The LC-MS method is described in [Li et al. Nature Communications 14.1 (2023): 4113](https://www.nature.com/articles/s41467-023-39889-1).
+A web server (https://asari.app), a [full pipeline](https://pypi.org/project/pcpfm/) and [tutorials](https://github.com/shuzhao-li-lab/asari_pcpfm_tutorials/) are available.
 
-A web server (https://asari.app) and [full pipeline](https://pypi.org/project/pcpfm/) are available now.
-A set of tutorials are hosted at https://github.com/shuzhao-li-lab/asari_pcpfm_tutorials/.
-
-## Install and get started
-
-- Install from PyPi repository: `pip3 install asari-metabolomics`. Add `--upgrade` to update to new versions.
-- Or clone from source code: https://github.com/shuzhao-li/asari . One can run it as a Python module by calling Python interpreter. GitHub repo is often ahead of PyPi versions.
-- Requires Python 3.11+. Installation time ~ 5 seconds if common libraries already exist.
-- The core package is designed to be compact and cloud friendly. The visualization and other dependencies are additional (also listed in `optional-requirements.txt`), installed as extras: `pip install "asari-metabolomics[viz]"` for the dashboard (`asari viz`), `[gc]` for NMF deconvolution, `[plot]` for plotting tools, or `[all]`.
-- One can use the web version (https://asari.app) without local installation.
-
-If installed from pip and the system path includes asari, one can run `asari` as a command in a terminal, e.g.: 
-`asari process -i data_dir`
-
-Alternatively, one can run it as a module via Python interpreter, e.g.:
-`python3 -m asari.main process -i data_dir`
-
-
-## Input
-### Data processing
-Input data are centroid mzML files. 
-Example datasets can be found at https://github.com/shuzhao-li-lab/data.
-
-We use ThermoRawFileParser (https://github.com/compomics/ThermoRawFileParser) to convert Thermo .RAW files to .mzML. Msconvert in ProteoWizard (https://proteowizard.sourceforge.io/tools.shtml) can handle the conversion of most vendor data formats and .mzXML files.
-
-MS/MS spectra are ignored in default LC-MS workflow but handled by alternative workflows.
-
-### Raw data inspection and quality control
-Asari subcommand `peek` returns a summary on a single mzML file.
-
-The `tools.plot_scan_seq` module gives scan level visualization of a single mzML file. Various tools will be added over time. Single-file QC works on a single mzML file; most QC functions work on the processed full feature table.
-
-### Annotation
-The design of asari is to spearate annotation from feature extraction. 
-
-Deconvolution in LC-MS data is also called "pre-annation", i.e., grouping ions to empirical compounds, is done using [Khipu](https://github.com/shuzhao-li-lab/khipu). 
-
-Annotation typically involves compound libraries and databases. Please refer to specific workflows. 
-
-MS/MS search uses entropy similarity (Li et al. 2021), by the batch search in `asari.ms2batch` (NumPy only) on `.npz` spectral indexes.
-
-#### Indexing an MS/MS library to .npz
-
-Build an index once from an MSP, MGF or JSON library, then use the `.npz` file as `--db`:
+## Install
 
 ```
-python -m asari.ms2batch index MassBank_NISTformat.msp MassBank.npz
-asari annotate --workflow LCMSMS --db MassBank.npz -i projectx_dir/ms2_spectra.json -o projectx_dir
+pip3 install asari-metabolomics
 ```
 
-Peaks are cleaned as in MS Entropy (precursor ion removal, noise filter at 1% of base peak, centroiding at 0.05 Da), so scores are comparable to FlashEntropySearch. Options: `--precursor-removal-da` (default 1.6; negative to disable, e.g. for EI spectra), `--noise-threshold` (default 0.01), `--min-peak-distance` (default 0.05), `--unweighted` (no entropy intensity weighting), `--no-metadata` (smaller file, without names and other fields). See `python -m asari.ms2batch index -h`.
+- Add `--upgrade` to update. The GitHub repo (https://github.com/shuzhao-li/asari) is often ahead of PyPI; from source, run `python3 -m asari.main ...`.
+- Requires Python 3.9+ (see `pyproject.toml`).
+- The core package is compact and cloud friendly. Optional extras: `pip install "asari-metabolomics[viz]"` for the dashboard (`asari viz`), `[gc]` for NMF deconvolution, `[plot]` for plotting tools, or `[all]`.
 
-The `.npz` file is a plain NumPy archive (no pickle), safe to share and loaded with `allow_pickle=False`; it can be memory-mapped for large libraries. In Python:
+Input data are centroided mzML files. Thermo .RAW files can be converted by [ThermoRawFileParser](https://github.com/compomics/ThermoRawFileParser); msconvert in [ProteoWizard](https://proteowizard.sourceforge.io/tools.shtml) handles most vendor formats.
 
-```
-from asari.ms2batch import SpectralIndex, read_spectra
-index = SpectralIndex.build(read_spectra('library.msp'))
-index.save('library.npz')
-index = SpectralIndex.load('library.npz')
-```
-
-A legacy FlashEntropySearch pickle can be converted by `python -m asari.ms2batch index library.pkl library.npz`. Unpickling can execute code, so convert only trusted files.
-
-### Pipelines
-An example pipeline is [PCPFM](https://pypi.org/project/pcpfm/), which includes data processing, annotation, QC and data wrangling. Thermo raw files conversion is included in PCPFM. 
-
-Different workflows can be put together using different modules. We will continue releasing examples as notebooks. 
-
-## Use 
-
-The `asari` as a command can run in a terminal, followed by a subcommand for specific tasks.
-For help information: `asari -h`
-
-To process all mzML files under directory mydir/projectx_dir (or use `--files` to specify input mzML files; default LC-MS workflow):
-
-`asari process --input mydir/projectx_dir`
-
-
-### Example use on GC-MS data
-
-GC-MS uses `--workflow GC` in three steps: `process` (feature extraction), optional `deconvolute` (grouping features into pseudospectra) and `annotate` (library search).
-
-**Retention index (RI).** Matching to libraries uses Kovats retention index. Provide alkane standards as a tab-separated file with a header row and two columns, Kovats index and measured retention time in minutes (example: `test/KovatsIndex_alkanestandards_cuimc.tsv`). RI is interpolated from feature retention time by a lowess fit to the standards; features eluting outside the standards get the RI of the nearest end.
-
-To process GC-MS data and add an `RI` column to the feature tables (right after `detection_counts`):
+## Quick start
 
 ```
-asari process -i mydir/gc_project --workflow GC --kovats KovatsIndex_alkanestandards.tsv
+asari -h                                     # help
+asari list_workflows                         # workflows and descriptions
+asari peek -i mydir/sample1.mzML             # inspect a single file
+asari process -i mydir/project_dir           # LC-MS feature extraction (default workflow)
 ```
 
-Feature tables that already have an RI column (named `RI`, `Retention Index`, `Kovats_RI`, etc.) do not need `--kovats` in the steps below. Otherwise, pass `--kovats` to `deconvolute` or `annotate`.
+Common options: `-i/--input` (directory of mzML files, or a file; `--files` for a text list of mzML paths), `-o/--output` (default: current directory), `-j/--project` (project name), `--mode pos|neg`, `--workflow`, `-p` (parameter YAML file; template at `test/parameters.yaml`).
+Every run writes a time-stamped result directory, e.g. `<project>_<time stamp>/` for `process`, `<project>_annotation_<time stamp>/` for `annotate`, with a `project.json` recording all parameters.
 
-To annotate a feature table by reverse search (default; recommended for high-resolution data). Library spectra are matched to features within m/z and RI windows:
+## Workflows and subcommands
 
-```
-asari annotate -i gc_project/Feature_table.tsv -o gc_project -j gc_anno \
-    --workflow GC --db my_GCMS_library.msp
-```
+Subcommands are `peek, process, deconvolute, annotate, join, viz`. Each takes `--workflow` (`LC` default, `GC`, `LCMSMS`, `MSMS`, `DIMS`) and, where applicable, an algorithm option.
 
-To deconvolute a feature table into pseudospectra (`--deconvolution_algorithm`: `hcl`, the default, clustering by correlation across samples and RI; `adap`, a port of ADAP-GC; or `nmf`, as in MSHub). The results are written to JSON and MSP:
-
-```
-asari deconvolute -i gc_project/Feature_table.tsv -o gc_project -j gc_decon \
-    --workflow GC --deconvolution_algorithm adap
-```
-
-To annotate pseudospectra by forward search against a library. Use `--hires F` for unit-mass (low-resolution) data or libraries:
-
-```
-asari annotate -i gc_decon_denovo_pseudospectra.json -o gc_project -j gc_fwd \
-    --workflow GC --search_algorithm forward --db my_GCMS_library.msp
-```
-
-Forward search can also start from a feature table, which then runs deconvolution first (`--search_algorithm forward --deconvolution_algorithm nmf`).
+| Subcommand | Workflow | Algorithm option | Input | Output |
+|---|---|---|---|---|
+| `peek` | any | | one mzML file | statistics, mass accuracy (vs `db/calibration_mz.json`), scan plot PDF if matplotlib is installed |
+| `process` | `LC` (default) | `--peak_area sum` (default), `auc`, `gauss` | mzML files, MS1 only | `Feature_table.tsv` |
+| `process` | `GC` | optional `--kovats` | mzML files, optional Kovats RI table | `Feature_table.tsv`, with `RI` column if `--kovats` |
+| `process` | `LCMSMS` | `--cluster_ms2 T` (default) or `F` | LC-MS/MS mzML files | `Feature_table.tsv`, MS/MS clusters `ms2_spectra.json`/`.msp` (or per file with `F`) |
+| `process` | `MSMS` | `--cluster_ms2 T` (default) or `F` | mzML files, MS/MS only | MS/MS spectra `ms2_spectra.json`/`.msp` (or per file with `F`); no feature table |
+| `process` | `DIMS` | | DI-MS mzML files, MS1 only | `Feature_table.tsv`, max intensity per mass track; no RT alignment or peak detection |
+| `deconvolute` | `LC` | khipu | feature table | empirical compounds `<project>_list_khipus.json` and `.tsv` |
+| `deconvolute` | `GC` | `--deconvolution_algorithm hcl` (default), `adap`, `nmf` | feature table with RI (or `--kovats`) | pseudospectra `<project>_denovo_pseudospectra.json` and `.msp` |
+| `annotate` | `LC` | `--search_algorithm mz` (default) | feature table, compound database (`--db`, JSON; default built-in); optional `--preannotation` from `deconvolute` | `Features_<project>.tsv`, `Annotated_features_<project>.json` |
+| `annotate` | `LC` | `--search_algorithm rtmz` | feature table, library with m/z and RT (`--db`, JSON; default built-in HILIC pos standards), `--lc_rt_tolerance`; optional `--preannotation` | same as above |
+| `annotate` | `LCMSMS`, `MSMS` | entropy search, then `--score_algorithm cosine` (default) or `entropy` | MS/MS spectra (JSON, MSP or process directory), MS/MS library (`--db`, `.npz` recommended; `.msp`, `.mgf`, `.json`, legacy `.pkl`) | `<project>_MS2_annotation.tsv` and `.json` |
+| `annotate` | `GC` | `--search_algorithm reverse` (default) | feature table with RI (or `--kovats`), GC-MS library (`--db`, MSP/JSON; default built-in) | `empCpds_`, `Features_<project>.tsv`, `Annotated_pseudospectra_<project>.json`/`.msp` |
+| `annotate` | `GC` | `--search_algorithm forward`, `--hires T` (default) or `F` (unit m/z) | pseudospectra (JSON/MSP), or feature table (deconvoluted first by `--deconvolution_algorithm`) | same as above |
+| `join` | `LC`, `GC` | `--join_algorithm composite_table_merge` (default) | list of feature tables or process directories | `join_<project>_<time stamp>/asari_join_result.tsv` |
+| `join` | `GC` | `--join_algorithm annotation_combine` | list of GC annotation results | combined annotation, same files as GC `annotate` |
+| `viz` | `LC`, `GC` | | `process` result directory (run with `--diagnosis T`) | dashboard in web browser |
+| `viz` | `GC`, `LCMSMS`, `MSMS` | | `annotate` (or GC `annotation_combine`) result directory | dashboard with interactive mirror plots |
 
 Notes:
-- `--db` takes MSP or JSON. Common MSP field-name variants are recognized; RI is read from `RI`, `Retention_index`, `Kovats` etc., or from `RETENTIONTIME` as in some GC libraries. Library entries without RI are not used. Without `--db`, the built-in `asari/db/gcms_corelib_20260930.msp` is used. A small low-resolution test library is at `asari/db/lowres_test_gcms.msp`.
-- Search parameters (`ms2_tolerance_in_da`, `ri_tolerance`, `score_cutoff_cosine`, `score_cutoff_entropy`, `corr_cutoff`) can be set in a parameter file (`-p`).
-- Annotation outputs: `empCpds_<project>.tsv` (one row per annotated compound), `Features_<project>.tsv` (one row per annotated feature), `Annotated_pseudospectra_<project>.json` and `.msp`. PDF mirror plots under `mirrorplots/` are optional (`--mirror_plot T`); interactive mirror plots are in the dashboard (`asari viz -i <annotation directory>`).
+- Scores for spectral matching: `--score_cutoff_cosine` (default 0.4); `--mirror_plot T` exports PDF mirror plots in GC annotation.
+- MS/MS libraries are best indexed once to `.npz`: `python -m asari.ms2batch index library.msp library.npz`. See [GUIDE.md](GUIDE.md#indexing-an-msms-library-to-npz).
+- `annotate` can be run on different databases and they can be combined via `join`.
+- `annotation_combine` for LC is planned for a future version.
 
-### More examples
+## Examples
 
-To use LC-MS/MS workflow to produce feature tables and MS/MS clusters:
+LC-MS, from feature extraction to annotation:
 
-`asari process --mode pos --input mydir/projectx_dir --workflow LCMSMS
-`
+```
+asari process -i mydir/project_dir -o mydir -j study1 --mode pos
+asari deconvolute -i mydir/study1_<ts>/Feature_table.tsv -o mydir -j study1 --workflow LC
+asari annotate -i mydir/study1_<ts>/Feature_table.tsv -o mydir -j study1 --workflow LC \
+    --preannotation mydir/study1_deconvolution_<ts>
+```
 
-MS/MS spectra are clustered per composite mass track (default greedy clustering with consensus spectra, `ms2_cluster_method` in parameters) and exported to `ms2_spectra.json` and `.msp`. Use `--cluster_ms2 F` to skip clustering and export unclustered spectra per input file as `ms2_spectra_<sample>.msp`.
+LC-MS/MS:
 
-To search MS/MS agains a database:
+```
+asari process -i mydir/project_dir -o mydir -j dda1 --workflow LCMSMS
+asari annotate -i mydir/dda1_<ts> -o mydir -j dda1 --workflow LCMSMS --db MassBank.npz
+```
 
-`asari annotate --db mydir/MSMS_library.npz -i mydir/projectx_dir/ms2_spectra.json -o mydir/projectx_dir/ --workflow LCMSMS
-`
+GC-MS:
 
-The database is preferably a `.npz` spectral index (`python -m asari.ms2batch index library.msp library.npz`), searched in batch mode. Plain `.msp`, `.mgf` or `.json` libraries are indexed on the fly. Legacy FlashEntropySearch `.pkl` databases are still supported, but pickle files are not secure to share; convert a trusted one by `python -m asari.ms2batch index library.pkl library.npz`. Input spectra can be `ms2_spectra.json`, `.msp`, or the process result directory. Matches pass `--score_algorithm` (cosine or entropy) with `--score_cutoff_cosine` (default 0.4). Results are written to `<project>_MS2_annotation.tsv` and `.json` in a new `annotation_<project>_<time stamp>` directory; the JSON includes experimental and library peaks for mirror plots in the dashboard.
+```
+asari process -i mydir/gc_dir -o mydir -j gc1 --workflow GC --kovats KovatsIndex_alkanestandards.tsv
+asari annotate -i mydir/gc1_<ts>/Feature_table.tsv -o mydir -j gc1 --workflow GC --db my_GCMS_library.msp
+```
 
-To extract MS/MS spectra only, ignoring MS1 data (no mass tracks, no m/z or RT alignment):
+Dashboard:
 
-`asari process --input mydir/projectx_dir -o mydir -j msms_project --workflow MSMS
-`
-
-By default, MS/MS spectra of all input files are grouped by precursor m/z (within `mz_tolerance_ppm`), then clustered on RT and spectral similarity as in LCMSMS, and exported to `ms2_spectra.json` and `.msp`. Use `--cluster_ms2 F` to export unclustered spectra per input file as `ms2_spectra_<sample>.msp`. The clustered `ms2_spectra.json` is annotated the same way as LCMSMS output (`asari annotate --workflow MSMS` or `LCMSMS`).
-
-Use `asari list_workflows` to see all workflows.
-
-To pre-annotate LC-MS feature table then match to a database (default HMDB for now):
-
-`asari annotate -i /Users/lish/li.play/test16_v16_599432/Feature_table.tsv -o /Users/lish/li.play/test16_v16_599432/ -j LCMSanno --workflow LC --mode pos`
-
-To launch a dashboard in your web browser after the project is processed into directory process_result_dir (requires `--diagnosis True` in `process`), or on an annotation directory:
-
-`asari viz --input process_result_dir`
-
-To get statistical description on a single file (useful to understand data and parameters):
-
-`asari peek --input mydir/projectx_dir/file_to_peek.mzML`
-
-To join data from multiple feature tables using the same LC/GC-MS method:
-
-`asari join -i pathlist.txt -o OUTDIR -j project_name`
-
-The input for `join` is a list of project directories or paths to feature tables (`Feature_table.tsv`), each a result of asari processing.
-This uses the default `--join_algorithm composite_table_merge`.
-
-To combine GC annotation results from different runs or methods on the same feature table (e.g. reverse search, and forward search on different deconvolutions or libraries):
-
-`asari join -i annotation_list.txt -o OUTDIR -j project_name --workflow GC --join_algorithm annotation_combine`
-
-The input is a text file listing `Annotated_pseudospectra_*.json` files or annotation directories, one per line. Annotations are combined by feature IDs and compound identity (first block of InChIKey by default, `combine_inchikey_block` in parameters; name if no InChIKey): annotations of the same compound sharing any feature are merged, the one of highest cosine score as representative. Output is the same set of files as GC annotation (`Annotated_pseudospectra_`, `empCpds_`, `Features_` and MSP), with sources and number of supporting sources per empCpd; the result directory can be viewed by `asari viz`. `annotation_combine` for LC is planned for next version.
-
-Please check documentation and demo notebooks for additional uses. 
+```
+asari process -i mydir/project_dir -o mydir -j study1 --diagnosis T
+asari viz -i mydir/study1_<ts>
+```
 
 ## Output
 
-A typical run of LC-MS data processing creates a project directory `<project_name>_<time stamp>` under the output directory (`-o`, default `output`). E.g. `-o mydir -j rsvstudy` may generate `mydir/rsvstudy_427105156` like this
+`process` writes one feature table, `Feature_table.tsv`, under the result directory. All features passing signal and shape thresholds are kept, including those present in a single sample; filtering is left to users (e.g. by `snr`, `goodness_fitting`, `cSelectivity`, `detection_counts` or annotation). See [GUIDE.md](GUIDE.md#output) for the full layout.
 
-    rsvstudy_427105156
-    ├── README.txt
-    ├── Feature_table.tsv
-    ├── pickle
-    │   ├── Blank_20210803_003.pickle
-    │   ├── ...
-    └── project.json
+## Asari suite and related projects
 
-There is one feature table, `Feature_table.tsv`, under the project directory (since asari 2.0; earlier versions had `preferred_Feature_table.tsv` and `export/full_Feature_table.tsv`).
-
-All peaks are kept in `Feature_table.tsv` if they meet signal (snr) and shape standards 
-(part of input parameters but default values are fine for most people). 
-That is, if a feature is only present in one sample, it will be reported, 
-as we think this is important for applications like exposome and personalized medicine. 
-The filtering decisions are left to end users, e.g. by `snr`, `goodness_fitting` (peak shape), `cSelectivity`, `detection_counts` or annotation.
-
-With `--diagnosis True`, `_mass_grid_mapping.csv` and `cmap.pickle` (used by `asari viz`) are also written. LCMSMS and MSMS workflows write MS/MS spectra to `ms2_spectra.json` and `.msp` (or `ms2_spectra_<sample>.msp` per input file with `--cluster_ms2 F`); MSMS has no feature table.
-
-An example feature table (from an earlier version, filtered as the then preferred table) is `test/HighOnly_HILICpos_preferred_Feature_table.tsv`, which was generated by:
-    `asari process -i MT202304_2phase_HILICpos -o highonly --min_peak_height 1000000`
-
-The `pickle` folder keeps intermediate files during processing.
-They are removed after the processing by default, to save disk space.
-
-## Dashboard
-
-`asari viz --input <directory>` launches a dashboard in the web browser. The dashboard type is determined by `run` in `<directory>/project.json`.
-
-Processed results (`run: process`, LC or GC workflow). Users can inspect features, composite mass tracks, co-eluting features and RT alignment. This requires `asari process ... --diagnosis True`, which exports `cmap.pickle` (large, not exported by default). The dashboard uses these files under the result folder: 'project.json', 'cmap.pickle' and 'Feature_table.tsv' (projects from earlier versions, with these files under `export/`, are also read). Thus, one can move around the folder, but modification of these files is not a good idea. Please note that pickle files are for internal use, and one should not trust pickle files from other people.
-
-Annotation results (`run: annotate`, GC, LCMSMS or MSMS workflow), e.g. `asari viz -i mydir/myproject_annotation_1112115116`. The dashboard reads annotated spectra from `Annotated_pseudospectra_*.json` (GC) or `*_MS2_annotation.json` (LCMSMS, MSMS). It has a summary panel (scores, matched peaks, distribution by RT/RI and m/z), and a browser of all annotations with interactive mirror plots, experimental spectrum (peaks or peaks_as_features) vs library spectrum (peaks_in_lib). Peaks matched within the annotation m/z tolerance are marked. LCMSMS annotation results from earlier versions do not include peaks; re-run `asari annotate` to view mirror plots.
- 
-![viz_screen_shot](docs/source/_static/viz_screen_shot20220518.png)
-
-## Parameters
-
-In most cases, only `mode` and `mz_tolerance_ppm` require attention. The latter is set at 5 ppm by default. Most modern instruments are fine with 5 ppm, but one may want to change if needed.
-
-Default ionization mode is `pos`. Change to `neg` if needed, by specifying `--mode neg` in command line.
-
-Users can supply a custom parameter file `xyz.yaml`, via `--parameters xyz.yaml` in command line.
-A template YAML file can be found at `test/parameters.yaml`.
-
-When the above methods overlap, command line arguments take priority.
-That is, commandline overwrites `xyz.yaml`, which overwrites default asari parameters in `default_parameters.py`. 
-
-## Algorithms
-
-Basic data concepts follow https://github.com/shuzhao-li/metDataModel, organized as
-
-    ├── Experiment
-       ├── Sample
-           ├── MassTrack
-               ├── Peak
-               ├── Peak
-           ├── MassTrack 
-               ├── Peak
-               ├── Peak
-        ...
-       ├── Sample 
-        ...
-       ├── Sample 
-
-A sample here corresponds to an injection file in LC-MS experiments. 
-A MassTrack is an extracted chromatogram for a specific m/z measurement, governing full retention time.
-Therefore, a MassTrack may include multiple mass traces, or EICs/XICs, as referred by literature.
-Peak (an elution peak at specific m/z) is specific to a sample, but a feature is defined at the level of an experiment after correspondence.
-
-Additional details:
-- Use of MassTracks simplifies m/z correspondence, which results in a MassGrid
-- Two modes of m/z correspondence: a clustering method for studies >= N (default 10) samples; 
-    and a slower method based on landmark peaks and verifying mass precision.
-- Chromatogram construction is based on m/z values via flexible bins and frequency counts (in lieu histograms). 
-- Elution peak alignment is based on LOWESS
-- Use integers for RT scan numbers and intensities for computing efficiency
-- Avoid mathematical curves whereas possible for computing efficiency
-
-Selectivity is tracked for
-- mSelectivity, how distinct are m/z measurements 
-- cSelectivity, how distinct are chromatograhic elution peaks
-
-Step-by-step algorithms are explained in doc/README.md.
-
-This package uses `mass2chem`, `khipu` and `JMS` for mass search and annotation functions.
-
-## Performance
-
-Asari is designed to run > 1000 samples on a laptop computer. The performance is achieved via
-- Implementation of basic functions using discrete mathematics and avoiding continuous curves.
-- Main intensity values of each sample are not kept in memory.
-- Simple (and transparent) peak detection based on local maxima (no curve fitting until evaluation)
-- Composite mass tracks greatly reduce the run cycles on peak detection
-- Using Python numerical libraries and vector operations
-- Alignment of mass tracks uses clustering in larger sample size
-
-When a study has N (default 10) or fewer samples, the MassGrid assembly uses a slower algorithm to compensate statistical distribution.
-
-## Platforms, Anaconda and Docker
-
-**Desktop vs Cloud**
-
-Python itself is used on Windows, Mac and Linux. Users may encouter problems related to Python not to asari, in which cases your best option is to find your local IT friend. 
-Asari is designed to be cloud friendly. There is no plan to build a complete desktop graphic application. 
-
-If you don't like command lines (many people don't), please feel free to try out the web server (https://asari.app). The free server has a quota. Please contact us if you find yourself in need of substantial cloud resources.
-
-**Anaconda and conda, virtual environments**
-
-Anaconda has various channels to distribute conda pacages. After looking into conda distribution, I came to the conclusion that it's not worth the effort to maintain a separate package on conda-forge.  The concern is that once we put in a conda package in public distribution, long-term maintenance of it and related packages will be potential issues. Pip is always in conda and one can use the same `pip install asari-metabolomics` in conda environment.
-
-Conda is excellent in handling virtual environments. Because we often use tools of different dependencies, virtual environments are great for preventing conflicts. This screen shot shows asari 1.13.1 installed in conda "base" environment and 1.11.4 in my native system environment.
-![conda_screen_shot](docs/source/_static/conda_asari_screenshot.png)
-
-**Docker Usage**
-
-The use of virtual environments makes using Docker largely obselete; however, virtual environments do not handle OS-level dependencies well. For example, the ThermoRawFileParser is a C# program that needs to be installed on the system level and MatchMS has strict version requirements. If you are having issues running or installing Asari in your native environment, use one of the dockerfiles as an alternative.
-
-Two docker files are provided in the repository, a prod dockerfile and a dev dockerfile. The prod dockerfile is for production use and uses the published versions of Asari suite packages. The dev dockerfile is for development use and installs the main Asari branch from github. This branch should be fully functional and often has new features not present in the release version; however, the dev version is for testing only. 
-
-The images are multi-platform, based on an Debian Buster image. You will need to have Docker installed on your system to use these. 
-
-Both Dockerfiles provide mono and the ThermoRawFileParser, which converts Thermo .raw files to .mzML files. 
-
-To build the container, you will need to run the following command in the terminal:
-
-`docker build -t <IMAGE_NAME> -f <DOCKERFILE> .` from within the Asari directory.
-
-Then you can interact with the container using `docker run -ti <IMAGE_NAME> bash`. 
-
-Note that docker essentially partitions your computer into separate environments, so any data you want to use in the container will need to be mounted as a volume. See below for examples on processing data with the container. You can pass the directory with your data `<INPUT_DATA>` and mount it as `<CONTAINER_PATH>` in the container by running:
-
-` docker run -v <INPUT_DATA>:<CONTAINER_PATH> -ti <IMAGE_NAME> bash`.
-
-See below for examples on processing data with the container. 
- 
-Example use
-To launch with volume mapping `$ docker run -v /Users/shuzhao/data:/home -ti <shuzhao/asari>`.
-
-In the container, ThermoRawFileParser is under `/usr/local/thermo/`.
-```
-# mono /usr/local/thermo/ThermoRawFileParser.exe -d my_data_dir
-
-# asari peek --input tmp/file_008.mzML 
-
-# asari process --mode neg --input tmp --output test99
-```
-
-
-## Discussion and Future Plans
-
-**Known limitations**
-- The current version was mostly developed for Orbitrap data, less tested on TOF.
-- Default elution peak detection is based on local maxima using statistically guided parameters. For highly complex local EIC, additional algorithm may be needed.
-
-**Next steps in development**
-- To improve TOF support. This maybe related to better construction of mass tracks when the m/z space gets too crowded.
-- Automated handling of sample clusters, since different sample types may be included in an experiment.
-
-**How accurate are my m/z values?**
-
-The mass tracks are scaffolds to assemble data. Very close m/z values may not be distinguished on a mass track. For example, when mass tracks are constructed for 5 ppm resolution, two m/z values of 3 ppm apart will be reported on the same mass track. This leads to a situation where the m/z values are not optimal. Asari is designed for reliable information retrieval. If the data are processed under 5 ppm, the information can be retrieved by 5 ppm. The true m/z values will be recovered via annotation, if the features are resolved by LC, when asari features are matched to annotation libraries.
-
-As discussed in the manuscript, ppm is not perfect in modeling mass resolution and is not constant for all m/z ranges. It is a practical tool we currently work with. If two compounds are not resolved by LC and their m/z values are 4 ppm apart, asari processing by 5 ppm will treat them as one feature. If the mass resolution is justified, one can run asari using, for instance, 3 ppm. The default workflow in asari does not fine-tune the m/z values, because the split m/z peaks from centroiding are difficult to distinguish from real m/z peaks. We leave the fine-tuning to annotation or targeted extraction workflow.
-
-We thank reviewer #1 for valuable discussions on this topic.
-
-
-## Extensions
-
-The core package is designed to be compact. We encourage building extensions on top of asari. Various workflows have been built for different applications and we will continue to release them (e.g. as notebooks). 
-
-Many derived applications are possible. E.g. a prototype desktop graphic interface is included in the source code and someone can develop it into a full project. 
-
-
-## Asari suite and Related projects
-
-The asari suite includes 
-- asari (Source code: https://github.com/shuzhao-li/asari, Package Repository: https://pypi.org/project/asari-metabolomics/)
+- asari (https://github.com/shuzhao-li/asari, https://pypi.org/project/asari-metabolomics/)
 - metDataModel: data models for metabolomics (https://github.com/shuzhao-li-lab/metDataModel)
-- mass2chem: common utilities in interpreting mass spectrometry data, annotation (https://github.com/shuzhao-li-lab/mass2chem)
-- khipu: a Python library for generalized, low-level annotation of MS metabolomics (https://github.com/shuzhao-li-lab/khipu)
-- JMS: Json's Metabolite Services. Search functions, annotation and metabolic models (https://github.com/shuzhao-li-lab/JMS)
-- Full pipeline (pcpfm) including asari processing, QC and annotation based on standards and MS/MS (https://github.com/shuzhao-li-lab/PythonCentricPipelineForMetabolomics)
-- asari-x: the eXposome miner (to be released)
+- mass2chem: utilities for mass spectrometry data and annotation (https://github.com/shuzhao-li-lab/mass2chem)
+- khipu: generalized, low-level annotation of MS metabolomics (https://github.com/shuzhao-li-lab/khipu)
+- JMS: Json's Metabolite Services (https://github.com/shuzhao-li-lab/JMS)
+- pcpfm: full pipeline including asari processing, QC and annotation (https://github.com/shuzhao-li-lab/PythonCentricPipelineForMetabolomics)
 
-
-Links for the asari paper:
-- Test data: https://github.com/shuzhao-li/data/tree/main/data
-- Notebooks to reproduce publication figures: https://github.com/shuzhao-li/data/tree/main/notebooks
-
-The khipu paper: https://pubs.acs.org/doi/10.1021/acs.analchem.2c05810
-
-The pipeline and datamodel paper: https://doi.org/10.1371/journal.pcbi.1011912 
-
-Tutorial on asari and the pipeline: https://github.com/shuzhao-li-lab/asari_pcpfm_tutorials
+Citation: Li et al. Nature Communications 14.1 (2023): 4113, https://doi.org/10.1038/s41467-023-39889-1.

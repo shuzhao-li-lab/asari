@@ -23,8 +23,10 @@ from .utils import build_boolean_dict
 booleandict = build_boolean_dict()
 SUBCOMMANDS = ["peek", "process", "deconvolute", "annotate", "viz", "join", "list_workflows"]
 WORKFLOWS = {
-    'LC': 'LC-MS (default). process: feature extraction; annotate: pre-annotation of feature table '
-          '(khipu, isotopes/adducts) and match to a compound database (HMDB default).',
+    'LC': 'LC-MS (default). process: feature extraction; deconvolute: pre-annotation by khipu '
+          '(isotopes/adducts into empirical compounds); annotate: match feature table to a compound database '
+          'by m/z (--search_algorithm mz, default) or a library by m/z and RT (rtmz), '
+          'optionally combined within empirical compounds (--preannotation).',
     'GC': 'GC-MS. process (optional --kovats to add RI column); deconvolute (--deconvolution_algorithm '
           'hcl, adap or nmf) into pseudospectra; annotate (--search_algorithm reverse or forward) '
           'against an MSP/JSON spectral library (--db, --hires).',
