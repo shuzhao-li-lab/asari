@@ -8,7 +8,7 @@ class TestDefaultParameters(unittest.TestCase):
         self.assertEqual(PARAMETERS['project_name'], 'asari_project')
 
     def test_outdir(self):
-        self.assertEqual(PARAMETERS['outdir'], 'output')
+        self.assertEqual(PARAMETERS['outdir'], '')
 
     def test_keep_intermediates(self):
         self.assertFalse(PARAMETERS['keep_intermediates'])

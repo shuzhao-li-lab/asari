@@ -6,7 +6,7 @@ mz_tolerance_ppm: 5
 mode: pos
 # Below rarely modified
 multicores: 4
-outdir: output
+outdir: ''
 reference: null
 autoheight: false
 database_mode: auto

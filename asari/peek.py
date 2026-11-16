@@ -1,50 +1,123 @@
 """
 Functions for subcommand `peek` (renamed from `analyze` in asari 2.0)
+
+Mass accuracy is estimated against reference m/z values in db/calibration_mz.json
+(KEGG and CSM based, {"pos": [...], "neg": [...]}). No other database is used.
+A plot of scan sequence (tools.plot_scan_seq.plot_msn) is exported if matplotlib is available.
 """
 
+import os
+import json
+import time
 import random
+import bisect
+import importlib.resources as pkg_resources
 import pymzml
 import numpy as np
 
 from mass2chem.search import find_mzdiff_pairs_from_masstracks
 
+from . import db
 from .chromatograms import extract_massTracks_
-from .experiment import ext_Experiment
 from .mass_functions import flatten_tuplelist
 from .utils import bulk_process
 
-def peek_single_sample(infile,
-            # mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=1000,
-            parameters={}):
+DEFAULT_CALIBRATION_DB = 'calibration_mz.json'
+# scans kept with full peaks for plot_msn, matching its nspec_plot and offset_n
+NSPEC_PLOT, OFFSET_N = 50, 100
+
+
+def peek_single_sample(infile, parameters={}):
     """
     Peek into a single mzML file and print statistics. Used by asari subcommand `peek`.
-    This uses ext_Experiment and default HMDB data to estimate mass accuracy.
+    Mass accuracy is estimated by matching landmark m/z values (12C/13C pairs) to
+    db/calibration_mz.json (or parameters['db'] if given, same format).
+    A PDF plot of MS1/MS2 scan sequence is written to a time-stamped subdirectory under parameters['outdir'],
+    <project_name>_peek_<timestamp>/, if matplotlib is available.
 
     Parameters
     ----------
     infile : str
         input mzML filepath.
-    mz_tolerance_ppm : float, optional, default: 5
-        m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
-    min_intensity : float, optional, default: 100
-        minimal intentsity value to consider, also used to filter out 0s.
-    min_timepoints : int, optional, default: 5
-        minimal consecutive scans to be considered real signal.
-    min_peak_height : float, optional, default: 1000
-        a bin is not considered if the max intensity < min_peak_height.
-    parameters : dict, optional, default: {}
-        not used, just place holder to use ext_Experiment class.
+    parameters : dict
+        asari parameters; uses mz_tolerance_ppm, min_intensity_threshold, min_timepoints,
+        min_peak_height, outdir and db.
     """
     print("Peek into %s\n" %infile)
-    mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(
-        infile, parameters, return_sample=False)
-    EE = ext_Experiment({}, parameters)
-    EE.load_annotation_db()
-    mass_accuracy_ratio = EE.KCD.evaluate_mass_accuracy_ratio(mz_landmarks, mode, mz_tolerance_ppm=10)
-    print("  Mass accuracy is estimated as %2.1f ppm." %(mass_accuracy_ratio*1000000))
+    mz_landmarks, mode, min_peak_height_, plot_data = get_file_masstrack_stats(
+        infile, parameters, return_sample=False, return_plot_data=True)
+
+    calibration_file = parameters.get('db') or str(
+        pkg_resources.files(db).joinpath(DEFAULT_CALIBRATION_DB))
+    reference_mzs = load_calibration_mz(calibration_file, mode)
+    mass_accuracy_ratio = evaluate_mass_accuracy_ratio(mz_landmarks, reference_mzs, mz_tolerance_ppm=10)
+    if mass_accuracy_ratio is not None:
+        print("  Mass accuracy is estimated as %2.1f ppm." %(mass_accuracy_ratio*1000000))
     print("\n")
 
-def get_file_masstrack_stats(infile, parameters, return_sample=False):
+    # time-stamped subdirectory, as in other subcommands; created only when the plot is written
+    time_stamp = ''.join([str(x) for x in time.localtime()[1:6]])
+    subdir = '_'.join([parameters.get('project_name', 'asari_project'), 'peek', time_stamp])
+    outdir = os.path.join(parameters.get('outdir') or '', subdir)
+    export_scan_plot(infile, plot_data, outdir)
+
+
+def load_calibration_mz(calibration_file, mode='pos'):
+    """Read reference m/z values of ionization mode from calibration JSON, {"pos": [...], "neg": [...]}."""
+    with open(calibration_file, encoding='utf-8') as f:
+        mzs = json.load(f).get(mode, [])
+    return sorted(mzs)
+
+
+def evaluate_mass_accuracy_ratio(query_mz_list, reference_mzs, mz_tolerance_ppm=10):
+    """
+    Match each query m/z to the nearest value in sorted reference_mzs within mz_tolerance_ppm,
+    then estimate systematic shift as mean of (query - reference)/reference.
+
+    Returns ratio, or None if no match.
+    """
+    results = []
+    for mz in query_mz_list:
+        ii = bisect.bisect_left(reference_mzs, mz)
+        nearest = [reference_mzs[jj] for jj in (ii-1, ii) if 0 <= jj < len(reference_mzs)]
+        if nearest:
+            ref = min(nearest, key=lambda x: abs(x - mz))
+            if abs(mz - ref) <= ref * mz_tolerance_ppm * 1e-6:
+                results.append(mz/ref - 1)
+    if results:
+        ratio = float(np.mean(results))
+        print("Mass accuracy was estimated on %d matched values as %2.1f ppm." %(len(results), ratio*1000000))
+        return ratio
+    else:
+        print("No m/z match found in calibration database to estimate mass accuracy.")
+        return None
+
+
+def export_scan_plot(infile, plot_data, outdir=None):
+    """
+    Plot MS1/MS2 scan sequence via tools.plot_scan_seq.plot_msn, if matplotlib is available.
+    Output is <outdir>/<file name>_peek.pdf.
+    """
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        from .tools.plot_scan_seq import plot_msn
+    except ImportError:
+        print("matplotlib is not available, skipping scan plot.")
+        return None
+    ms1_spectra, ms2_spectra = plot_data
+    if not ms1_spectra and not ms2_spectra:
+        return None
+    outdir = outdir or '.'
+    os.makedirs(outdir, exist_ok=True)
+    outfile = os.path.join(outdir, os.path.splitext(os.path.basename(infile))[0] + '_peek.pdf')
+    title = os.path.basename(infile)
+    plot_msn(ms1_spectra, ms2_spectra, nspec_plot=NSPEC_PLOT, offset_n=OFFSET_N, title=title, outfile=outfile)
+    print("Scan plot was written to %s\n" %outfile)
+    return outfile
+
+
+def get_file_masstrack_stats(infile, parameters, return_sample=False, return_plot_data=False):
     """
     Extract mass tracks from a file and get statistics.
     The ionization_mode is assumed on one scan, thus not supporting polarity switch in a single file.
@@ -64,7 +137,11 @@ def get_file_masstrack_stats(infile, parameters, return_sample=False):
         a bin is not considered if the max intensity < min_peak_height.
     return_sample : bool, optional, default: False
         if True, return full sample dictionary with mass tracks.
-        Else, return _mz_landmarks_, ionization_mode, min_peak_height_.
+        Else, return landmark_mzs (m/z values of landmark tracks), ionization_mode, min_peak_height_.
+    return_plot_data : bool, optional, default: False
+        if True (and not return_sample), also return (ms1_spectra, ms2_spectra) for plot_msn.
+        Full peaks are kept only for the first NSPEC_PLOT + OFFSET_N scans, which plot_msn may use;
+        other scans keep only their max intensity.
 
 
     Note
@@ -88,8 +165,7 @@ def get_file_masstrack_stats(infile, parameters, return_sample=False):
 
 
     To-do: to add output info on instrumentation? (Not sure how pymzml handles the info if at all.)
-        To merge from chromatograms.extract_massTracks_;
-        and add plot_scan_seq.plot_msn
+        To merge from chromatograms.extract_massTracks_.
 
     """
     mz_tolerance_ppm = parameters['mz_tolerance_ppm']
@@ -101,8 +177,11 @@ def get_file_masstrack_stats(infile, parameters, return_sample=False):
     list_mass_tracks = []
 
     jj, L1, L2 = 0, 0, 0
+    counter = 0
+    ms1_spectra, ms2_spectra = [], []      # for plot_msn, ids as 'sp' + sequential number
     with pymzml.run.Reader(infile) as exp:
         for spec in exp:
+            counter += 1
             if spec.ms_level == 1:
                 L1 += 1
                 if spec["positive scan"]:
@@ -112,6 +191,15 @@ def get_file_masstrack_stats(infile, parameters, return_sample=False):
                     ionization_mode = 'neg'
             elif spec.ms_level == 2:
                 L2 += 1
+            if return_plot_data and spec.ms_level in (1, 2):
+                peaks = [(mz, intensity) for mz, intensity in spec.peaks('centroided') if intensity > 0]
+                if counter > NSPEC_PLOT + OFFSET_N:
+                    peaks = [(0, max([x[1] for x in peaks]))] if peaks else []
+                record = {'id': 'sp'+str(counter), 'rtime': spec.scan_time_in_minutes() * 60, 'peaks': peaks}
+                if spec.ms_level == 1:
+                    ms1_spectra.append(record)
+                elif peaks:
+                    ms2_spectra.append(record)
 
     xdict = extract_massTracks_(infile,                 # MS level 1
                 mz_tolerance_ppm=mz_tolerance_ppm,
@@ -166,10 +254,13 @@ def get_file_masstrack_stats(infile, parameters, return_sample=False):
     print("Max intensity in any landmark track: ", f"{max_peak_height:,}")
     print("Minimal height of landmark tracks: ", f"{min_peak_height_:,}", "\n")
 
+    landmark_mzs = [x['mz'] for x in list_mass_tracks]      # _mz_landmarks_ are index numbers
     if return_sample:
         return new
+    elif return_plot_data:
+        return landmark_mzs, ionization_mode, min_peak_height_, (ms1_spectra, ms2_spectra)
     else:
-        return _mz_landmarks_, ionization_mode, min_peak_height_
+        return landmark_mzs, ionization_mode, min_peak_height_
 
 
 def match_mzdiff_pairs_by_rt(matched_mz_pairs,
@@ -263,56 +354,3 @@ def estimate_min_peak_height(list_input_files, parameters):
     print("Estimated parameter for min peak_height is %d \n" %recommended)
     return max(recommended, min_min_peak_height)
 
-# removed for now as part of Asari-X
-# def ext_estimate_min_peak_height(list_input_files,
-#             mz_tolerance_ppm=5, min_intensity=100, min_timepoints=5, min_peak_height=500,
-#             num_files_to_use=3):
-#     '''
-#     Extended estimate_min_peak_height for Xasari use.
-
-#     Parameters
-#     ----------
-#     list_input_files : list[str]
-#         input mzML filepaths, but only using num_files_to_use.
-#     mz_tolerance_ppm : float, optional, default: 5
-#         m/z tolerance in part-per-million. Used to seggregate m/z regsions here.
-#     min_intensity : float, optional, default: 100
-#         minimal intentsity value to consider, also used to filter out 0s.
-#     min_timepoints : int, optional, default: 5
-#         minimal consecutive scans to be considered real signal.
-#     min_peak_height : float, optional, default: 500
-#         a bin is not considered if the max intensity < min_peak_height.
-#     num_files_to_use : int, optional, default: 3
-#         Use randomly chosen num_files_to_use from list_input_files.
-
-#     Returns
-#     -------
-#     A dict of ion mode and recommended min_peak_height.
-#     The latter is an estimated parameter for min peak_height as half of the min verified landmark peaks.
-
-#     See also
-#     --------
-#     estimate_min_peak_height
-#     '''
-#     estimated, _ionmode = [], []
-#     if len(list_input_files) <= num_files_to_use:
-#         selected = list_input_files
-#     else:
-#         selected = random.sample(list_input_files, num_files_to_use)
-#     print("Estimating parameter for min peak_height based on ", selected)
-#     for infile in selected:
-#         try:
-#             mz_landmarks, mode, min_peak_height_ = get_file_masstrack_stats(infile,
-#                         mz_tolerance_ppm, min_intensity, min_timepoints, min_peak_height)
-#                         # not all above parameters are used or relevant
-#             estimated.append(min_peak_height_)
-#             _ionmode.append(mode)
-#         except:
-#             print("Error in analyzing ", infile)
-#     recommended = int(0.5 * np.median(estimated))
-#     if len(set(_ionmode)) > 1:
-#         print("Error occured due to inconsistent ion mode." )
-#         print(selected, _ionmode)
-#         return None
-#     else:
-#         return {'mode': _ionmode[0], 'min_peak_height': recommended}

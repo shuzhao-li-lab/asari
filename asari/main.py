@@ -445,7 +445,7 @@ def build_parser():
     parser.add_argument('-i', '--input', type=str,
             help='input directory of mzML files to process, or a single file to peek')
     parser.add_argument('-o', '--output', type=str,
-            help='output directory')
+            help='output directory (default: current directory); results go to a time-stamped subdirectory')
     parser.add_argument('-j', '--project', type=str,
             help='project name')
     parser.add_argument('-p', '--parameters', type=str,

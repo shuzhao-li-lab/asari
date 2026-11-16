@@ -17,9 +17,9 @@ PARAMETERS = {
     'search_algorithm': 'reverse',      # annotate: 'reverse', 'forward', 'mz', 'rtmz', 'csm'
     'score_algorithm': 'cosine',        # spectral similarity: 'cosine', 'entropy'
     'deconvolution_algorithm': 'hcl',   # deconvolute / forward annotate: 'hcl', 'adap', 'nmf'
-    'diagnosis': False,                   # to keep cache files for viz
+    'diagnosis': False,                 # to keep cache files for viz
 
-    'outdir': 'output',
+    'outdir': '',                       # output location; subdir will be created at run
     'keep_intermediates': False,        # if true, keep on-disk intermediates
     'reuse_intermediates': None,        # if provided as a path, reuse intermediates  with same basename as input mzML files to skip extraction.
     'database_mode': 'ondisk',          # `auto` determined on sample number
