@@ -2,3 +2,8 @@
 docs/source/README.md
 docs/source/GUIDE.md
 docs/_build/
+
+# Python cache, macOS, logs
+__pycache__/
+.DS_Store
+khipu.log

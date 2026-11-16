@@ -42,7 +42,7 @@ Every run writes a time-stamped result directory, e.g. `<project>_<time stamp>/`
 
 ## Workflows and subcommands
 
-Subcommands are `peek, process, deconvolute, annotate, join, viz`. Each takes `--workflow` (`LC` default, `GC`, `LCMSMS`, `MSMS`, `DIMS`) and, where applicable, an algorithm option.
+Subcommands are `peek, process, deconvolute, annotate, join, viz`. Each takes `--workflow` (`LC` default, `GC`, `LCMSMS`, `MSMS`, `DIMS`; case insensitive, with synonyms `LCMS` for `LC` and `GCMS` for `GC`) and, where applicable, an algorithm option.
 
 | Subcommand | Workflow | Algorithm option | Input | Output |
 |---|---|---|---|---|

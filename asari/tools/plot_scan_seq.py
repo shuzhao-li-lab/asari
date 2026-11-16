@@ -33,7 +33,7 @@ def plot_msn(ms1_spectra, ms2_spectra,
         else: return 0
 
     number_spectra_level1, number_spectra_level2 = len(ms1_spectra), len(ms2_spectra)
-    max_rtime = max([x['rtime'] for x in ms1_spectra+ms2_spectra])
+    max_rtime = max([x['rtime'] for x in ms1_spectra+ms2_spectra], default=0)
     if number_spectra_level1 + number_spectra_level2 < nspec_plot + offset_n:
         NN = range(nspec_plot)
     else:
@@ -86,7 +86,11 @@ def plot_msn(ms1_spectra, ms2_spectra,
     for x in ms2_plotdata:
         ax[0].text(x['rtime'], x['median_intensity'] + text_offset, x['num_peaks'], fontsize=6, ha='center')
 
-    ax[0].set_ylim(ymax=max(yy) + 0.5)
+    # y limit from all plotted scans; none if no MS1 (e.g. MS/MS only file) or bad data
+    _heights = [y for y in yy + [x['median_intensity'] for x in ms2_plotdata]
+                if y is not None and np.isfinite(y)]
+    if _heights:
+        ax[0].set_ylim(ymax=max(_heights) + 0.5)
     ax[0].set_xlabel("Retention time (sec)", loc="right")
     ax[0].set_ylabel("Median log10 intensity")
     ax[0].legend(loc='upper right', ncols=2, bbox_to_anchor=(1, 1.2))

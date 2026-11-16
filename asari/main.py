@@ -45,6 +45,18 @@ WORKFLOWS = {
             'reports max intensity per mass track per sample.',
 }
               # "xic", "extract",
+# shorthand synonyms of workflows, after normalize_workflow removes case, '-' and '/'
+WORKFLOW_SYNONYMS = {'LCMS': 'LC', 'GCMS': 'GC'}
+
+def normalize_workflow(name):
+    """
+    Return the workflow name in WORKFLOWS for user input, case insensitive, ignoring '-' and '/',
+    with synonyms (WORKFLOW_SYNONYMS), e.g. 'LCMS' or 'lc-ms' -> 'LC', 'GCMS' -> 'GC', 'LC-MS/MS' -> 'LCMSMS'.
+    Returns None if not a known workflow.
+    """
+    key = str(name).strip().upper().replace('-', '').replace('/', '')
+    key = WORKFLOW_SYNONYMS.get(key, key)
+    return key if key in WORKFLOWS else None
 
 def get_input_file_list(parameters):
     """
@@ -89,6 +101,8 @@ def list_workflows(parameters=None, args=None):
     print("Available workflows (use with --workflow):\n")
     for name, description in WORKFLOWS.items():
         print(f"  {name:<8}{description}\n")
+    print("Synonyms: " + ', '.join(f"{k} for {v}" for k, v in WORKFLOW_SYNONYMS.items())
+          + "; names are case insensitive, '-' and '/' ignored (e.g. LC-MS/MS for LCMSMS).\n")
     if parameters:
         print(f"Default workflow: {parameters.get('workflow', 'LC')}")
 
@@ -420,10 +434,13 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     #
     if args.workflow:
         parameters['workflow'] = args.workflow
-        assert parameters['workflow'] in WORKFLOWS, "Workflow must be one of %s." %', '.join(WORKFLOWS)
-        debug_print(to_print=f"Setting workflow to {parameters['workflow']}")
-    else:
-        debug_print(to_print=f"Using default workflow: {parameters['workflow']}")
+    workflow = normalize_workflow(parameters['workflow'])         # also for workflow in parameter file
+    assert workflow, "Workflow must be one of %s (or synonyms %s)." %(
+        ', '.join(WORKFLOWS), ', '.join(f"{k} for {v}" for k, v in WORKFLOW_SYNONYMS.items()))
+    if workflow != parameters['workflow']:
+        print(f"Workflow {parameters['workflow']} is run as {workflow}.")
+        parameters['workflow'] = workflow
+    debug_print(to_print=f"Using workflow {parameters['workflow']}")
     if parameters.get('kovats'):
         validate_kovats_file(parameters['kovats'])
         if parameters.get('workflow') != 'GC':
@@ -551,7 +568,8 @@ def build_parser():
     parser.add_argument('--vizualization_max_samples', type=int,
             help='Maximum number of samples to display in visualization')
     parser.add_argument('--workflow', type=str,
-            help='Workflow to use, LC by default')
+            help='Workflow to use, LC by default: LC, GC, LCMSMS, MSMS or DIMS; '
+                 'synonyms LCMS for LC, GCMS for GC (case insensitive)')
 
     args = parser.parse_args()
     return args
