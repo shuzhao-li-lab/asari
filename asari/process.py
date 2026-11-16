@@ -348,7 +348,7 @@ def batch_EIC_from_samples_(sample_registry, parameters):
 
 def single_sample_EICs_(job):
     """
-    Extraction of mass tracks from a single sample. Used by multiprocessing in batch_EIC_from_samples_.
+    Extraction of mass tracks from a single sample. Used by multiprocessing in ``batch_EIC_from_samples_``.
     `shared_dict` is used to pass back information, thus critical. Designed here as
     sample_id:
         ('status:mzml_parsing', 'status:eic', outfile,
@@ -395,7 +395,7 @@ def single_sample_EICs_(job):
 
     See also
     --------
-    batch_EIC_from_samples_, make_iter_parameters
+    ``batch_EIC_from_samples_``, make_iter_parameters
     """
     #todo, maybe job should be a dict or something, else, we can just pass the parameters right?
 

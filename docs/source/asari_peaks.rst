@@ -7,3 +7,4 @@ Peaks
 
 .. automodule:: asari.peaks
     :members:
+

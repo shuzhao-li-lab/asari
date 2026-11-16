@@ -1,7 +1,5 @@
-.. asari documentation master file, created by
-   sphinx-quickstart on Thu Apr 20 08:43:44 2023.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+.. asari documentation master file.
+   The narrative pages are README.md and GUIDE.md from the repository root, copied at build time (conf.py).
 
 Welcome to asari's documentation!
 =================================
@@ -10,12 +8,16 @@ Welcome to asari's documentation!
     :target: https://asari.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
 
+Asari is a trackable and scalable Python program for high-resolution metabolomics and exposomics data processing,
+supporting LC-MS, LC-MS/MS, MS/MS, GC-MS and direct infusion (DI-MS) workflows.
+Source code: https://github.com/shuzhao-li/asari
+
 .. toctree::
    :maxdepth: 2
-   :numbered:
+   :caption: Contents
 
-   overview
-   developers_guide
+   Quick start <README>
+   Guide <GUIDE>
    modules
 
 

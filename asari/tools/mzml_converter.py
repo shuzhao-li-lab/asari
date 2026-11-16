@@ -6,7 +6,7 @@ import multiprocessing as mp
 import requests
 
 from zipfile import ZipFile
-from .utils import bulk_process
+from ..utils import bulk_process
 
 class mzMLconverter:
     """Convert Thermo .RAW files to mzML using ThermoRawFileParser."""

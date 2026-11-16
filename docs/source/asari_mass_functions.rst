@@ -7,3 +7,4 @@ Mass Functions
 
 .. automodule:: asari.mass_functions
     :members:
+

@@ -137,7 +137,7 @@ def get_file_masstrack_stats(infile, parameters, return_sample=False, return_plo
         a bin is not considered if the max intensity < min_peak_height.
     return_sample : bool, optional, default: False
         if True, return full sample dictionary with mass tracks.
-        Else, return landmark_mzs (m/z values of landmark tracks), ionization_mode, min_peak_height_.
+        Else, return landmark_mzs (m/z values of landmark tracks), ionization_mode, ``min_peak_height_``.
     return_plot_data : bool, optional, default: False
         if True (and not return_sample), also return (ms1_spectra, ms2_spectra) for plot_msn.
         Full peaks are kept only for the first NSPEC_PLOT + OFFSET_N scans, which plot_msn may use;
@@ -165,7 +165,7 @@ def get_file_masstrack_stats(infile, parameters, return_sample=False, return_plo
 
 
     To-do: to add output info on instrumentation? (Not sure how pymzml handles the info if at all.)
-        To merge from chromatograms.extract_massTracks_.
+        To merge from ``chromatograms.extract_massTracks_``.
 
     """
     mz_tolerance_ppm = parameters['mz_tolerance_ppm']

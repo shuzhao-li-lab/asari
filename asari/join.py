@@ -716,7 +716,7 @@ def combine_gc_empCpds(sources, inchikey_block=1):
 
 def write_tsv_combined_empCpds(combined, sources, outfile):
     """
-    Table of combined empCpds, same columns as empCpds_ tsv from GC annotate
+    Table of combined empCpds, same columns as ``empCpds_`` tsv from GC annotate
     (library and quant ion details from the representative source), plus combination columns.
     """
     base_header = ['empCpd', 'name', 'inchikey', 'formula', 'lib_exact_mass', 'score_cosine', 'score_entropy',
@@ -750,7 +750,7 @@ def write_tsv_combined_empCpds(combined, sources, outfile):
 
 def write_tsv_combined_features(combined, sources, outfile):
     """
-    Table per annotated feature, same columns as Features_ tsv from GC annotate.
+    Table per annotated feature, same columns as ``Features_`` tsv from GC annotate.
     Feature details (mz, rtime, RI, peak_area etc.) are taken from any source that has them,
     since pseudospectra-based annotations may lack feature details.
     """
@@ -789,7 +789,7 @@ def combine_gc_annotations(file_list_paths, parameters):
     """
     join --join_algorithm annotation_combine --workflow GC.
     Combine multiple GC annotation JSON files (Annotated_pseudospectra_*.json, from runs or methods
-    on the same feature table) to one JSON, and export empCpds_ and Features_ tsv files and MSP.
+    on the same feature table) to one JSON, and export ``empCpds_`` and ``Features_`` tsv files and MSP.
     See combine_gc_empCpds for the combination rules.
 
     file_list_paths : a text file containing list of paths to annotation JSON files or directories, one per line.

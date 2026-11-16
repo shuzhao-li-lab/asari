@@ -7,3 +7,4 @@ Dashboard
 
 .. automodule:: asari.dashboard
     :members:
+

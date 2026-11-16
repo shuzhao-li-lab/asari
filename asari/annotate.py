@@ -971,7 +971,7 @@ class GCMS_Annotation:
 
     def export(self, list_empCpds, feature_anno_list, dict_features=None, algorithm=''):
         """
-        Export tsv tables (Features_, empCpds_), JSON and MSP of annotated pseudospectra,
+        Export tsv tables (``Features_``, ``empCpds_``), JSON and MSP of annotated pseudospectra,
         and mirror plots if parameters['do_mirror_plot'].
         dict_features can be None (pseudospectra input): feature details are then
         taken from the empCpds or left blank.

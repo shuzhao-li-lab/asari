@@ -189,7 +189,7 @@ def bin_to_mass_tracks(bin_data_tuples, rt_length, mz_tolerance_ppm=5):
     """
     Construct mass tracks from data that may exceed proper m/z range (i.e. over mz_tolerance_ppm).
     A mass track is an EIC for full RT range, without separating the mass traces.
-    Imperfect ROIs will be examined in extract_massTracks_ and merged if needed.
+    Imperfect ROIs will be examined in ``extract_massTracks_`` and merged if needed.
 
     Parameters
     ----------

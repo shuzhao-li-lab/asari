@@ -2,8 +2,9 @@
 
 .. default-domain:: py
 
-Main
+Main (command line)
 ======================
 
 .. automodule:: asari.main
     :members:
+
