@@ -1,3 +1,14 @@
+v1.19.3 -> v2.0.0
+    Subcommands peek, process, deconvolute, annotate, join, viz; annotation separated from processing.
+    Default output to time-stamped subdirectories of the current directory.
+    peek: mass accuracy against new db/calibration_mz.json (KEGG and CSM); scan plot PDF.
+    LC deconvolute by khipu (requires khipu 2.0.7).
+    LC annotate by mz (compound database, adducts incl. Cl-, HCOO-) or rtmz (--lc_rt_tolerance), with --preannotation.
+    New class LCMSMS_Annotation; MS/MS search in batch mode on ms2batch .npz index (default), MSP/MGF/JSON; pickle legacy.
+    --score_cutoff_cosine flag; LCMSMS with --search_algorithm mz/rtmz runs as LC.
+    Added LC/LCMSMS "join --join_algorithm annotation_combine" (MS1, MS/MS and preannotation).
+    README split into quick start README.md and in-depth GUIDE.md.
+
 v1.19.2 -> v1.19.3
     Added GC "join --join_algorithm new annotation_combine"
 

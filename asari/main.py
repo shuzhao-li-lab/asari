@@ -26,13 +26,17 @@ WORKFLOWS = {
     'LC': 'LC-MS (default). process: feature extraction; deconvolute: pre-annotation by khipu '
           '(isotopes/adducts into empirical compounds); annotate: match feature table to a compound database '
           'by m/z (--search_algorithm mz, default) or a library by m/z and RT (rtmz), '
-          'optionally combined within empirical compounds (--preannotation).',
+          'optionally combined within empirical compounds (--preannotation); '
+          'join --join_algorithm annotation_combine: combine annotations (MS1, MS/MS, preannotation) of one process run.',
     'GC': 'GC-MS. process (optional --kovats to add RI column); deconvolute (--deconvolution_algorithm '
           'hcl, adap or nmf) into pseudospectra; annotate (--search_algorithm reverse or forward) '
-          'against an MSP/JSON spectral library (--db, --hires).',
+          'against an MSP/JSON spectral library (--db, --hires); '
+          'join --join_algorithm annotation_combine: combine annotation runs on the same feature table.',
     'LCMSMS': 'LC-MS/MS (DDA). process: MS1 feature table plus MS/MS spectra on mass tracks, '
               'clustered by default (--cluster_ms2 F to export per input file); '
-              'annotate: search MS/MS against a pre-indexed library (--db).',
+              'annotate: search MS/MS against a library (--db; .npz index preferred, or .msp, .mgf, .json); '
+              'with --search_algorithm mz or rtmz, MS1 search of the feature table, same as LC; '
+              'join --join_algorithm annotation_combine as in LC, mapping MS/MS annotations to MS1 features.',
     'MSMS': 'MS/MS only. process: MS2 spectra per input file, MS1 data ignored, no m/z or RT alignment; '
             'clustered by precursor m/z, RT and similarity by default (--cluster_ms2 F to export per input file); '
             'annotate as LCMSMS (--workflow LCMSMS on ms2_spectra.json).',
@@ -75,7 +79,7 @@ def annotate(parameters, args):
 def join(parameters, args):
     """
     Run subcommand `join` by --join_algorithm: composite_table_merge (default) on multiple feature tables;
-    annotation_combine on multiple annotation results (GC workflow).
+    annotation_combine on multiple annotation results (GC, LC or LCMSMS workflow).
     """
     join_project(args.input, parameters=parameters)
 
@@ -461,7 +465,7 @@ def build_parser():
     parser.add_argument('--search_algorithm', type=str,
                 choices=['reverse', 'forward', 'mz', 'rtmz', 'csm'],
                 help=f"search algorithm for annotate (default: {PARAMETERS['search_algorithm']} for GC, mz for LC; "
-                     "LC uses mz or rtmz)")
+                     "LC uses mz or rtmz; LCMSMS with mz or rtmz runs as LC)")
     parser.add_argument('--preannotation', type=str,
                 help="annotate LC: empCpds from `deconvolute` (<project>_list_khipus.json or its directory); "
                      "library matches are combined within empCpds")
@@ -527,7 +531,8 @@ def build_parser():
     parser.add_argument('--join_algorithm', type=str,
             help='For `join`: composite_table_merge (default), joining LC/GC-MS feature tables; '
                  'or annotation_combine, combining annotation results of different runs or methods '
-                 '(--workflow GC; input is a text file listing annotation JSON files or directories)')
+                 '(--workflow GC: a text file listing annotation JSON files or directories; '
+                 '--workflow LC or LCMSMS: a text file listing process, deconvolute and annotate result directories)')
     parser.add_argument('--mirror_plot',
             help='For `annotate --workflow GC`, export PDF mirror plots under mirrorplots/ (default False). '
                  'Interactive mirror plots are available in `asari viz` on the annotation directory')

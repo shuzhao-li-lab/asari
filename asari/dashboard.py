@@ -561,7 +561,7 @@ def _normalize_annotation_record(entry, index):
         record = {
             'id': entry.get('spid'),
             'query_id': entry.get('spid'),
-            'name': db_entry.get('NAME', entry.get('database_key', '')),
+            'name': entry.get('name') or db_entry.get('NAME') or db_entry.get('name') or entry.get('database_key', ''),
             'mz': _float_or_none(entry.get('mz')),
             'rtime': _float_or_none(entry.get('rtime')),
             'RI': None,

@@ -50,6 +50,15 @@ def annotate_project(infile, parameters):
     os.makedirs(outdir, exist_ok=True)
     print(f"Annotation directory: {outdir}.\n\n")
 
+    if parameters['workflow'] == "LCMSMS" and parameters['search_algorithm'] in ('mz', 'rtmz'):
+        # shortcut: MS1 search of the LC-MS/MS feature table is the same as LC annotation
+        print(f"Shortcut: --workflow LCMSMS with --search_algorithm {parameters['search_algorithm']} "
+              "is an MS1 search, run as --workflow LC on the feature table.\n")
+        parameters['workflow'] = 'LC'
+        if os.path.isdir(infile):
+            infile = os.path.join(infile, 'Feature_table.tsv')
+            print(f"Using feature table {infile}.\n")
+
     if parameters['workflow'] == "LC":
         # to add deconvolute and algorithms in version 2
         if parameters['search_algorithm'] not in ('mz', 'rtmz'):
@@ -133,7 +142,8 @@ class LCMSMS_Annotation:
         Returns list of annotation results (JSON style), or None if no database.
         """
         if not self.database_file:
-            print("LCMSMS/MSMS annotation requires a pre-indexed MS/MS database via --db.")
+            print("LCMSMS/MSMS annotation requires an MS/MS library via --db: "
+                  ".npz index (preferred, see `python -m asari.ms2batch index -h`), or .msp, .mgf, .json.")
             return None
         self.load_database(self.database_file)
         list_query_spectra = self.load_query_spectra(infile)
@@ -388,6 +398,7 @@ class LCMS_Annotation:
             _database_file = self.parameters.get('db') or str(
                 pkg_resources.files(db).joinpath(_default_database_))
             list_lib_entries = json.load(open(_database_file))
+            print(f"Read {len(list_lib_entries)} compounds from {_database_file}.")
 
         else:
             print(f"search_algorithm {self.parameters['search_algorithm']} is not supported in LC.")

@@ -541,7 +541,8 @@ def join_project(file_list_paths, parameters):
     """
     Run subcommand `join` by parameters['join_algorithm']:
     'composite_table_merge' (default) joins LC/GC-MS feature tables (join_tables);
-    'annotation_combine' combines annotations from different runs or methods, by workflow (GC for now).
+    'annotation_combine' combines annotations from different runs or methods, by workflow
+    (GC: combine_gc_annotations; LC or LCMSMS: combine_lc_annotations).
     """
     algorithm = parameters.get('join_algorithm', 'composite_table_merge')
     if algorithm == 'composite_table_merge':
@@ -549,8 +550,10 @@ def join_project(file_list_paths, parameters):
     elif algorithm == 'annotation_combine':
         if parameters['workflow'] == 'GC':
             combine_gc_annotations(file_list_paths, parameters)
+        elif parameters['workflow'] in ('LC', 'LCMSMS'):
+            combine_lc_annotations(file_list_paths, parameters)
         else:
-            print(f"annotation_combine is not yet supported for workflow {parameters['workflow']}; GC only.")
+            print(f"annotation_combine is not supported for workflow {parameters['workflow']}; GC, LC or LCMSMS.")
     else:
         print(f"Unknown join_algorithm {algorithm}, must be one of {', '.join(JOIN_ALGORITHMS)}.")
 
@@ -832,4 +835,444 @@ def combine_gc_annotations(file_list_paths, parameters):
     print("\nCombined %d empCpds into %d (%d supported by multiple sources, %d with features shared by other annotations)."
           %(sum(len(S['list_of_empCpds']) for S in sources), len(combined), multi,
             sum(1 for x in combined if x['shared_features_with'])))
+    print(f"Results written to {outdir}.\n")
+
+
+# -----------------------------------------------------------------------------
+# annotation_combine for LC (LC-MS, LC-MS/MS)
+# -----------------------------------------------------------------------------
+#
+# Sources are result directories, identified by project.json ('run', 'workflow'):
+#   process (LC or LCMSMS)    : Feature_table.tsv, ms2_spectra.json (reference of all others)
+#   deconvolute, LC           : <project>_list_khipus.json (preannotation, empCpds)
+#   annotate, LC              : Annotated_features_<project>.json (MS1, mz or rtmz)
+#   annotate, LCMSMS or MSMS  : <project>_MS2_annotation.json (MS/MS spectral search)
+# All must come from the same process run (same feature table).
+
+LC_SOURCE_FILES = {
+    ('deconvolute', 'LC'): '*_list_khipus.json',
+    ('annotate', 'LC'): 'Annotated_features_*.json',
+    ('annotate', 'LCMSMS'): '*_MS2_annotation.json',
+    ('annotate', 'MSMS'): '*_MS2_annotation.json',
+}
+
+def read_dir_path_list(file_list_paths):
+    """
+    file_list_paths : a text file containing list of result directories (or files in them), one per line.
+    Returns list of directories, in input order, without duplicates.
+    """
+    dirs = []
+    for line in open(file_list_paths).read().splitlines():
+        line = line.strip().strip('",')
+        if not line or line in ('[', ']') or line.startswith('#'):
+            continue
+        d = line if os.path.isdir(line) else os.path.dirname(line)
+        if not os.path.isdir(d):
+            print(f"Warning: {line} not found, skipped.")
+        elif os.path.realpath(d) not in [os.path.realpath(x) for x in dirs]:
+            dirs.append(d)
+    return dirs
+
+def _read_project_json(d):
+    f = os.path.join(d, 'project.json')
+    if not os.path.exists(f):
+        return None
+    with open(f, encoding='utf-8') as F:
+        return json.load(F)
+
+def _input_process_dir(desc):
+    """The process directory of a run's input (a process directory, or a file in it)."""
+    p = (desc.get('input') or '').rstrip('/')
+    if os.path.isfile(p) or os.path.splitext(p)[1] in ('.tsv', '.json', '.msp', '.txt'):
+        p = os.path.dirname(p)
+    if os.path.basename(p) == 'export':         # projects before asari 2.0
+        p = os.path.dirname(p)
+    return p
+
+def _same_dir(recorded, actual):
+    """True if recorded path is actual directory; by name if recorded path no longer exists (moved)."""
+    if os.path.exists(recorded):
+        return os.path.realpath(recorded) == os.path.realpath(actual)
+    return os.path.basename(recorded) == os.path.basename(os.path.realpath(actual))
+
+def _find_feature_table(d, desc=None):
+    for name in [(desc or {}).get('output_feature_table', 'Feature_table.tsv'), 'Feature_table.tsv',
+                 os.path.join('export', 'full_Feature_table.tsv')]:
+        f = os.path.join(d, name)
+        if os.path.exists(f):
+            return f
+    return None
+
+def collect_lc_sources(dirs, parameters):
+    """
+    Classify result directories by project.json, and verify they came from the same process run.
+
+    The reference is the process directory in dirs, or else the common input of the other runs.
+    A source is excluded (with a warning) if its input is not the reference, its mode differs,
+    or its content does not match the reference feature table.
+
+    Returns (reference, sources), reference = {'dir', 'desc', 'feature_table'},
+    sources = [{'source', 'dir', 'run', 'workflow', 'file', 'desc'}, ...]; or (None, []) if failed.
+    """
+    import glob
+    process_dirs, candidates = [], []
+    for d in dirs:
+        desc = _read_project_json(d)
+        if desc is None:
+            print(f"Warning: no project.json in {d}, skipped.")
+            continue
+        run, workflow = desc.get('run'), desc.get('workflow')
+        if run == 'process':
+            process_dirs.append((d, desc))
+        elif (run, workflow) in LC_SOURCE_FILES:
+            files = sorted(glob.glob(os.path.join(d, LC_SOURCE_FILES[(run, workflow)])))
+            if files:
+                candidates.append({'dir': d, 'run': run, 'workflow': workflow, 'file': files[0], 'desc': desc})
+            else:
+                print(f"Warning: no {LC_SOURCE_FILES[(run, workflow)]} in {d}, skipped.")
+        else:
+            print(f"Warning: {d} (run {run}, workflow {workflow}) is not used in LC annotation_combine, skipped.")
+
+    if len(process_dirs) > 1:
+        print("Error: more than one process directory given: " + ', '.join(x[0] for x in process_dirs))
+        return None, []
+    if process_dirs:
+        ref_dir, ref_desc = process_dirs[0]
+    else:
+        inputs = sorted(set(_input_process_dir(S['desc']) for S in candidates))
+        if len(inputs) != 1:
+            print("Error: no process directory given, and the sources have different inputs: " + ', '.join(inputs))
+            return None, []
+        ref_dir, ref_desc = inputs[0], _read_project_json(inputs[0]) or {}
+        print(f"Using process directory from the input of sources: {ref_dir}")
+    feature_table = _find_feature_table(ref_dir, ref_desc)
+    if not feature_table:
+        print(f"Error: no feature table found in {ref_dir}.")
+        return None, []
+    reference = {'dir': ref_dir, 'desc': ref_desc, 'feature_table': feature_table}
+
+    mode = ref_desc.get('mode') or parameters.get('mode')
+    sources, labels = [], set()
+    for S in candidates:
+        if not _same_dir(_input_process_dir(S['desc']), ref_dir):
+            print(f"Warning: {S['dir']} is from input {S['desc'].get('input')}, not {ref_dir}; excluded.")
+            continue
+        if mode and S['desc'].get('mode') and S['desc']['mode'] != mode:
+            print(f"Warning: {S['dir']} is in mode {S['desc']['mode']}, not {mode}; excluded.")
+            continue
+        label = S['desc'].get('project_name') or os.path.basename(S['dir'])
+        while label in labels:
+            label += '_' + str(len(sources))
+        labels.add(label)
+        S['source'] = label
+        sources.append(S)
+    return reference, sources
+
+def _valid_str(x):
+    return bool(x) and str(x).strip().lower() not in ('none', 'nan', 'null')
+
+def compound_keys(name='', inchikey='', inchikey_block=1):
+    """Keys to compare compounds across databases: InChIKey (first inchikey_block blocks) and lower case name."""
+    keys = set()
+    if _valid_str(inchikey):
+        keys.add('inchikey:' + '-'.join(str(inchikey).strip().split('-')[:inchikey_block]))
+    if _valid_str(name):
+        keys.add('name:' + str(name).strip().lower())
+    return keys
+
+def ms2_entry_fields(db_entry):
+    """name, inchikey, precursor_type, formula, lib_id and precursor m/z from an MS/MS library entry (MSP fields, any case)."""
+    low = {str(k).lower(): v for k, v in db_entry.items()}
+    name = str(low.get('name') or '').split(';')[0].strip()       # MS-DIAL style 'Choline; CE30; InChIKey'
+    return {
+        'name': name,
+        'inchikey': low.get('inchikey') or '',
+        'ion': low.get('precursor_type') or low.get('precursortype') or low.get('adduct') or '',
+        'formula': low.get('formula') or '',
+        'lib_id': low.get('db#') or low.get('accession') or low.get('id') or '',
+        'lib_mz': low.get('precursor_mz') or low.get('precursormz') or '',
+    }
+
+def map_ms2_to_features(list_spectra, list_features, mz_tolerance_ppm=5, rt_tolerance=10):
+    """
+    Map MS/MS spectra to MS1 features, by parent_masstrack_id (from asari LCMSMS process) if available,
+    else precursor m/z within mz_tolerance_ppm. Among candidates, a feature whose peak range
+    (rtime_left_base, rtime_right_base) contains the MS/MS rtime is preferred, then closest rtime
+    within rt_tolerance.
+
+    list_spectra : [{'id', 'precursor_mz', 'rtime', 'parent_masstrack_id' (optional)}, ...]
+    Returns {spectrum id: feature id}.
+    """
+    by_track = {}
+    for F in list_features:
+        by_track.setdefault(str(F.get('parent_masstrack_id')), []).append(F)
+    sorted_features = sorted(list_features, key=lambda x: x['mz'])
+    mzs = np.array([F['mz'] for F in sorted_features])
+    mapping = {}
+    for sp in list_spectra:
+        mz, rt = sp.get('precursor_mz'), sp.get('rtime')
+        if rt is None:
+            continue
+        track = sp.get('parent_masstrack_id')
+        if track is not None and str(track) in by_track:
+            cands = by_track[str(track)]
+        elif mz:
+            tol = mz * mz_tolerance_ppm * 1e-6
+            a, b = np.searchsorted(mzs, [mz - tol, mz + tol])
+            cands = sorted_features[a: b + 1]
+            cands = [F for F in cands if abs(F['mz'] - mz) <= tol]
+        else:
+            continue
+        inside = [F for F in cands if F.get('rtime_left_base', F['rtime']) <= rt <= F.get('rtime_right_base', F['rtime'])]
+        near = inside or [F for F in cands if abs(F['rtime'] - rt) <= rt_tolerance]
+        if near:
+            mapping[sp['id']] = min(near, key=lambda F: abs(F['rtime'] - rt))['id']
+    return mapping
+
+def combine_lc_annotations(file_list_paths, parameters):
+    """
+    join --join_algorithm annotation_combine --workflow LC (or LCMSMS).
+    Combine LC-MS annotation results of the same process run:
+    MS1 feature annotation (annotate LC, mz or rtmz, one or more databases),
+    MS/MS annotation (annotate LCMSMS/MSMS, one or more databases),
+    and preannotation (deconvolute LC, khipu empCpds).
+
+    - MS1 direct matches from all sources are combined; with preannotation, matches are combined within
+      empCpds by combine_preannotation (neutral mass consistency, then M0, then common ions).
+    - MS/MS spectra are mapped to MS1 features by parent mass track (or precursor m/z) and rtime
+      (map_ms2_to_features); their annotations are added to the feature, and to features in the same empCpd.
+    - number_of_sources: sources supporting the same compound (InChIKey first block or name) on the feature.
+
+    file_list_paths : a text file listing result directories, one per line (process, deconvolute, annotate).
+    Sources are identified and verified by project.json (collect_lc_sources).
+
+    Output, in <project>_annotation_combine_<time stamp>/:
+    - <project>_MS2_annotation.json and .tsv, all MS/MS annotations with mapped features (viewable by `asari viz`);
+    - Annotated_features_<project>.json and Features_<project>.tsv, MS1 features with MS1 and MS/MS annotations.
+    """
+    from .utils import NpEncoder
+    from .annotate import combine_preannotation
+
+    dirs = read_dir_path_list(file_list_paths)
+    reference, sources = collect_lc_sources(dirs, parameters)
+    if reference is None:
+        return
+    mode = reference['desc'].get('mode') or parameters['mode']
+    ppm = parameters['mz_tolerance_ppm']
+    inchikey_block = parameters.get('combine_inchikey_block', 1)
+
+    with open(reference['feature_table']) as f:
+        _n, list_features = read_features_from_asari_table(f.read())
+    dict_features = {F['id']: F for F in list_features}
+    print(f"Reference: {len(list_features)} features in {reference['feature_table']}.")
+
+    # verify and load sources
+    ms1_sources, ms2_sources, empCpd_sources = [], [], []
+    for S in sources:
+        with open(S['file'], encoding='utf-8') as f:
+            data = json.load(f)
+        if S['run'] == 'deconvolute':
+            ids = [F['id'] for emp in data for F in emp.get('MS1_pseudo_Spectra', [])]
+            missing = [x for x in ids if x not in dict_features]
+            if missing:
+                print(f"Warning: {len(missing)} features in {S['file']} not in reference feature table; excluded.")
+                continue
+            S['data'] = data
+            empCpd_sources.append(S)
+        elif S['workflow'] == 'LC':
+            n = data.get('number_of_features')
+            missing = [F['id'] for F in data.get('list_of_features', []) if F['id'] not in dict_features]
+            if (n is not None and n != len(list_features)) or missing:
+                print(f"Warning: {S['file']} was on {n} features, not matching the reference; excluded.")
+                continue
+            S['data'] = data
+            ms1_sources.append(S)
+        else:
+            S['data'] = data
+            ms2_sources.append(S)
+        S['database'] = data.get('database', '') if isinstance(data, dict) else ''
+        S['algorithm'] = data.get('algorithm', '') if isinstance(data, dict) else 'khipu'
+        S['number_of_entries'] = len(data.get('list_of_features', [])) if isinstance(data, dict) else len(data)
+        print(f"  source {S['source']}: {S['run']} {S['workflow']} {S['algorithm']}, "
+              f"{S['number_of_entries']} entries, {S['file']}")
+    if len(empCpd_sources) > 1:
+        print(f"Warning: multiple preannotation sources; using {empCpd_sources[0]['file']}.")
+    if not ms1_sources and not ms2_sources:
+        print("No annotation source to combine.")
+        return
+
+    # MS1: direct matches from all sources, ids prefixed by source
+    direct, dict_lib_entries = {}, {}
+    for S in ms1_sources:
+        for F in S['data'].get('list_of_features', []):
+            for m in F.get('matches', []):
+                if m.get('match', 'direct') != 'direct':        # recomputed from preannotation below
+                    continue
+                lib_id = S['source'] + ':' + str(m['id'])
+                E = {k: v for k, v in m.items() if k not in ('match', 'ppm', 'delta_rtime')}
+                E.update({'lib_id': m['id'], 'source': S['source'], 'database': S['database']})
+                dict_lib_entries[lib_id] = E
+                direct.setdefault(F['id'], [])
+                if lib_id not in direct[F['id']]:
+                    direct[F['id']].append(lib_id)
+    combined_ms1, dict_feature_empCpd, empCpd_members = direct, {}, {}
+    if empCpd_sources:
+        list_empCpds = empCpd_sources[0]['data']
+        combined_ms1, dict_feature_empCpd = combine_preannotation(
+            direct, list_empCpds, dict_lib_entries, mode=mode, mz_tolerance_ppm=ppm)
+        for emp in list_empCpds:
+            empCpd_members[emp.get('interim_id')] = [F['id'] for F in emp.get('MS1_pseudo_Spectra', [])]
+
+    feature_items = {}
+    for fid, lib_ids in combined_ms1.items():
+        F = dict_features[fid]
+        for lib_id in lib_ids:
+            E = dict_lib_entries[lib_id]
+            item = {'evidence': 'MS1', 'match': 'direct' if lib_id in direct.get(fid, []) else 'empCpd'}
+            item.update({k: E.get(k, '') for k in ('source', 'database', 'lib_id', 'name', 'identifier', 'ion',
+                                                     'isotope', 'formula', 'neutral_mass', 'inchikey')})
+            item['lib_mz'], item['lib_rtime'] = E.get('mz'), E.get('rtime')
+            if item['match'] == 'direct':
+                item['ppm'] = round((F['mz'] - E['mz']) / E['mz'] * 1e6, 2)
+                if E.get('rtime') not in (None, ''):
+                    item['delta_rtime'] = round(F['rtime'] - float(E['rtime']), 2)
+            feature_items.setdefault(fid, []).append(item)
+
+    # MS/MS: map spectra to features
+    ms2_spectra = {}
+    ms2_file = os.path.join(reference['dir'], 'ms2_spectra.json')
+    if os.path.exists(ms2_file):
+        with open(ms2_file, encoding='utf-8') as f:
+            ms2_spectra = {sp['id']: sp for sp in json.load(f) if 'id' in sp}
+    list_ms2_records = []
+    for S in ms2_sources:
+        for r in S['data'].get('list_of_features', []):
+            rec = dict(r)
+            rec.update({'source': S['source'], 'database': S['database']})
+            rec.update({k: v for k, v in ms2_entry_fields(r.get('database_entry', {})).items()
+                        if k in ('name', 'inchikey', 'ion', 'formula')})
+            list_ms2_records.append(rec)
+    query = {}
+    for rec in list_ms2_records:
+        sp = ms2_spectra.get(rec['spid'], {})
+        query[rec['spid']] = {'id': rec['spid'], 'precursor_mz': sp.get('precursor_mz', rec.get('mz')),
+                              'rtime': sp.get('rtime', rec.get('rtime')),
+                              'parent_masstrack_id': sp.get('parent_masstrack_id')}
+    ms2_to_feature = map_ms2_to_features(list(query.values()), list_features, ppm,
+                                         parameters.get('lc_rt_tolerance', 10))
+    print(f"MS/MS: {len(list_ms2_records)} annotations on {len(query)} spectra, "
+          f"{sum(1 for x in query if x in ms2_to_feature)} spectra mapped to MS1 features.")
+
+    for ii, rec in enumerate(list_ms2_records):
+        fid = ms2_to_feature.get(rec['spid'])
+        rec['feature'] = fid or ''
+        rec['empCpd'] = dict_feature_empCpd.get(fid, {}).get('interim_id', '') if fid else ''
+        if not fid:
+            continue
+        F = dict_features[fid]
+        fields = ms2_entry_fields(rec.get('database_entry', {}))
+        base = {'evidence': 'MS2', 'source': rec['source'], 'database': rec['database'],
+                'lib_id': fields['lib_id'] or rec.get('database_key', ''), 'name': rec['name'],
+                'identifier': rec.get('database_key', ''), 'ion': rec['ion'], 'formula': rec['formula'],
+                'inchikey': rec['inchikey'], 'lib_mz': fields['lib_mz'], 'spid': rec['spid'],
+                'cosine_score': rec.get('cosine_score'), 'entropy_score': rec.get('entropy_score'),
+                'number_matched_peaks': rec.get('number_matched_peaks'), '_ms2_index': ii}
+        targets = empCpd_members.get(rec['empCpd'], [fid]) if rec['empCpd'] else [fid]
+        for t in targets:
+            item = dict(base, match='direct' if t == fid else 'empCpd')
+            if t == fid:
+                item['ppm'] = round((F['mz'] - rec['mz']) / rec['mz'] * 1e6, 2) if rec.get('mz') else ''
+                item['delta_rtime'] = round(F['rtime'] - rec['rtime'], 2) if rec.get('rtime') is not None else ''
+            feature_items.setdefault(t, []).append(item)
+
+    # number of sources supporting the same compound, per feature
+    for fid, items in feature_items.items():
+        keys = [compound_keys(x.get('name'), x.get('inchikey'), inchikey_block) for x in items]
+        for x, k in zip(items, keys):
+            x['number_of_sources'] = len(set(y['source'] for y, k2 in zip(items, keys) if k & k2) | {x['source']})
+            if x['evidence'] == 'MS2' and x['match'] == 'direct':
+                list_ms2_records[x['_ms2_index']]['number_of_sources'] = x['number_of_sources']
+        items.sort(key=lambda x: (x['match'] != 'direct', -x['number_of_sources'], x['evidence'],
+                                  -(x.get('cosine_score') or 0), abs(x.get('ppm') or 0) if x.get('ppm') != '' else 0))
+        for x in items:
+            x.pop('_ms2_index', None)
+    for rec in list_ms2_records:        # unmapped spectra: count among MS/MS annotations of the same spectrum
+        if 'number_of_sources' not in rec:
+            k = compound_keys(rec['name'], rec['inchikey'], inchikey_block)
+            rec['number_of_sources'] = len(set(r['source'] for r in list_ms2_records if r['spid'] == rec['spid']
+                                    and k & compound_keys(r['name'], r['inchikey'], inchikey_block)) | {rec['source']})
+
+    # export
+    time_stamp = [str(x) for x in time.localtime()[1:6]]
+    handle = parameters['project_name']
+    outdir = os.path.join(parameters['outdir'], '_'.join([handle, 'annotation_combine', ''.join(time_stamp)]))
+    os.makedirs(outdir, exist_ok=True)
+    meta_sources = [{k: S[k] for k in ('source', 'dir', 'run', 'workflow', 'file', 'database', 'algorithm',
+                                        'number_of_entries')} for S in ms1_sources + ms2_sources + empCpd_sources[:1]]
+    common = {
+        'algorithm': 'annotation_combine',
+        'mode': mode,
+        'mz_tolerance_ppm': ppm,
+        'lc_rt_tolerance': parameters.get('lc_rt_tolerance', 10),
+        'time_stamp': ':'.join(time_stamp),
+        'process_dir': reference['dir'],
+        'feature_table': reference['feature_table'],
+        'sources': meta_sources,
+    }
+    empCpd_fields = ['interim_id', 'neutral_formula_mass', 'isotope', 'modification']
+
+    # MS/MS annotations
+    ms2_keys = ['spid', 'mz', 'rtime', 'feature', 'empCpd', 'source', 'database', 'entropy_score', 'cosine_score',
+                'number_matched_peaks', 'number_of_sources', 'database_key', 'name', 'inchikey', 'ion', 'formula']
+    list_ms2_records.sort(key=lambda r: (r['spid'], -r['number_of_sources'], -(r.get('cosine_score') or 0)))
+    if list_ms2_records:
+        with open(os.path.join(outdir, handle + '_MS2_annotation.tsv'), 'w', encoding='utf-8') as O:
+            O.write('\t'.join(ms2_keys) + '\n')
+            for r in list_ms2_records:
+                O.write('\t'.join(['' if r.get(k) is None else str(r.get(k)) for k in ms2_keys]) + '\n')
+        with open(os.path.join(outdir, handle + '_MS2_annotation.json'), 'w', encoding='utf-8') as O:
+            json.dump(dict({'type': 'MS/MS', 'database': '; '.join(S['database'] for S in ms2_sources)},
+                           **common, list_of_features=list_ms2_records),
+                      O, indent=2, ensure_ascii=False, cls=NpEncoder)
+
+    # MS1 features
+    list_annotated = []
+    for F in list_features:
+        if F['id'] in feature_items:
+            F2 = dict(F, matches=feature_items[F['id']])
+            if F['id'] in dict_feature_empCpd:
+                F2['empCpd'] = dict_feature_empCpd[F['id']]
+            list_annotated.append(F2)
+    item_fields = ['evidence', 'match', 'source', 'number_of_sources', 'lib_id', 'name', 'identifier', 'ion',
+                   'isotope', 'formula', 'inchikey', 'lib_mz', 'ppm', 'lib_rtime', 'delta_rtime', 'neutral_mass',
+                   'spid', 'cosine_score', 'entropy_score', 'number_matched_peaks']
+    header = ['feature', 'mz', 'rtime', 'empCpd', 'empCpd_neutral_mass', 'feature_isotope', 'feature_ion',
+              'number_of_matches'] + item_fields
+    with open(os.path.join(outdir, 'Features_' + handle + '.tsv'), 'w', encoding='utf-8') as O:
+        O.write('\t'.join(header) + '\n')
+        for F in list_annotated:
+            emp = F.get('empCpd', {})
+            for x in F['matches']:
+                row = [F['id'], F['mz'], F['rtime']] + [emp.get(k, '') for k in empCpd_fields] + [
+                       len(F['matches'])] + [x.get(k, '') for k in item_fields]
+                O.write('\t'.join(['' if v is None else str(v) for v in row]) + '\n')
+    with open(os.path.join(outdir, 'Annotated_features_' + handle + '.json'), 'w', encoding='utf-8') as O:
+        json.dump(dict({'type': 'LCMS', 'database': '; '.join(S['database'] for S in ms1_sources + ms2_sources)},
+                       **common, number_of_features=len(list_features),
+                       number_of_annotated_features=len(list_annotated),
+                       preannotation=empCpd_sources[0]['file'] if empCpd_sources else '',
+                       list_of_features=list_annotated),
+                  O, indent=2, ensure_ascii=False, cls=NpEncoder)
+
+    parameters['join_sources'] = [S['dir'] for S in sources]
+    parameters['process_dir'] = reference['dir']
+    with open(os.path.join(outdir, 'project.json'), 'w', encoding='utf-8') as f:
+        json.dump(parameters, f, ensure_ascii=False, indent=2, cls=NpEncoder)
+
+    n_ms1 = sum(1 for F in list_annotated if any(x['evidence'] == 'MS1' for x in F['matches']))
+    n_ms2 = sum(1 for F in list_annotated if any(x['evidence'] == 'MS2' for x in F['matches']))
+    n_both = sum(1 for F in list_annotated if any(x['number_of_sources'] > 1 for x in F['matches']))
+    print(f"\n{len(list_annotated)} of {len(list_features)} features annotated: {n_ms1} by MS1, {n_ms2} by MS/MS, "
+          f"{n_both} with a compound supported by multiple sources.")
+    print(f"{len(list_ms2_records)} MS/MS annotations, {sum(1 for r in list_ms2_records if r['feature'])} mapped to features.")
     print(f"Results written to {outdir}.\n")

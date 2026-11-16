@@ -57,18 +57,19 @@ Subcommands are `peek, process, deconvolute, annotate, join, viz`. Each takes `-
 | `annotate` | `LC` | `--search_algorithm mz` (default) | feature table, compound database (`--db`, JSON; default built-in); optional `--preannotation` from `deconvolute` | `Features_<project>.tsv`, `Annotated_features_<project>.json` |
 | `annotate` | `LC` | `--search_algorithm rtmz` | feature table, library with m/z and RT (`--db`, JSON; default built-in HILIC pos standards), `--lc_rt_tolerance`; optional `--preannotation` | same as above |
 | `annotate` | `LCMSMS`, `MSMS` | entropy search, then `--score_algorithm cosine` (default) or `entropy` | MS/MS spectra (JSON, MSP or process directory), MS/MS library (`--db`, `.npz` recommended; `.msp`, `.mgf`, `.json`, legacy `.pkl`) | `<project>_MS2_annotation.tsv` and `.json` |
+| `annotate` | `LCMSMS` | `--search_algorithm mz` or `rtmz` | feature table or `process` directory | shortcut, run as `LC` above (MS1 search) |
 | `annotate` | `GC` | `--search_algorithm reverse` (default) | feature table with RI (or `--kovats`), GC-MS library (`--db`, MSP/JSON; default built-in) | `empCpds_`, `Features_<project>.tsv`, `Annotated_pseudospectra_<project>.json`/`.msp` |
 | `annotate` | `GC` | `--search_algorithm forward`, `--hires T` (default) or `F` (unit m/z) | pseudospectra (JSON/MSP), or feature table (deconvoluted first by `--deconvolution_algorithm`) | same as above |
 | `join` | `LC`, `GC` | `--join_algorithm composite_table_merge` (default) | list of feature tables or process directories | `join_<project>_<time stamp>/asari_join_result.tsv` |
 | `join` | `GC` | `--join_algorithm annotation_combine` | list of GC annotation results | combined annotation, same files as GC `annotate` |
+| `join` | `LC`, `LCMSMS` | `--join_algorithm annotation_combine` | list of result directories of one `process` run: LC/LCMSMS `annotate`, optional `deconvolute` (preannotation) and the `process` directory | `Features_<project>.tsv`, `Annotated_features_<project>.json` (MS1 features with MS1 and MS/MS annotations); `<project>_MS2_annotation.tsv`/`.json` (all MS/MS annotations) |
 | `viz` | `LC`, `GC` | | `process` result directory (run with `--diagnosis T`) | dashboard in web browser |
-| `viz` | `GC`, `LCMSMS`, `MSMS` | | `annotate` (or GC `annotation_combine`) result directory | dashboard with interactive mirror plots |
+| `viz` | `GC`, `LCMSMS`, `MSMS` | | `annotate` or `annotation_combine` result directory (LC `annotation_combine` with MS/MS sources) | dashboard with interactive mirror plots |
 
 Notes:
 - Scores for spectral matching: `--score_cutoff_cosine` (default 0.4); `--mirror_plot T` exports PDF mirror plots in GC annotation.
 - MS/MS libraries are best indexed once to `.npz`: `python -m asari.ms2batch index library.msp library.npz`. See [GUIDE.md](GUIDE.md#indexing-an-msms-library-to-npz).
-- `annotate` can be run on different databases and they can be combined via `join`.
-- `annotation_combine` for LC is planned for a future version.
+- `annotate` can be run on different databases and libraries; results of one `process` run (MS1, MS/MS and `deconvolute` preannotation) are combined by `join --join_algorithm annotation_combine`. See [GUIDE.md](GUIDE.md#joining-results).
 
 ## Examples
 
@@ -86,6 +87,10 @@ LC-MS/MS:
 ```
 asari process -i mydir/project_dir -o mydir -j dda1 --workflow LCMSMS
 asari annotate -i mydir/dda1_<ts> -o mydir -j dda1 --workflow LCMSMS --db MassBank.npz
+asari annotate -i mydir/dda1_<ts> -o mydir -j dda1 --workflow LCMSMS --search_algorithm mz   # MS1, same as LC
+asari deconvolute -i mydir/dda1_<ts>/Feature_table.tsv -o mydir -j dda1 --workflow LC
+# list the result directories above, one per line, in dirs.txt
+asari join -i dirs.txt -o mydir -j dda1 --workflow LC --join_algorithm annotation_combine
 ```
 
 GC-MS:
