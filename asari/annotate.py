@@ -22,6 +22,7 @@ import os
 import json
 import time
 import pickle
+import numpy as np
 import importlib.resources as pkg_resources
 from pathvalidate import sanitize_filename
 
@@ -34,6 +35,8 @@ from .tools.match_features import list_match_lcms_features
 from .mass_functions import all_mass_paired_mapping
 from .tools.plot import mirror_plot
 from .tools.entropy_search import clean_list_ms2spectra
+from .tools.msp_parser import parse_msp_to_listdict
+from .tools.cosine import cosine_similarity
 from .gc_functions import *
 from .deconvolute import (ingest_gc_featuretable, run_gc_deconvolution)
 
@@ -69,16 +72,8 @@ def annotate_project(infile, parameters):
 
     elif parameters['workflow'] in ("LCMSMS", "MSMS"):
         # to handle diff anno methods, including pre-annotation in version 2
-
-        
-        annotate_lcmsms(
-            infile=infile,
-            outdir=outdir,
-            database_file=parameters['db'],
-            project_name_handle=parameters['project_name'],
-            ms2_tolerance_in_da=parameters.get('lcmsms_ms2_tolerance_in_da', 0.01),
-
-        )
+        ANN = LCMSMS_Annotation(dict(parameters, outdir=outdir))
+        ANN.annotate_spectra(infile)
 
     # recording project parameters as meta data
     with open(os.path.join(outdir, 'project.json'), 'w', encoding='utf-8') as f:
@@ -89,105 +84,200 @@ def annotate_project(infile, parameters):
 # -----------------------------------------------------------------------------
 #
 
-def annotate_lcmsms(
-        infile,
-        outdir,
-        database_file,
-        project_name_handle='lcmsmsresult',
-        ms2_tolerance_in_da=0.01,
-        cosine_similarity_filter=0.5,
-        database_key='INCHIKEY'
-    ):
+class LCMSMS_Annotation:
     """
-    LC-MS/MS annotation of the input JSON file on a pre-indexed database_file.
+    Annotation of MS/MS spectra (LCMSMS or MSMS workflow) against a spectral library
+    pre-indexed for Flash Entropy (pickle of ms_entropy.FlashEntropySearch).
 
-    infile : MS/MS spectra or clusters (as from Asari LCMSMS process workflow) in JSON
-    database_file : pre-indexed database_file compatible with Flash Entropy
+    Input spectra are from asari `process` (LCMSMS or MSMS workflow), in JSON (ms2_spectra.json)
+    or MSP (ms2_spectra.msp, ms2_spectra_<sample>.msp), or a process directory with ms2_spectra.json/.msp.
+
+    Steps: entropy identity search (low prefilter), then cosine similarity on the best entropy match;
+    matches pass by parameters['score_algorithm'] and score_cutoff_cosine or score_cutoff_entropy;
+    redundant library compounds (by database_key, e.g. INCHIKEY) are collapsed to the best scoring match.
+
+    Outputs in outdir: <project>_MS2_annotation.tsv and <project>_MS2_annotation.json
+    (with experimental 'peaks' and library 'peaks_in_lib' for mirror plots in viz Dashboard).
     """
-    entropy_screen_params = {'mz_tol_ms1': 0.01,
-        'mz_tol_ms2': ms2_tolerance_in_da,
-        'ms2_sim_tol': 0.2,     # intentionally low, to filter later. ENTROPY_FILTER = 0.2
-        'precursor_mz_offset': 1.6,
-        }
+    entropy_prefilter = 0.2         # intentionally low on entropy identity search, to filter later
+    precursor_mz_offset = 1.6       # removal of precursor ions in cleaning query spectra, in Da
+    database_keys = ('INCHIKEY', 'InChIKey', 'inchikey', 'NAME', 'name')    # to collapse redundant entries
 
-    entropy_search = pickle.load(open(database_file, 'rb'))
-    print(f"Loaded database of {len(entropy_search.precursor_mz_array)} spectra.")
-    ms2_spectra = json.load(open(infile))
-    # original experimental peaks, kept in JSON export for mirror plots (e.g. in viz Dashboard)
-    dict_query_peaks = {sp['id']: sp['peaks'] for sp in ms2_spectra}
-    cleaned_spectra = clean_list_ms2spectra(ms2_spectra, entropy_search, entropy_screen_params)
-    print(f"Loadded {len(cleaned_spectra)} cleaned experimental spectra.\n")
+    def __init__(self, parameters):
+        self.parameters = parameters
+        self.outdir = parameters['outdir']
+        self.project_name = parameters['project_name']
+        self.database_file = parameters.get('db')
+        self.ms1_tolerance_in_da = parameters['lcmsms_ms1_tolerance_in_da']
+        self.ms2_tolerance_in_da = parameters['lcmsms_ms2_tolerance_in_da']
+        self.score_algorithm = parameters['score_algorithm']
+        if self.score_algorithm == 'entropy':
+            self.score_cutoff = parameters['score_cutoff_entropy']
+        else:
+            self.score_algorithm, self.score_cutoff = 'cosine', parameters['score_cutoff_cosine']
+        self.entropy_search = None
 
-    results = []
-    for (precursor_mz, peaks, rtime, spid) in cleaned_spectra:
-        similarity, matched_num = entropy_search.identity_search(precursor_mz=precursor_mz,
-                                                                peaks=peaks,
-                                                                ms1_tolerance_in_da=entropy_screen_params['mz_tol_ms1'],
-                                                                ms2_tolerance_in_da=entropy_screen_params['mz_tol_ms2'],
-                                                                output_matched_peak_number=True)
-        if np.max(similarity) > entropy_screen_params['ms2_sim_tol']:
-            # get best entropy match
-            best_idx = np.argmax(similarity)
-            entropy_matched_entry = entropy_search[best_idx]
-            entropy_score = similarity[best_idx]
-            number_matched_peaks = matched_num[best_idx]
-            # get cosine score
-            cosine_score, _ = cosine_similarity(peaks, entropy_matched_entry['peaks'],
-                                            mz_tolerance=ms2_tolerance_in_da)
-            if cosine_score > cosine_similarity_filter:
-                results.append( (entropy_matched_entry, cosine_score, entropy_score, number_matched_peaks, spid, precursor_mz, rtime) )
+    def annotate_spectra(self, infile):
+        """
+        Workflow: load database and query spectra, search, collapse and export.
+        Returns list of annotation results (JSON style), or None if no database.
+        """
+        if not self.database_file:
+            print("LCMSMS/MSMS annotation requires a pre-indexed MS/MS database via --db.")
+            return None
+        self.entropy_search = self.load_database(self.database_file)
+        list_query_spectra = self.load_query_spectra(infile)
+        results = self.search(list_query_spectra)
+        concise_results = self.collapse_by_database_key(results)
+        json_results = self.format_results(concise_results, list_query_spectra)
+        self.export(json_results)
+        return json_results
 
-    # Collapse redundant DB entries for export, selecting by best cosine_score. Consider to keep top N later.
-    concise_results = {}
-    for res in results:
-            k = res[0][database_key]
-            if k in concise_results:
-                if res[1] > concise_results[k][1]:
-                    concise_results[k] = res
+    def load_database(self, database_file):
+        """Load pre-indexed database (pickle of FlashEntropySearch)."""
+        with open(database_file, 'rb') as f:
+            entropy_search = pickle.load(f)
+        print(f"Loaded database of {len(entropy_search.precursor_mz_array)} spectra from {database_file}.")
+        return entropy_search
+
+    def load_query_spectra(self, infile):
+        """
+        Load experimental MS/MS spectra from JSON or MSP, or from a process directory 
+        (ms2_spectra.json, else ms2_spectra.msp).
+        Returns list of spectra as dicts with 'id', 'precursor_mz', 'rtime', 'peaks'.
+        """
+        if os.path.isdir(infile):
+            for f in ('ms2_spectra.json', 'ms2_spectra.msp'):
+                if os.path.exists(os.path.join(infile, f)):
+                    infile = os.path.join(infile, f)
+                    break
             else:
+                raise FileNotFoundError(f"No ms2_spectra.json or ms2_spectra.msp in {infile}.")
+
+        if infile.lower().endswith('.msp'):
+            list_query_spectra = []
+            for ii, e in enumerate(parse_msp_to_listdict(infile)):
+                precursor_mz = e.get('PRECURSORMZ') or e.get('PrecursorMZ')
+                if precursor_mz in (None, ''):
+                    continue
+                rtime = e.get('RETENTIONTIME')
+                list_query_spectra.append({
+                    'id': e.get('ID') or e.get('NAME') or f"sp{ii}",
+                    'precursor_mz': float(precursor_mz),
+                    'rtime': float(rtime) if rtime not in (None, '') else None,
+                    'peaks': [list(x) for x in e['peaks']],
+                })
+        else:
+            with open(infile, encoding='utf-8') as f:
+                list_query_spectra = json.load(f)
+        print(f"Loaded {len(list_query_spectra)} experimental spectra from {infile}.")
+        return list_query_spectra
+
+    def search(self, list_query_spectra):
+        """
+        Entropy identity search of cleaned query spectra; cosine similarity on the best entropy match.
+        Returns list of (library entry, cosine_score, entropy_score, number_matched_peaks, spid, precursor_mz, rtime)
+        that pass score cutoff by self.score_algorithm.
+        """
+        cleaned_spectra = clean_list_ms2spectra(list_query_spectra, self.entropy_search,
+                                                {'precursor_mz_offset': self.precursor_mz_offset})
+        print(f"Searching {len(cleaned_spectra)} cleaned experimental spectra, "
+              f"{self.score_algorithm} score cutoff {self.score_cutoff}.\n")
+        prefilter = min(self.entropy_prefilter, self.score_cutoff)
+        results = []
+        for (precursor_mz, peaks, rtime, spid) in cleaned_spectra:
+            similarity, matched_num = self.entropy_search.identity_search(
+                precursor_mz=precursor_mz,
+                peaks=peaks,
+                ms1_tolerance_in_da=self.ms1_tolerance_in_da,
+                ms2_tolerance_in_da=self.ms2_tolerance_in_da,
+                output_matched_peak_number=True)
+            if len(similarity) == 0 or np.max(similarity) <= prefilter:
+                continue
+            best_idx = int(np.argmax(similarity))
+            entry = dict(self.entropy_search[best_idx])
+            entropy_score = float(similarity[best_idx])
+            cosine_score, _ = cosine_similarity(peaks, entry['peaks'], mz_tolerance=self.ms2_tolerance_in_da)
+            score = entropy_score if self.score_algorithm == 'entropy' else cosine_score
+            if score > self.score_cutoff:
+                results.append((entry, float(cosine_score), entropy_score, int(matched_num[best_idx]),
+                                spid, precursor_mz, rtime))
+        print(f"{len(results)} spectra matched to database.")
+        return results
+
+    def get_database_key(self, entry):
+        """Compound key of a library entry, first available of self.database_keys."""
+        for k in self.database_keys:
+            if entry.get(k):
+                return entry[k]
+        return None
+
+    def collapse_by_database_key(self, results):
+        """
+        Collapse redundant library compounds (same database key), keeping the best match 
+        by self.score_algorithm. Consider to keep top N later.
+        Returns {database key: result}.
+        """
+        score_idx = 2 if self.score_algorithm == 'entropy' else 1
+        concise_results = {}
+        for res in results:
+            k = self.get_database_key(res[0]) or res[4]
+            if k not in concise_results or res[score_idx] > concise_results[k][score_idx]:
                 concise_results[k] = res
+        return concise_results
 
-    #
-    json_concise_results = []
-    for k, res in concise_results.items():
-        # library peaks are kept in JSON only (not in tsv), for mirror plots
-        peaks_in_lib = [[round(float(mz), 4), float(intensity)] for mz, intensity in res[0].pop('peaks')]
-        json_concise_results.append({
-            'spid': res[4],
-            'mz': round(res[5], 4),     # expt_precursor_mz
-            'rtime': res[6],            # expt_rtime
-            'entropy_score': round(float(res[2]), 3),
-            'cosine_score': round(float(res[1]), 3),
-            'number_matched_peaks': int(res[3]),
-            'database_key': k,
-            'database_entry': res[0],
-            'peaks': dict_query_peaks.get(res[4], []),     # experimental MS/MS spectrum
-            'peaks_in_lib': peaks_in_lib,                   # library spectrum
-        })
+    def format_results(self, concise_results, list_query_spectra):
+        """
+        Format results as JSON style list, keeping experimental 'peaks' and library 'peaks_in_lib'
+        (JSON only, not in tsv) for mirror plots.
+        """
+        dict_query_peaks = {sp['id']: sp['peaks'] for sp in list_query_spectra}
+        json_results = []
+        for k, res in concise_results.items():
+            entry = dict(res[0])
+            peaks_in_lib = [[round(float(mz), 4), float(intensity)] for mz, intensity in entry.pop('peaks')]
+            json_results.append({
+                'spid': res[4],
+                'mz': round(float(res[5]), 4),          # expt_precursor_mz
+                'rtime': res[6],                        # expt_rtime
+                'entropy_score': round(res[2], 3),
+                'cosine_score': round(res[1], 3),
+                'number_matched_peaks': res[3],
+                'database_key': k,
+                'database_entry': entry,
+                'peaks': dict_query_peaks.get(res[4], []),     # experimental MS/MS spectrum
+                'peaks_in_lib': peaks_in_lib,                   # library spectrum
+            })
+        return json_results
 
-    tsv_output_file = os.path.join(outdir, project_name_handle+'_MS2_annotation.tsv')
-    keys1 = ['spid', 'mz', 'rtime', 'entropy_score', 'cosine_score', 'number_matched_peaks']
-    keys2 = list(json_concise_results[0]['database_entry'].keys())
-    s = '\t'.join(keys1 + keys2) + '\n'
-    for row in json_concise_results:
-        s += '\t'.join([str(row.get(k, '')) for k in keys1]
-                                  + [str(row['database_entry'].get(k, '')) for k in keys2]
-                                  ) + '\n'
-    with open(tsv_output_file, 'w') as fh:
-        fh.write(s)
+    def export(self, json_results):
+        """Export <project>_MS2_annotation.tsv and .json to self.outdir."""
+        tsv_output_file = os.path.join(self.outdir, self.project_name + '_MS2_annotation.tsv')
+        keys1 = ['spid', 'mz', 'rtime', 'entropy_score', 'cosine_score', 'number_matched_peaks']
+        keys2 = []
+        for row in json_results:        # union of database fields, in order of appearance
+            keys2 += [k for k in row['database_entry'] if k not in keys2]
+        with open(tsv_output_file, 'w', encoding='utf-8') as O:
+            O.write('\t'.join(keys1 + keys2) + '\n')
+            for row in json_results:
+                O.write('\t'.join([str(row.get(k, '')) for k in keys1]
+                                  + [str(row['database_entry'].get(k, '')) for k in keys2]) + '\n')
 
-    json_export = {
-        'type': 'MS/MS',
-        'database': database_file,
-        'algorithm': 'entropy,cosine',
-        'time_stamp': ':'.join([str(x) for x in time.localtime()[1:6]]),
-        'list_of_features': json_concise_results
-    }
-    json_output_file = os.path.join(outdir, project_name_handle+'_MS2_annotation.json')
-    with open(json_output_file, 'w', encoding='utf-8') as O:
-        json.dump(json_export, O, indent=2, ensure_ascii=False)
-
-    print(f"MS/MS annotation results ({len(json_concise_results)}) in JSON and tsv were written to {outdir}.\n\n")
+        json_export = {
+            'type': 'MS/MS',
+            'database': self.database_file,
+            'algorithm': 'entropy,cosine',
+            'score_algorithm': self.score_algorithm,
+            'score_cutoff': self.score_cutoff,
+            'ms1_tolerance_in_da': self.ms1_tolerance_in_da,
+            'ms2_tolerance_in_da': self.ms2_tolerance_in_da,
+            'time_stamp': ':'.join([str(x) for x in time.localtime()[1:6]]),
+            'list_of_features': json_results,
+        }
+        json_output_file = os.path.join(self.outdir, self.project_name + '_MS2_annotation.json')
+        with open(json_output_file, 'w', encoding='utf-8') as O:
+            json.dump(json_export, O, indent=2, ensure_ascii=False, cls=NpEncoder)
+        print(f"MS/MS annotation results ({len(json_results)}) in JSON and tsv were written to {self.outdir}.\n\n")
 
 
 #

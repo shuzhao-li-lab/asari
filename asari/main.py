@@ -338,6 +338,10 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     if args.preannotation:
         parameters['preannotation'] = args.preannotation
 
+    if args.score_cutoff_cosine is not None:
+        parameters['score_cutoff_cosine'] = args.score_cutoff_cosine
+        debug_print(to_print=f"Setting score_cutoff_cosine to {parameters['score_cutoff_cosine']}")
+
     if args.lc_rt_tolerance is not None:
         parameters['lc_rt_tolerance'] = args.lc_rt_tolerance
         debug_print(to_print=f"Setting lc_rt_tolerance to {parameters['lc_rt_tolerance']}")
@@ -459,6 +463,9 @@ def build_parser():
     parser.add_argument('--preannotation', type=str,
                 help="annotate LC: empCpds from `deconvolute` (<project>_list_khipus.json or its directory); "
                      "library matches are combined within empCpds")
+    parser.add_argument('--score_cutoff_cosine', type=float,
+                help=f"cosine similarity cutoff for spectral matching in annotate, GC, LCMSMS and MSMS "
+                     f"(default: {PARAMETERS['score_cutoff_cosine']})")
     parser.add_argument('--lc_rt_tolerance', type=float,
                 help=f"rtime tolerance in seconds, matching LC-MS features to a library in annotate "
                      f"--search_algorithm rtmz (default: {PARAMETERS['lc_rt_tolerance']})")

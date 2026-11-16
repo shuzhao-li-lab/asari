@@ -556,7 +556,7 @@ def _normalize_annotation_record(entry, index):
     query_peaks, lib_peaks, info (dict for display).
     """
     if 'database_entry' in entry:
-        # LCMSMS / MSMS, from annotate_lcmsms
+        # LCMSMS / MSMS, from LCMSMS_Annotation
         db_entry = entry.get('database_entry', {})
         record = {
             'id': entry.get('spid'),

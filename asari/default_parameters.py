@@ -82,7 +82,8 @@ PARAMETERS = {
     'ms2_cluster_method': 'greedy',      # 'greedy' (consensus spectra) or 'hcl' (hierarchical; KDE for large lists)
     'ms2_similarity_threshold': 0.7,     # minimal similarity to join a cluster, for greedy method
     'ms2_cluster_score': 'entropy',      # 'entropy' or 'cosine', for greedy method
-    'lcmsms_ms2_tolerance_in_da': 0.01,  # da tolerance for MS/MS peak matching in LCMSMS annotation
+    'lcmsms_ms1_tolerance_in_da': 0.01,  # da tolerance for precursor m/z in LCMSMS/MSMS annotation
+    'lcmsms_ms2_tolerance_in_da': 0.01,  # da tolerance for MS/MS peak matching in LCMSMS/MSMS annotation
 
     # for LC annotation, to update
     'check_isotope_ratio': False,
