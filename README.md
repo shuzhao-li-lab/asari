@@ -50,6 +50,7 @@ Subcommands are `peek, process, deconvolute, annotate, join, viz`. Each takes `-
 | `process` | `LC` (default) | `--peak_area sum` (default), `auc`, `gauss` | mzML files, MS1 only | `Feature_table.tsv` |
 | `process` | `GC` | optional `--kovats` | mzML files, optional Kovats RI table | `Feature_table.tsv`, with `RI` column if `--kovats` |
 | `process` | `LCMSMS` | `--cluster_ms2 T` (default) or `F` | LC-MS/MS mzML files | `Feature_table.tsv`, MS/MS clusters `ms2_spectra.json`/`.msp` (or per file with `F`) |
+| `process` | `LCMSMS` | `--precursor_features T` | LC-MS/MS mzML files | `Feature_table.tsv` of MS/MS precursors, MS1 peak height, no elution peak detection; MS/MS as above |
 | `process` | `MSMS` | `--cluster_ms2 T` (default) or `F` | mzML files, MS/MS only | MS/MS spectra `ms2_spectra.json`/`.msp` (or per file with `F`); no feature table |
 | `process` | `DIMS` | | DI-MS mzML files, MS1 only | `Feature_table.tsv`, max intensity per mass track; no RT alignment or peak detection |
 | `deconvolute` | `LC` | khipu | feature table | empirical compounds `<project>_list_khipus.json` and `.tsv` |

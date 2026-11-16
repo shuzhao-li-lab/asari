@@ -161,6 +161,8 @@ class ext_Experiment:
         Therefore, quantitative information cross samples is only usable for a subset of MS1 features.
 
         The MS1 feature table and MS/MS clusters are reported separately, sharing masstrack IDs.
+        With parameters['precursor_features'], the feature table is built from MS/MS precursors
+        without elution peak detection, using MS1 peak height nearest to precursors (CMAP.get_precursor_feature_table).
         The MS/MS clusters are searched against spectral libraries seprately and result can be used to annotate
         the MS1 feature table here or different acquisitions.
         """
@@ -181,8 +183,12 @@ class ext_Experiment:
                 similarity_threshold=self.parameters.get('ms2_similarity_threshold', 0.7),
                 score=self.parameters.get('ms2_cluster_score', 'entropy')
             )
-        # MS1 peaks
-        self.CMAP.global_peak_detection()
+        # MS1 features
+        if self.parameters.get('precursor_features', False) and self.CMAP.ms2_precursors:
+            # from MS/MS precursors, no elution peak detection
+            self.CMAP.get_precursor_feature_table()
+        else:
+            self.CMAP.global_peak_detection()
 
     def process_all_MSMS(self):
         """

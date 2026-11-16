@@ -34,6 +34,7 @@ WORKFLOWS = {
           'join --join_algorithm annotation_combine: combine annotation runs on the same feature table.',
     'LCMSMS': 'LC-MS/MS (DDA). process: MS1 feature table plus MS/MS spectra on mass tracks, '
               'clustered by default (--cluster_ms2 F to export per input file); '
+              '--precursor_features T for a feature table from MS/MS precursors (MS1 peak height, no peak detection); '
               'annotate: search MS/MS against a library (--db; .npz index preferred, or .msp, .mgf, .json); '
               'with --search_algorithm mz or rtmz, MS1 search of the feature table, same as LC; '
               'join --join_algorithm annotation_combine as in LC, mapping MS/MS annotations to MS1 features.',
@@ -390,6 +391,10 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     if args.cluster_ms2:
         parameters['cluster_ms2'] = booleandict[args.cluster_ms2]
         debug_print(to_print=f"Setting cluster_ms2 to: {parameters['cluster_ms2']}")
+
+    if args.precursor_features:
+        parameters['precursor_features'] = booleandict[args.precursor_features]
+        debug_print(to_print=f"Setting precursor_features to: {parameters['precursor_features']}")
     if args.join_algorithm:
         assert args.join_algorithm in JOIN_ALGORITHMS, \
             "join_algorithm must be one of %s." %', '.join(JOIN_ALGORITHMS)
@@ -528,6 +533,10 @@ def build_parser():
             help='For LCMSMS and MSMS workflows, cluster MS/MS spectra (default True), '
                  'per mass track in LCMSMS or per precursor m/z group in MSMS; '
                  'if False, export unclustered MS/MS spectra per input file')
+    parser.add_argument('--precursor_features',
+            help='For LCMSMS process, build the feature table from MS/MS precursors without elution peak detection: '
+                 'one feature per precursor m/z and RT group, intensity by the MS1 peak nearest to the precursor '
+                 '(height, not area) (default False)')
     parser.add_argument('--join_algorithm', type=str,
             help='For `join`: composite_table_merge (default), joining LC/GC-MS feature tables; '
                  'or annotation_combine, combining annotation results of different runs or methods '

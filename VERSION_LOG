@@ -7,6 +7,7 @@ v1.19.3 -> v2.0.0
     New class LCMSMS_Annotation; MS/MS search in batch mode on ms2batch .npz index (default), MSP/MGF/JSON; pickle legacy.
     --score_cutoff_cosine flag; LCMSMS with --search_algorithm mz/rtmz runs as LC.
     Added LC/LCMSMS "join --join_algorithm annotation_combine" (MS1, MS/MS and preannotation).
+    Added LCMSMS process --precursor_features: feature table from MS/MS precursors (MS1 peak height), no peak detection.
     README split into quick start README.md and in-depth GUIDE.md.
 
 v1.19.2 -> v1.19.3

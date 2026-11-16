@@ -139,6 +139,14 @@ asari process --mode pos --input mydir/projectx_dir --workflow LCMSMS
 MS/MS spectra are clustered per composite mass track (default greedy clustering with consensus spectra, `ms2_cluster_method` in parameters) and exported to `ms2_spectra.json` and `.msp`. Use `--cluster_ms2 F` to skip clustering and export unclustered spectra per input file as `ms2_spectra_<sample>.msp`.
 The MS1 feature table and MS/MS clusters are reported separately, sharing mass track IDs.
 
+MS1 data in DDA runs can be sparse for elution peak detection. With `--precursor_features T`, the feature table is built from MS/MS precursors instead, without elution peak detection:
+
+```
+asari process --mode pos --input mydir/projectx_dir --workflow LCMSMS --precursor_features T
+```
+
+MS/MS precursors of all samples are grouped on each mass track by aligned RT (a new feature when the gap exceeds `ms2_rt_gap`, default 5 seconds). The intensity of a feature in a sample is the height of the MS1 peak nearest to the MS/MS precursor on the mass track (within `precursor_rt_window`, default 5 seconds), the maximum over the sample's MS/MS spectra in the feature; samples without MS/MS in the feature are measured the same way at the feature RT mapped to the sample. `rtime` is the median RT of the precursors, `rtime_left_base` and `rtime_right_base` their range; `peak_area` is the sum of sample intensities, and `cSelectivity`, `goodness_fitting` and `snr` are 0 (not computed). Features without MS1 signal in any sample are dropped. MS/MS clustering and export are the same as above.
+
 To extract MS/MS spectra only, ignoring MS1 data (no mass tracks, no m/z or RT alignment):
 
 ```

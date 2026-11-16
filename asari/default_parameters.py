@@ -82,6 +82,8 @@ PARAMETERS = {
     'ms2_cluster_method': 'greedy',      # 'greedy' (consensus spectra) or 'hcl' (hierarchical; KDE for large lists)
     'ms2_similarity_threshold': 0.7,     # minimal similarity to join a cluster, for greedy method
     'ms2_cluster_score': 'entropy',      # 'entropy' or 'cosine', for greedy method
+    'precursor_features': False,         # LCMSMS: feature table from MS/MS precursors (nearest MS1 peak height), no elution peak detection
+    'precursor_rt_window': 5,            # in seconds, search window for the MS1 peak nearest to an MS/MS precursor (precursor_features)
     'lcmsms_ms1_tolerance_in_da': 0.01,  # da tolerance for precursor m/z in LCMSMS/MSMS annotation
     'lcmsms_ms2_tolerance_in_da': 0.01,  # da tolerance for MS/MS peak matching in LCMSMS/MSMS annotation
 

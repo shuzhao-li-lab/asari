@@ -30,6 +30,34 @@ from .utils import bulk_process
 from .tools.ms2 import rt_cluster_msms
 
 
+def nearest_peak_intensity(intensity, rtimes, rt, window=5):
+    """
+    Height of the MS1 peak nearest to rt on a mass track (precursor intensity of an MS/MS spectrum).
+
+    intensity : intensity array of the mass track, co-indexed with rtimes (sample scans).
+    rtimes : retention times of MS1 scans in seconds, ascending.
+    rt : retention time of the MS/MS spectrum, in seconds.
+    window : seconds on each side of rt to search.
+
+    Returns the intensity of the local maximum closest to rt within the window
+    (the window maximum if no local maximum inside it); 0 if no signal.
+    """
+    lo = int(np.searchsorted(rtimes, rt - window, side='left'))
+    hi = min(int(np.searchsorted(rtimes, rt + window, side='right')), len(intensity))
+    if hi <= lo:
+        return 0
+    seg = np.asarray(intensity[lo:hi], dtype=float)
+    if seg.max() <= 0:
+        return 0
+    if len(seg) < 3:
+        return float(seg.max())
+    inner = np.where((seg[1:-1] > 0) & (seg[1:-1] >= seg[:-2]) & (seg[1:-1] >= seg[2:]))[0] + 1
+    if not len(inner):
+        return float(seg.max())
+    best = inner[np.argmin(np.abs(np.asarray(rtimes[lo:hi])[inner] - rt))]
+    return float(seg[best])
+
+
 def _cluster_track_ms2_worker(item, similarity_function, rt_gap, mz_tolerance, distance_threshold,
                               method='greedy', similarity_threshold=0.7, score='entropy'):
     key, track = item
@@ -457,6 +485,10 @@ class CompositeMap:
 
         mzDict = dict(self.MassGrid['mz'])
         mzlist = list(self.MassGrid.index)                          # this gets indices as keys, per mass track
+        # LCMSMS precursor_features: MS/MS precursors per composite track, (sample, ref scan, MS1 intensity)
+        collect_precursors = self.experiment.parameters.get('precursor_features', False)
+        precursor_rt_window = self.experiment.parameters.get('precursor_rt_window', 5)
+        self.ms2_precursors = {}
         basetrack = np.zeros(self.rt_length, dtype=INTENSITY_DATA_TYPE)        # self.rt_length defines max rt number
         _comp_dict, _comp_ms2 = {}, {}
         for k in mzlist:
@@ -502,6 +534,9 @@ class CompositeMap:
                         for spec in _this_track['ms2_spectra']:
                             spec['sample'] = SM.name
                         _comp_ms2[k] += _this_track['ms2_spectra']
+                        if collect_precursors and _this_track['ms2_spectra']:
+                            self.ms2_precursors.setdefault(k, []).extend(
+                                self._get_precursors(SM, _this_track, precursor_rt_window))
 
         result = {}
         for k,v in _comp_dict.items():
@@ -511,6 +546,100 @@ class CompositeMap:
                           }
 
         self.composite_mass_tracks = result
+
+    @staticmethod
+    def _get_precursors(sample, track, window):
+        """
+        Precursors of MS/MS spectra on a sample mass track, as (sample name, reference scan, MS1 intensity).
+        Reference scan is the RT-aligned scan number (sample.rt_cal_dict), MS1 intensity by nearest_peak_intensity.
+        """
+        rtimes = np.asarray(sample.list_retention_time)
+        result = []
+        for spec in track['ms2_spectra']:
+            scan = int(np.argmin(np.abs(rtimes - spec['rtime'])))
+            ref_scan = sample.rt_cal_dict.get(scan, scan) if sample.rt_cal_dict else scan
+            result.append((sample.name, int(round(ref_scan)),
+                           nearest_peak_intensity(track['intensity'], rtimes, spec['rtime'], window)))
+        return result
+
+    def get_precursor_feature_table(self):
+        """
+        LCMSMS feature table from MS/MS precursors, without elution peak detection (parameters['precursor_features']).
+
+        On each composite mass track, MS/MS precursors (from all samples, RT-aligned) are grouped by RT,
+        a new group when the gap exceeds parameters['ms2_rt_gap'] (default 5 seconds); each group is a feature.
+        Feature intensity per sample is the height of the MS1 peak nearest to the MS/MS precursor
+        (nearest_peak_intensity, within parameters['precursor_rt_window'] seconds):
+        the max over the sample's own MS/MS spectra in the group; for samples without MS/MS in the group,
+        at the feature RT mapped to the sample (reverse RT calibration).
+        Feature rtime is the median aligned RT of precursors, rtime_left_base and rtime_right_base the range.
+        peak_area is the sum of sample intensities; cSelectivity, goodness_fitting and snr are not computed (0).
+        Features without MS1 signal in any sample are dropped. Feature IDs follow track m/z and RT.
+
+        Updates self.FeatureList, self.FeatureTable.
+        """
+        rt_gap = self.experiment.parameters.get('ms2_rt_gap', 5)
+        window = self.experiment.parameters.get('precursor_rt_window', 5)
+        max_scan = self.rt_length - 1
+        ref_rt = lambda scan: self.dict_scan_rtime.get(min(max(int(scan), 0), max_scan), self.max_ref_rtime)
+        self.FeatureList, group_intensities = [], []
+        for k in sorted(self.ms2_precursors, key=lambda x: self.composite_mass_tracks[x]['mz']):
+            precursors = sorted(self.ms2_precursors[k], key=lambda x: x[1])
+            groups, current = [], [precursors[0]]
+            for p in precursors[1:]:
+                if ref_rt(p[1]) - ref_rt(current[-1][1]) > rt_gap:
+                    groups.append(current)
+                    current = [p]
+                else:
+                    current.append(p)
+            groups.append(current)
+            for G in groups:
+                scans = [p[1] for p in G]
+                apex = int(np.median(scans))
+                intensities = {}
+                for sample_name, _, x in G:
+                    intensities[sample_name] = max(intensities.get(sample_name, 0), x)
+                self.FeatureList.append({
+                    'id_number': 'F' + str(len(self.FeatureList)),
+                    'parent_masstrack_id': k,
+                    'mz': self.composite_mass_tracks[k]['mz'],
+                    'apex': apex, 'left_base': min(scans), 'right_base': max(scans),
+                    'rtime': ref_rt(apex), 'rtime_left_base': ref_rt(min(scans)), 'rtime_right_base': ref_rt(max(scans)),
+                    'peak_area': 0, 'cSelectivity': 0, 'goodness_fitting': 0, 'snr': 0,
+                    'number_ms2_spectra': len(G),
+                })
+                group_intensities.append(intensities)
+        print("\n%d precursor features from %d MS/MS spectra on %d mass tracks." %(
+            len(self.FeatureList), sum(len(v) for v in self.ms2_precursors.values()), len(self.ms2_precursors)))
+
+        FeatureTable = pd.DataFrame(self.FeatureList)
+        total = np.zeros(len(self.FeatureList))
+        for SM in self.experiment.all_samples:
+            if self.experiment.parameters['drop_unaligned_samples'] and not SM.is_rt_aligned:
+                continue
+            list_mass_tracks = SM.get_masstracks_and_anchors()
+            rtimes = np.asarray(SM.list_retention_time)
+            fList = []
+            for F, intensities in zip(self.FeatureList, group_intensities):
+                if SM.name in intensities:
+                    fList.append(intensities[SM.name])
+                    continue
+                track_number = self.MassGrid[SM.name][F['parent_masstrack_id']]
+                if pd.isna(track_number):
+                    fList.append(0)
+                    continue
+                scan = SM.reverse_rt_cal_dict.get(F['apex'], F['apex']) if SM.reverse_rt_cal_dict else F['apex']
+                scan = min(max(int(round(scan)), 0), len(rtimes) - 1)
+                fList.append(nearest_peak_intensity(
+                    list_mass_tracks[int(track_number)]['intensity'], rtimes, rtimes[scan], window))
+            FeatureTable[SM.name] = fList
+            total += np.array(fList, dtype=float)
+        FeatureTable['peak_area'] = total.round()
+        keep = total > 0            # drop features without MS1 signal in any sample
+        if (~keep).sum():
+            print("Dropped %d precursor features without MS1 signal." %(~keep).sum())
+        self.FeatureTable = FeatureTable[keep].reset_index(drop=True)
+        self.FeatureList = [F for F, k in zip(self.FeatureList, keep) if k]
 
     def cluster_ms2_spectra(self,
                             similarity_function=None,
