@@ -1,7 +1,7 @@
 """
 GC-MS feature processing is basically the same as LC-MS processing.
 Retention index calculation can be either in the `process` step or in `deconvolute` or `annotate`,
-based on a Kovats RI table to derive a regression model.
+by linear interpolation between alkanes in a Kovats RI table.
 
 Default GC-MS annotation is using a reverse search against a high-resoluiton database, which requires no deconvolution.
 
@@ -27,7 +27,6 @@ import re
 from typing import NamedTuple
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
 
 
 from scipy import sparse
@@ -213,21 +212,55 @@ def find_entries_in_rtwindow(query, gclib, tol = 30):
     """
     return [x for x in gclib if abs(query-x.RI) < tol]
 
-def read_fit_KovatsIndex_rtime(KovatsIndex_file, sep='\t', frac=0.3):
-    """Fit a lowess model of Kovats index on retention time (min) from a Kovats standards file."""
-    kovats = pd.read_csv(KovatsIndex_file, sep=sep)
-    # loess regression
-    model = sm.nonparametric.lowess(kovats.values[:, 0], kovats.values[:, 1], frac=frac)
-    return model
+def read_fit_KovatsIndex_rtime(KovatsIndex_file, sep='\t', max_extrapolation=100):
+    """RI model from a Kovats standards file (columns: Kovats index, measured time in minutes).
 
-def append_kovats_index(list_features, ri_model):
-    """Add RI to each featulre in list_features.
-    ri_model : np.array of regression result.
+    RI is linearly interpolated between neighboring alkanes (van den Dool and Kratz).
+    Multiple measurements of the same alkane (e.g. batches) are averaged by median.
+    Outside the standards, RI is extrapolated by the slope of the two alkanes at each end,
+    up to max_extrapolation RI units (default 100, one alkane); beyond that, RI stays at the bound.
+    Returns np.array of [time (min), Kovats index] sorted by time, for np.interp;
+    the first and last rows are the extrapolation bounds, the rows between are the alkanes.
     """
-    for feature in list_features:
-        feature['RI'] = float(np.interp(feature['rtime']/60, ri_model[:, 0], ri_model[:, 1])
-                    )   # asari rtime is in seconds, convert to minutes
-    return list_features
+    kovats = pd.read_csv(KovatsIndex_file, sep=sep).iloc[:, :2].apply(pd.to_numeric, errors='coerce').dropna()
+    kovats.columns = ['ri', 'time']
+    model = kovats.groupby('ri')['time'].median().reset_index()[['time', 'ri']].values
+    model = model[np.argsort(model[:, 1])]
+    # alkane times must increase with Kovats index; drop any that do not
+    keep = np.ones(len(model), dtype=bool)
+    last = -np.inf
+    for i, t in enumerate(model[:, 0]):
+        if t <= last:
+            keep[i] = False
+        else:
+            last = t
+    if not keep.all():
+        print(f"Warning: Kovats index {model[~keep, 1].tolist()} in {KovatsIndex_file} "
+              "do not elute after the previous alkane; not used.")
+    model = model[keep]
+    if len(model) < 2:
+        raise ValueError(f"Need at least 2 alkanes with increasing times in {KovatsIndex_file}.")
+    (t0, k0), (t1, k1) = model[0], model[1]
+    (tm, km), (tn, kn) = model[-2], model[-1]
+    low = [t0 - (t1 - t0) * max_extrapolation / (k1 - k0), k0 - max_extrapolation]
+    high = [tn + (tn - tm) * max_extrapolation / (kn - km), kn + max_extrapolation]
+    return np.vstack([low, model, high])
+
+
+def report_ri_extrapolation(rtimes, ri_model):
+    """Print a warning on features (rtime in seconds) outside the alkane standards of ri_model
+    from read_fit_KovatsIndex_rtime, i.e. with extrapolated RI or RI set to the bound."""
+    if ri_model is None or len(ri_model) < 4:
+        return
+    t = np.asarray(rtimes, dtype=float) / 60
+    (t_lo, k_lo), (t_first, k_first) = ri_model[0], ri_model[1]
+    (t_last, k_last), (t_hi, k_hi) = ri_model[-2], ri_model[-1]
+    n_before, n_after = int((t < t_first).sum()), int((t > t_last).sum())
+    n_bound = int(((t < t_lo) | (t > t_hi)).sum())
+    if n_before or n_after:
+        print(f"Warning: {n_before} features elute before the first alkane (RI {k_first:g}, {t_first:.2f} min) "
+              f"and {n_after} after the last (RI {k_last:g}, {t_last:.2f} min); RI is extrapolated "
+              f"within {k_lo:g}-{k_hi:g}" + (f", {n_bound} features beyond that set to the bound." if n_bound else "."))
 
 def port_pseudospectrum_to_json(PS, normalize_intensity=False):
     """Port an instance of PseudoSpectrum to JSON dict.
@@ -360,6 +393,7 @@ def append_kovats_index(list_features, ri_model):
     """Add RI to each feature in list_features (asari rtime in seconds)."""
     for feature in list_features:
         feature['RI'] = rtime_to_ri(feature['rtime'], ri_model)
+    report_ri_extrapolation([f['rtime'] for f in list_features], ri_model)
     return list_features
 
 def check_RI_presence(infile):
@@ -420,14 +454,14 @@ def read_feature_table_has_RI(infile, data_start_col=12):
     return list_features, feature_dataframe
 
 
-def read_feature_table_and_kovats(infile, KovatsIndex_file=None, frac=0.3, data_start_col=11):
+def read_feature_table_and_kovats(infile, KovatsIndex_file=None, data_start_col=11):
     """
     Read an asari Feature_table.tsv.
     Returns list_features (sorted by peak_area, descending; with 'RI' if KovatsIndex_file),
     feature_dataframe (sample intensities, indexed by feature ID) and ri_model (or None).
     """
     df = pd.read_csv(infile, sep='\t', index_col=0)
-    ri_model = read_fit_KovatsIndex_rtime(KovatsIndex_file, frac=frac) if KovatsIndex_file else None
+    ri_model = read_fit_KovatsIndex_rtime(KovatsIndex_file) if KovatsIndex_file else None
     meta = df.iloc[:, :data_start_col - 1]
     list_features = []
     for fid, row in zip(meta.index, meta.itertuples(index=False)):

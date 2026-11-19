@@ -87,7 +87,15 @@ Output in `<project>_annotation_<time stamp>/`: `Features_<project>.tsv` (one ro
 
 GC-MS uses `--workflow GC` in three steps: `process` (feature extraction), optional `deconvolute` (grouping features into pseudospectra) and `annotate` (library search).
 
-**Retention index (RI).** Matching to libraries uses Kovats retention index. Provide alkane standards as a tab-separated file with a header row and two columns, Kovats index and measured retention time in minutes (example: `test/KovatsIndex_alkanestandards_cuimc.tsv`). RI is interpolated from feature retention time by a lowess fit to the standards; features eluting outside the standards get the RI of the nearest end.
+**Retention index (RI).** Matching to libraries uses Kovats retention index. Provide alkane standards as a tab-separated file with a header row and two columns, Kovats index and measured retention time in minutes (example: `test/KovatsIndex_alkanestandards_cuimc.tsv`). RI is linearly interpolated from feature retention time between neighboring alkanes (van den Dool and Kratz), using the median time when an alkane is measured more than once (e.g. per batch); outside the standards, RI is extrapolated by the slope of the two alkanes at that end, up to 100 RI units (one alkane), and held at that bound further out. A warning reports how many features fall outside the standards.
+
+Alkane standards are often recorded as a table with one row per alkane and one column of retention times per batch (.xlsx, .tsv or .csv). Convert such a table to the format above, with all batches stacked:
+
+```
+python -m asari.tools.kovats Alkane_standards.xlsx -o KovatsIndex_alkanestandards.tsv
+```
+
+The carbon number is taken from the molecular formula column (checked against an alkane number column if present), and the batch columns are the numeric columns after the name, formula and m/z columns; set them with `--batch_start_col` or `--batch_cols` (a regex on column headers) if needed. Warnings are printed for mismatched carbon numbers and for batches whose retention times do not increase with carbon number.
 
 To process GC-MS data and add an `RI` column to the feature table (right after `detection_counts`):
 

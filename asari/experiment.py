@@ -426,14 +426,15 @@ class ext_Experiment:
         """
         GC workflow: add a column 'RI' (Kovats retention index) right after 'detection_counts',
         so that sample columns start one column later (data_start_col=12 in gc_functions).
-        RI is interpolated from feature rtime (seconds) by a lowess fit of the Kovats standards
+        RI is linearly interpolated from feature rtime (seconds) between alkanes in the Kovats standards
         file parameters['kovats'] (columns: Kovats index, measured time in minutes).
-        Features outside the range of the standards get the RI at the nearest end.
+        Outside the standards, RI is extrapolated up to 100 units (one alkane), then held at that bound.
         """
-        from .gc_functions import read_fit_KovatsIndex_rtime
-        ri_model = read_fit_KovatsIndex_rtime(self.parameters['kovats'], frac=0.3)
-        ri = np.interp(self.CMAP.FeatureTable.loc[feature_table.index, 'rtime'].values / 60,
-                       ri_model[:, 0], ri_model[:, 1])
+        from .gc_functions import read_fit_KovatsIndex_rtime, report_ri_extrapolation
+        ri_model = read_fit_KovatsIndex_rtime(self.parameters['kovats'])
+        rtimes = self.CMAP.FeatureTable.loc[feature_table.index, 'rtime'].values
+        ri = np.interp(rtimes / 60, ri_model[:, 0], ri_model[:, 1])
+        report_ri_extrapolation(rtimes, ri_model)
         feature_table = feature_table.copy()
         feature_table.insert(feature_table.columns.get_loc('detection_counts') + 1, 'RI', ri.round(2))
         print(f"Added retention index (RI) using Kovats standards in {self.parameters['kovats']}.")

@@ -63,7 +63,7 @@ def ingest_gc_featuretable(infile, parameters):
     elif parameters['kovats']:
         list_features, feature_dataframe, ri_model = read_feature_table_and_kovats(
             infile, KovatsIndex_file=parameters['kovats'],
-            frac=0.3, data_start_col=11
+            data_start_col=11
             )
     else:
         print("Need retention index values or a KovatsIndex_file to complete this function.")
