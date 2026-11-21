@@ -91,6 +91,19 @@ def run_gc_deconvolution(list_features, feature_dataframe, ri_model, method):
 # ---------------------------------------------------------------------------
 
 
+def khipu_feature_adaptor(list_features, intensity_key='peak_area'):
+    """
+    Add the intensity names khipu uses to asari features, from intensity_key (default peak_area):
+    'representative_intensity' (khipu model, M0 selection) and 'height' (isotope ratio check,
+    `check_isotope_ratio`). Existing values are kept, e.g. a feature that already has 'height'.
+    """
+    for f in list_features:
+        intensity = f.get(intensity_key, f.get('representative_intensity', f.get('height', 0)))
+        f.setdefault('representative_intensity', intensity)
+        f.setdefault('height', intensity)
+    return list_features
+
+
 def khipu_deconvolute_featuretable(infile, parameters, json_output_file):
     """
     LC-MS deconvolution using Khipu, grouping isotopes and adducts of the same compound
@@ -104,7 +117,8 @@ def khipu_deconvolute_featuretable(infile, parameters, json_output_file):
     parameters : dict
         parameter dictionary passed from main.py,
         which imports from default_parameters and updates the dict by user arguments.
-        Uses mode, mz_tolerance_ppm and khipu_rtime_tolerance (seconds).
+        Uses mode, mz_tolerance_ppm, khipu_rtime_tolerance (seconds) and check_isotope_ratio
+        (isotope abundance ratio limits in isotope_search_patterns, on peak_area).
     json_output_file : str
         output JSON filepath. A tsv of the same name is also written.
 
@@ -128,8 +142,9 @@ def khipu_deconvolute_featuretable(infile, parameters, json_output_file):
 
     with open(infile) as f:
         _n, list_features = read_features_from_asari_table(f.read())
-    for f in list_features:
-        f['representative_intensity'] = f['peak_area']
+    list_features = khipu_feature_adaptor(list_features)
+    if parameters['check_isotope_ratio']:
+        print("Checking isotope abundance ratios (13C etc.), using feature peak_area as intensity.")
     peak_dict = make_peak_dict(list_features)
 
     list_khipus, _ = peaklist_to_khipu_list(

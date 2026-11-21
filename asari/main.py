@@ -24,7 +24,7 @@ booleandict = build_boolean_dict()
 SUBCOMMANDS = ["peek", "process", "deconvolute", "annotate", "viz", "join", "list_workflows"]
 WORKFLOWS = {
     'LC': 'LC-MS (default). process: feature extraction; deconvolute: pre-annotation by khipu '
-          '(isotopes/adducts into empirical compounds); annotate: match feature table to a compound database '
+          '(isotopes/adducts into empirical compounds; --check_isotope_ratio T to check isotope abundance ratios); annotate: match feature table to a compound database '
           'by m/z (--search_algorithm mz, default) or a library by m/z and RT (rtmz), '
           'optionally combined within empirical compounds (--preannotation); '
           'join --join_algorithm annotation_combine: combine annotations (MS1, MS/MS, preannotation) of one process run.',
@@ -406,6 +406,9 @@ def update_params_from_CLI(parameters, args, debug_print=False):
         parameters['cluster_ms2'] = booleandict[args.cluster_ms2]
         debug_print(to_print=f"Setting cluster_ms2 to: {parameters['cluster_ms2']}")
 
+    if args.check_isotope_ratio:
+        parameters['check_isotope_ratio'] = booleandict[args.check_isotope_ratio]
+        debug_print(to_print=f"Setting check_isotope_ratio to: {parameters['check_isotope_ratio']}")
     if args.precursor_features:
         parameters['precursor_features'] = booleandict[args.precursor_features]
         debug_print(to_print=f"Setting precursor_features to: {parameters['precursor_features']}")
@@ -550,6 +553,9 @@ def build_parser():
             help='For LCMSMS and MSMS workflows, cluster MS/MS spectra (default True), '
                  'per mass track in LCMSMS or per precursor m/z group in MSMS; '
                  'if False, export unclustered MS/MS spectra per input file')
+    parser.add_argument('--check_isotope_ratio',
+            help='For LC deconvolute, require isotope abundance ratios (e.g. 13C/12C) within limits in '
+                 'isotope_search_patterns, using feature peak_area (default False)')
     parser.add_argument('--precursor_features',
             help='For LCMSMS process, build the feature table from MS/MS precursors without elution peak detection: '
                  'one feature per precursor m/z and RT group, intensity by the MS1 peak nearest to the precursor '

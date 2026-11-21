@@ -3,6 +3,8 @@ v2.0.0 -> v2.0.1
         alkanes measured per batch are averaged by median. Outside the standards, RI is extrapolated
         by the end slopes up to 100 units, then held at that bound, with a warning on feature counts. RI values change (up to ~40 units on SRM1958 LookAhead);
         re-run process/deconvolute/annotate with --kovats to update existing results.
+    LC deconvolute --check_isotope_ratio: khipu isotope abundance ratio check, on feature peak_area
+        (adaptor sets khipu 'height' and 'representative_intensity').
     tools/kovats.py: convert alkane standards with batches in columns (.xlsx/.tsv/.csv) to Kovats index file,
         with batch column detection and carbon number from molecular formula.
 

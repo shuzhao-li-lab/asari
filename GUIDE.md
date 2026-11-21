@@ -70,6 +70,7 @@ See [Algorithms](#algorithms) for the steps.
 
 `asari deconvolute -i Feature_table.tsv --workflow LC` groups isotopes and adducts of the same compound into empirical compounds (empCpds), using [khipu](https://github.com/shuzhao-li-lab/khipu). This is also called pre-annotation; no database is used.
 Adducts follow `adduct_search_patterns_pos/neg` in `default_parameters.py` (neg mode includes Cl- and formate), with RT tolerance `khipu_rtime_tolerance` (seconds).
+With `--check_isotope_ratio T`, an isotope pair is kept only if its abundance ratio (from feature `peak_area`) is within the limits in `isotope_search_patterns`, e.g. 13C/12C between 0 and 0.8 of M0; default is off.
 Output in `<project>_deconvolution_<time stamp>/`: `<project>_list_khipus.json` (list of empCpds) and `<project>_list_khipus.tsv` (one row per feature, with empCpd, isotope and ion; features not in any khipu are listed as singletons).
 
 ### Annotation
