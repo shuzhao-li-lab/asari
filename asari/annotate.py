@@ -842,7 +842,8 @@ class GCMS_Annotation:
         elif parameters['search_algorithm'] == 'forward':
             # construct pseudospectra (feature groups) from scratch
             list_pseudospectra, core_features = run_gc_deconvolution(
-                list_features, feature_dataframe, ri_model, parameters['deconvolution_algorithm']
+                list_features, feature_dataframe, ri_model, parameters['deconvolution_algorithm'],
+                parameters=parameters
                 )
             json_output_file = os.path.join(
                 self.outdir, self.project_name + '_denovo_pseudospectra.json')
