@@ -34,7 +34,8 @@ def deconvolute_project(infile, parameters):
     elif parameters['workflow'] == "GC":
         list_features, feature_dataframe, ri_model = ingest_gc_featuretable(infile, parameters)
         list_pseudospectra, core_features = run_gc_deconvolution(
-            list_features, feature_dataframe, ri_model, parameters['deconvolution_algorithm']
+            list_features, feature_dataframe, ri_model, parameters['deconvolution_algorithm'],
+            parameters=parameters
         )
         json_output_file = os.path.join(outdir, parameters['project_name'] + '_denovo_pseudospectra.json')
         write_list_pseudospectra(list_pseudospectra, json_output_file)
@@ -72,11 +73,13 @@ def ingest_gc_featuretable(infile, parameters):
     print(f"{len(list_features)} features, {feature_dataframe.shape[1]} samples.")
     return list_features, feature_dataframe, ri_model
 
-def run_gc_deconvolution(list_features, feature_dataframe, ri_model, method):
+def run_gc_deconvolution(list_features, feature_dataframe, ri_model, method, parameters=None):
     """Run GC deconvolution by method ('hcl', 'adap' or 'nmf'). Returns list_pseudospectra, core_features."""
+    limit = (parameters or {}).get('max_core_features', 20000)
     # returns
     runs = {
-        'hcl': lambda: iterative_build_pseudospectra_by_hcl(list_features, feature_dataframe),
+        'hcl': lambda: iterative_build_pseudospectra_by_hcl(
+            list_features, feature_dataframe, max_core_features=limit),
         'adap': lambda: adap_gc_deconvolution(list_features, ri_model),
         'nmf': lambda: nmf_deconvolution(list_features, feature_dataframe, ri_model),
     }
