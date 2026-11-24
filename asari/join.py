@@ -228,7 +228,7 @@ def join_tables(file_list_paths, parameters):
         for ii in track_indices:
             row_dict = MG.MassGrid.iloc[ii, :].to_dict()        # mapping name to mass track index
             for t, track2feats in master_track2features.items():
-                if row_dict[t]:
+                if pd.notna(row_dict[t]):
                     row_features[t] += track2feats[row_dict[t]]
 
         # if str(ii).endswith('1000'): print(row_features)
