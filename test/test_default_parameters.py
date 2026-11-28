@@ -30,6 +30,10 @@ class TestDefaultParameters(unittest.TestCase):
     def test_mass_range(self):
         self.assertEqual(PARAMETERS['mass_range'], (50, 2000))
 
+    def test_khipu_workflow(self):
+        self.assertEqual(PARAMETERS['khipu_workflow'], 'regular')
+        self.assertFalse(PARAMETERS['check_isotope_ratio'])
+
     def test_mz_tolerance_ppm(self):
         self.assertEqual(PARAMETERS['mz_tolerance_ppm'], 5)
 

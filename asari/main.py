@@ -18,13 +18,15 @@ from .deconvolute import deconvolute_project
 from .annotate import annotate_project
 from .join import join_project, JOIN_ALGORITHMS
 from .utils import build_boolean_dict
+from khipu.parameters import normalize_workflow as normalize_khipu_workflow
 
 
 booleandict = build_boolean_dict()
 SUBCOMMANDS = ["peek", "process", "deconvolute", "annotate", "viz", "join", "list_workflows"]
 WORKFLOWS = {
     'LC': 'LC-MS (default). process: feature extraction; deconvolute: pre-annotation by khipu '
-          '(isotopes/adducts into empirical compounds; --check_isotope_ratio T to check isotope abundance ratios); annotate: match feature table to a compound database '
+          '(isotopes/adducts into empirical compounds; --khipu_workflow regular (default) or tracing for isotope labeled data; '
+          '--check_isotope_ratio T to check isotope abundance ratios, regular only); annotate: match feature table to a compound database '
           'by m/z (--search_algorithm mz, default) or a library by m/z and RT (rtmz), '
           'optionally combined within empirical compounds (--preannotation); '
           'join --join_algorithm annotation_combine: combine annotations (MS1, MS/MS, preannotation) of one process run.',
@@ -409,6 +411,12 @@ def update_params_from_CLI(parameters, args, debug_print=False):
     if args.check_isotope_ratio:
         parameters['check_isotope_ratio'] = booleandict[args.check_isotope_ratio]
         debug_print(to_print=f"Setting check_isotope_ratio to: {parameters['check_isotope_ratio']}")
+    if args.khipu_workflow:
+        parameters['khipu_workflow'] = args.khipu_workflow
+    khipu_workflow = normalize_khipu_workflow(parameters.get('khipu_workflow', 'regular'))  # also from parameter file
+    assert khipu_workflow, "khipu_workflow must be regular or tracing (got %s)." % parameters.get('khipu_workflow')
+    parameters['khipu_workflow'] = khipu_workflow
+    debug_print(to_print=f"Using khipu_workflow {khipu_workflow}")
     if args.precursor_features:
         parameters['precursor_features'] = booleandict[args.precursor_features]
         debug_print(to_print=f"Setting precursor_features to: {parameters['precursor_features']}")
@@ -555,7 +563,11 @@ def build_parser():
                  'if False, export unclustered MS/MS spectra per input file')
     parser.add_argument('--check_isotope_ratio',
             help='For LC deconvolute, require isotope abundance ratios (e.g. 13C/12C) within limits in '
-                 'isotope_search_patterns, using feature peak_area (default False)')
+                 'isotope_search_patterns, using feature peak_area (default False); '
+                 'khipu regular workflow only')
+    parser.add_argument('--khipu_workflow',
+            help='For LC deconvolute, khipu workflow: regular (natural isotopes only, default) '
+                 'or tracing (isotope labeled samples, e.g. 13C)')
     parser.add_argument('--precursor_features',
             help='For LCMSMS process, build the feature table from MS/MS precursors without elution peak detection: '
                  'one feature per precursor m/z and RT group, intensity by the MS1 peak nearest to the precursor '

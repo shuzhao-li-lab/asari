@@ -8,6 +8,7 @@ import os
 import json
 import time
 from khipu.extended import (peaklist_to_khipu_list, export_empCpd_khipu_list, export_khipu_table)
+from khipu.parameters import default_isotope_patterns, normalize_workflow
 from khipu.utils import make_peak_dict
 from .utils import NpEncoder
 from .tools.file_io import read_features_from_asari_table
@@ -120,8 +121,12 @@ def khipu_deconvolute_featuretable(infile, parameters, json_output_file):
     parameters : dict
         parameter dictionary passed from main.py,
         which imports from default_parameters and updates the dict by user arguments.
-        Uses mode, mz_tolerance_ppm, khipu_rtime_tolerance (seconds) and check_isotope_ratio
-        (isotope abundance ratio limits in isotope_search_patterns, on peak_area).
+        Uses mode, mz_tolerance_ppm, khipu_rtime_tolerance (seconds), khipu_workflow and
+        check_isotope_ratio (isotope abundance ratio limits in isotope_search_patterns, on peak_area).
+        khipu_workflow 'regular' (natural isotopes only, default) uses isotope_search_patterns and
+        khipu's rules for regular data (isotopologue intensities decrease M0 > M1 > M2 ...);
+        'tracing' (isotope labeled samples) uses khipu's 13C patterns up to 12 atoms, without the
+        isotope ratio check.
     json_output_file : str
         output JSON filepath. A tsv of the same name is also written.
 
@@ -143,27 +148,42 @@ def khipu_deconvolute_featuretable(infile, parameters, json_output_file):
         adduct_search_patterns = adduct_search_patterns_neg
         singleton_ion, delta_mz = 'M-H-', -PROTON
 
+    workflow = normalize_workflow(parameters.get('khipu_workflow', 'regular'))
+    if workflow is None:
+        raise ValueError("khipu_workflow must be regular or tracing, got %r" % parameters.get('khipu_workflow'))
+    check_isotope_ratio = parameters['check_isotope_ratio']
+    if workflow == 'tracing':
+        patterns = default_isotope_patterns('tracing')
+        if check_isotope_ratio:
+            print("check_isotope_ratio is only used in the khipu regular workflow; ignored for tracing.")
+            check_isotope_ratio = False
+    else:
+        patterns = isotope_search_patterns
+    print(f"khipu workflow: {workflow}")
+
     with open(infile) as f:
         _n, list_features = read_features_from_asari_table(f.read())
     list_features = khipu_feature_adaptor(list_features)
-    if parameters['check_isotope_ratio']:
+    if check_isotope_ratio:
         print("Checking isotope abundance ratios (13C etc.), using feature peak_area as intensity.")
     peak_dict = make_peak_dict(list_features)
 
     list_khipus, _ = peaklist_to_khipu_list(
                             list_features,
-                            isotope_search_patterns=isotope_search_patterns,
+                            isotope_search_patterns=patterns,
                             adduct_search_patterns=adduct_search_patterns,
                             extended_adducts=extended_adducts,
                             mz_tolerance_ppm=parameters['mz_tolerance_ppm'],
                             rt_tolerance=parameters['khipu_rtime_tolerance'],
-                            check_isotope_ratio=parameters['check_isotope_ratio'],
+                            check_isotope_ratio=check_isotope_ratio,
                             mode=mode,
                             charges=[1, 2, 3],
                             has_parent_masstrack=True,
+                            workflow=workflow,
                             )
     empCpds = export_empCpd_khipu_list(list_khipus)
-    num_in_khipus = sum(len(E['MS1_pseudo_Spectra']) for E in empCpds)
+    # distinct features: since khipu 3, a feature found by the extended search can be in several empCpds
+    num_in_khipus = len({F['id'] for E in empCpds for F in E['MS1_pseudo_Spectra']})
     print(f"Got {len(empCpds)} khipus, with {num_in_khipus} of {len(list_features)} features; "
           f"the rest are singletons in the tsv.")
 

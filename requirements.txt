@@ -1,6 +1,6 @@
 metDataModel
 mass2chem
-khipu-metabolomics>=2.0.7
+khipu-metabolomics>=3.0.0
 jms-metabolite-services>=0.5.7
 pymzml
 ms_entropy

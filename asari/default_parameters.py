@@ -88,7 +88,8 @@ PARAMETERS = {
     'lcmsms_ms2_tolerance_in_da': 0.01,  # da tolerance for MS/MS peak matching in LCMSMS/MSMS annotation
 
     # for LC annotation, to update
-    'check_isotope_ratio': False,
+    'check_isotope_ratio': False,        # LC deconvolute, khipu regular workflow only
+    'khipu_workflow': 'regular',         # LC deconvolute: khipu workflow, regular (natural isotopes) or tracing (isotope labeled)
     'khipu_rtime_tolerance': 2,          # in seconds, for khipu annotation grouping of features into empirical compounds, to update
     'preannotation': None,               # annotate LC: empCpds JSON from `deconvolute` (khipu), to combine annotation within empCpds
     'lc_rt_tolerance': 10,               # in seconds, for matching LC-MS features to a library by m/z and rtime (annotate --search_algorithm rtmz)

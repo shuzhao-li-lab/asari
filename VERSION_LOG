@@ -5,6 +5,9 @@ v2.0.0 -> v2.0.1
         re-run process/deconvolute/annotate with --kovats to update existing results.
     LC deconvolute --check_isotope_ratio: khipu isotope abundance ratio check, on feature peak_area
         (adaptor sets khipu 'height' and 'representative_intensity').
+    LC deconvolute --khipu_workflow regular (default) or tracing, passed to khipu as workflow
+        (requires khipu 3.0.0). regular: khipu rules for natural isotopes (isotopologue intensities
+        decrease M0 > M1 > M2 ...); tracing: 13C up to 12 atoms, no isotope ratio check.
     tools/kovats.py: convert alkane standards with batches in columns (.xlsx/.tsv/.csv) to Kovats index file,
         with batch column detection and carbon number from molecular formula.
 
