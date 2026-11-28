@@ -1029,6 +1029,20 @@ def map_ms2_to_features(list_spectra, list_features, mz_tolerance_ppm=5, rt_tole
             mapping[sp['id']] = min(near, key=lambda F: abs(F['rtime'] - rt))['id']
     return mapping
 
+def empCpd_targets(fid, empCpd_id, empCpd_members, dict_feature_empCpd):
+    """
+    Features that an annotation of feature fid is propagated to: fid, and the members of its
+    empCpd (empCpd_id) that belong to that empCpd. Since khipu 3, a feature found by the extended
+    search can be in several empCpds; it belongs to one (see annotate.combine_preannotation),
+    and only annotations within that empCpd are propagated to it.
+    """
+    if not empCpd_id:
+        return [fid]
+    members = [t for t in empCpd_members.get(empCpd_id, [])
+               if t == fid or dict_feature_empCpd.get(t, {}).get('interim_id') == empCpd_id]
+    return members if fid in members else [fid] + members
+
+
 def combine_lc_annotations(file_list_paths, parameters):
     """
     join --join_algorithm annotation_combine --workflow LC (or LCMSMS).
@@ -1177,7 +1191,7 @@ def combine_lc_annotations(file_list_paths, parameters):
                 'inchikey': rec['inchikey'], 'lib_mz': fields['lib_mz'], 'spid': rec['spid'],
                 'cosine_score': rec.get('cosine_score'), 'entropy_score': rec.get('entropy_score'),
                 'number_matched_peaks': rec.get('number_matched_peaks'), '_ms2_index': ii}
-        targets = empCpd_members.get(rec['empCpd'], [fid]) if rec['empCpd'] else [fid]
+        targets = empCpd_targets(fid, rec['empCpd'], empCpd_members, dict_feature_empCpd)
         for t in targets:
             item = dict(base, match='direct' if t == fid else 'empCpd')
             if t == fid:

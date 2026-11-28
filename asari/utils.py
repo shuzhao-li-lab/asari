@@ -16,6 +16,14 @@ import numpy as np
 import pymzml
 import tqdm
 
+try:
+    from khipu.ion_patterns import is_extended_modification
+except ImportError:     # khipu < 3.0.1
+    def is_extended_modification(modification):
+        """True for a khipu modification from the extended search, e.g. 'M+H+,H2O' (khipu >= 3);
+        such a feature can be in several empCpds. False for main adducts, e.g. 'Na/H, 2x charged'."""
+        return any('charged' not in part for part in str(modification).split(',')[1:])
+
 
 class NpEncoder(json.JSONEncoder):
     """

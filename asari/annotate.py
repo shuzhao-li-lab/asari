@@ -29,7 +29,7 @@ from pathvalidate import sanitize_filename
 # from jms.dbStructures import knownCompoundDatabase, ExperimentalEcpdDatabase
 from . import db
 from .default_parameters import (PROTON, adduct_search_patterns_pos, adduct_search_patterns_neg)
-from .utils import NpEncoder
+from .utils import NpEncoder, is_extended_modification
 from .tools.file_io import read_features_from_asari_table
 from .tools.match_features import list_match_lcms_features
 from .mass_functions import all_mass_paired_mapping
@@ -697,7 +697,13 @@ def combine_preannotation(matched_results, list_empCpds, dict_lib_entries, mode=
         1) M0 over isotopes in library entry;
         2) more common ions (get_ion_priority).
     All candidates tied for best (e.g. isomers) are assigned to all features in the empCpd,
-    replacing their direct matches. 
+    replacing their direct matches.
+
+    Since khipu 3, a feature found by khipu's extended search (modification such as 'M+H+,H2O')
+    can be in several empCpds. Each feature belongs to one empCpd here: the one where it is a
+    core member (a feature is a core member of at most one empCpd), else the first empCpd that
+    has it. An empCpd annotates only its own features, and an extended-search feature keeps its
+    direct matches if it has any. 
     If no candidate is consistent with the empCpd neutral mass (i.e. library match and khipu disagree),
     the features keep their direct matches. Features not in any empCpd keep their direct matches.
 
@@ -723,17 +729,22 @@ def combine_preannotation(matched_results, list_empCpds, dict_lib_entries, mode=
     """
     combined_results = dict(matched_results)
     dict_feature_empCpd = {}
+    # each feature's own empCpd: core membership first, then extended-search membership
+    for extended in (False, True):
+        for emp in list_empCpds:
+            for F in emp.get('MS1_pseudo_Spectra', []):
+                if is_extended_modification(F.get('modification', '')) == extended \
+                        and F['id'] not in dict_feature_empCpd:
+                    dict_feature_empCpd[F['id']] = {
+                        'interim_id': emp.get('interim_id', ''),
+                        'neutral_formula_mass': emp.get('neutral_formula_mass'),
+                        'isotope': F.get('isotope', ''),
+                        'modification': F.get('modification', ''),
+                    }
     num_annotated_empCpds, num_inconsistent = 0, 0
     for emp in list_empCpds:
         features = emp.get('MS1_pseudo_Spectra', [])
         neutral_mass = emp.get('neutral_formula_mass')
-        for F in features:
-            dict_feature_empCpd[F['id']] = {
-                'interim_id': emp.get('interim_id', ''),
-                'neutral_formula_mass': neutral_mass,
-                'isotope': F.get('isotope', ''),
-                'modification': F.get('modification', ''),
-            }
         candidates = []
         for F in features:
             for lib_id in matched_results.get(F['id'], []):
@@ -758,6 +769,10 @@ def combine_preannotation(matched_results, list_empCpds, dict_lib_entries, mode=
         best = min(ranks.values())
         selected = [x for x in candidates if ranks[x] == best]
         for F in features:
+            if dict_feature_empCpd[F['id']]['interim_id'] != emp.get('interim_id', ''):
+                continue                    # the feature belongs to another empCpd
+            if is_extended_modification(F.get('modification', '')) and matched_results.get(F['id']):
+                continue                    # extended-search feature keeps its direct matches
             combined_results[F['id']] = selected
         num_annotated_empCpds += 1
 
